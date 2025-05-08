@@ -1,0 +1,165 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 221 83% 53%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221 83% 53%;
+    --radius: 0.5rem;
+  }
+ 
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', sans-serif;
+    margin: 0;
+    padding: 0;
+  }
+  
+  /* Asegurar que las tablas respeten el tema oscuro */
+  .dark table, 
+  .dark tbody, 
+  .dark tr, 
+  .dark td, 
+  .dark th {
+    @apply bg-gray-800 text-gray-300 border-gray-700;
+  }
+  
+  .dark table tbody tr:hover {
+    @apply bg-gray-700;
+  }
+
+  /* Forzar colores de fondo para contenedores en modo oscuro */
+  .dark div.bg-white {
+    @apply bg-gray-800 !important;
+  }
+
+  /* Tarjetas y paneles en modo oscuro */
+  .dark div.rounded-lg,
+  .dark div.shadow-md,
+  .dark div.overflow-hidden,
+  .dark div.overflow-x-auto {
+    @apply bg-gray-800 text-gray-300 !important;
+  }
+
+  /* Inputs y controles en modo oscuro */
+  .dark input, 
+  .dark select {
+    @apply bg-gray-700 border-gray-600 text-gray-300 !important;
+  }
+}
+
+:root {
+  --primary: #3b82f6;
+  --primary-dark: #2563eb;
+  --secondary: #10b981;
+  --secondary-dark: #059669;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --info: #3b82f6;
+  --success: #10b981;
+}
+
+/* Scrollbar personalizado */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100 dark:bg-gray-700;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-400 dark:bg-gray-600 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-500 dark:bg-gray-500;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Reglas específicas para órdenes de compra */
+.dark [class*="PurchaseOrderList"] div,
+.dark [class*="PurchaseOrderList"] div[class*="bg-white"],
+.dark [class*="PurchaseOrderList"] table,
+.dark [class*="PurchaseOrderList"] tbody,
+.dark [class*="PurchaseOrderList"] tr,
+.dark [class*="PurchaseOrderList"] th,
+.dark [class*="PurchaseOrderList"] td {
+  background-color: rgb(31 41 55) !important; /* bg-gray-800 */
+  color: rgb(209 213 219) !important; /* text-gray-300 */
+  border-color: rgb(55 65 81) !important; /* border-gray-700 */
+}
+
+/* Panel principal de filtros (el contenedor blanco grande) */
+.dark div[class*="rounded-lg"] {
+  background-color: rgb(31 41 55) !important; /* bg-gray-800 */
+}
+
+.dark [class*="PurchaseOrderList"] tr:hover {
+  background-color: rgb(55 65 81) !important; /* bg-gray-700 */
+}
+
+/* Excluir los badges que ya tienen sus propios colores */
+.dark [class*="PurchaseOrderList"] span[class*="bg-"],
+.dark [class*="PurchaseOrderList"] button,
+.dark [class*="PurchaseOrderList"] a {
+  background-color: initial !important;
+}
+
+/* Forzar que todos los elementos con bg-white tengan fondo oscuro en modo dark */
+.dark .bg-white {
+  background-color: rgb(31 41 55) !important; /* bg-gray-800 */
+} 

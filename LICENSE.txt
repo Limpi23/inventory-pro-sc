@@ -1,0 +1,34 @@
+ACUERDO DE LICENCIA DE USUARIO FINAL - INVENTARIO PRO
+
+IMPORTANTE: LEA DETENIDAMENTE LOS TÉRMINOS Y CONDICIONES DE ESTE ACUERDO ANTES DE UTILIZAR EL SOFTWARE.
+
+Este Acuerdo de Licencia de Usuario Final ("EULA") es un acuerdo legal entre usted (ya sea como individuo o entidad) y Inventario Pro, para el software que acompaña este EULA, que incluye software relacionado y medios, materiales impresos y documentación electrónica ("Software").
+
+Al instalar, copiar o utilizar el Software, usted acepta estar obligado por los términos de este EULA. Si no está de acuerdo con los términos de este EULA, no instale ni utilice el Software.
+
+1. CONCESIÓN DE LICENCIA
+El Software está protegido por leyes de derechos de autor y tratados internacionales sobre derechos de autor, así como por otras leyes y tratados de propiedad intelectual. Este Software se licencia, no se vende.
+
+2. DERECHOS DE USUARIO
+Esta licencia le otorga los siguientes derechos:
+- Instalación y Uso: Puede instalar y utilizar un número ilimitado de copias del Software.
+- Reproducción y Distribución: Puede reproducir y distribuir un número ilimitado de copias del Software.
+
+3. RESTRICCIONES
+- No puede realizar ingeniería inversa, descompilar o desensamblar el Software.
+- No puede alquilar, arrendar o prestar el Software.
+- No puede transferir sus derechos bajo este EULA.
+
+4. TERMINACIÓN
+Sin perjuicio de cualquier otro derecho, Inventario Pro puede terminar este EULA si usted no cumple con los términos y condiciones de este EULA. En tal caso, debe destruir todas las copias del Software.
+
+5. GARANTÍA LIMITADA
+El Software se proporciona "tal cual", sin garantía de ningún tipo.
+
+6. LIMITACIÓN DE RESPONSABILIDAD
+En ningún caso Inventario Pro será responsable por cualquier daño (incluyendo, sin limitación, daños por pérdida de beneficios comerciales, interrupción del negocio, pérdida de información comercial, o cualquier otra pérdida pecuniaria) que surja del uso o imposibilidad de usar el Software.
+
+7. LEY APLICABLE
+Este EULA se rige por las leyes del país en que usted adquirió el Software.
+
+Al instalar este software, acepta los términos de este acuerdo. 

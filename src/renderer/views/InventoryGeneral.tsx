@@ -1,0 +1,708 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { supabase } from '../lib/supabase';
+import Papa from 'papaparse';
+import { useReactToPrint } from 'react-to-print';
+
+interface InventoryItem {
+  product_id: string;
+  product_name: string;
+  sku: string | null;
+  warehouse_id: string;
+  warehouse_name: string;
+  current_quantity: number;
+}
+
+interface InventoryMovement {
+  id: string;
+  product_name: string;
+  warehouse_name: string;
+  movement_date: string;
+  movement_type: {
+    description: string;
+    code: string;
+  };
+  quantity: number;
+  reference: string | null;
+}
+
+const InventoryGeneral: React.FC = () => {
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [movements, setMovements] = useState<InventoryMovement[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
+  const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
+  const [selectedWarehouse, setSelectedWarehouse] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'csv' | 'physical'>('csv');
+  const [showExportOptions, setShowExportOptions] = useState(false);
+  
+  // Paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+
+  // Refs para la impresión
+  const printComponentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetchInventory();
+  }, []);
+
+  const fetchInventory = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Obtener el inventario actual
+      const { data: inventoryData, error: inventoryError } = await supabase
+        .from('current_stock')
+        .select('*')
+        .order('product_name');
+      
+      if (inventoryError) throw inventoryError;
+      setInventory(inventoryData || []);
+      
+      setIsLoading(false);
+    } catch (err: any) {
+      console.error('Error cargando inventario:', err);
+      setError(err.message);
+      setIsLoading(false);
+    }
+  };
+
+  const fetchProductHistory = async (productId: string) => {
+    setIsLoading(true);
+    try {
+      const { data: movementsData, error: movementsError } = await supabase
+        .from('stock_movements')
+        .select(`
+          id,
+          movement_date,
+          quantity,
+          reference,
+          product:products(name),
+          warehouse:warehouses(name),
+          movement_type:movement_types(description, code)
+        `)
+        .eq('product_id', productId)
+        .order('movement_date', { ascending: false });
+      
+      if (movementsError) throw movementsError;
+      
+      const formattedMovements = (movementsData || []).map((m: any) => ({
+        id: m.id,
+        product_name: m.product?.name || 'Desconocido',
+        warehouse_name: m.warehouse?.name || 'Desconocido',
+        movement_date: m.movement_date,
+        movement_type: {
+          description: m.movement_type?.description || 'Desconocido',
+          code: m.movement_type?.code || ''
+        },
+        quantity: m.quantity,
+        reference: m.reference
+      }));
+      
+      setMovements(formattedMovements);
+      setActiveTab('history');
+    } catch (err: any) {
+      console.error('Error cargando historial:', err);
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const clearFilters = () => {
+    setSelectedProduct(null);
+    setSelectedWarehouse(null);
+    setSearchTerm('');
+    setCurrentPage(1);
+  };
+
+  // Filtrar inventario por producto, almacén y término de búsqueda
+  const filteredInventory = inventory.filter(item => {
+    if (selectedProduct && item.product_id !== selectedProduct) return false;
+    if (selectedWarehouse && item.warehouse_id !== selectedWarehouse) return false;
+    if (searchTerm && !item.product_name.toLowerCase().includes(searchTerm.toLowerCase()) && 
+       !(item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase()))) return false;
+    return true;
+  });
+
+  // Calcular paginación
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = filteredInventory.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredInventory.length / itemsPerPage);
+
+  // Cambiar de página
+  const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
+
+  // Manejo de la impresión usando react-to-print
+  const handlePrint = useReactToPrint({
+    contentRef: printComponentRef,
+    documentTitle: `Inventario para Conteo Físico - ${new Date().toLocaleDateString()}`,
+    onAfterPrint: () => {
+      console.log('Impresión completada');
+    }
+  });
+  
+  // Función para abrir las opciones de exportación
+  const openExportOptions = () => {
+    setShowExportOptions(true);
+  };
+  
+  // Función para cerrar las opciones de exportación
+  const closeExportOptions = () => {
+    setShowExportOptions(false);
+  };
+
+  // Función para exportar inventario a CSV para conteo físico
+  const exportToCSV = (format: 'csv' | 'physical') => {
+    try {
+      setIsExporting(true);
+      
+      let headers: string[];
+      let dataRows: string[][];
+      
+      if (format === 'physical') {
+        // Formato para conteo físico con más columnas para la verificación
+        headers = [
+          'Producto',
+          'SKU',
+          'Almacén',
+          'Cantidad en Sistema',
+          'Cantidad Física',
+          'Diferencia',
+          'Observaciones',
+          'Responsable de Conteo',
+          'Fecha de Conteo'
+        ];
+        
+        dataRows = filteredInventory.map(item => [
+          item.product_name,
+          item.sku || '',
+          item.warehouse_name,
+          item.current_quantity.toString(),
+          '', // Campo para cantidad física (para completar durante conteo)
+          '', // Campo para diferencia (para completar durante conteo)
+          '', // Campo para observaciones
+          '', // Campo para responsable de conteo
+          ''  // Campo para fecha de conteo
+        ]);
+      } else {
+        // Formato básico CSV
+        headers = [
+          'Producto',
+          'SKU',
+          'Almacén',
+          'Cantidad'
+        ];
+        
+        dataRows = filteredInventory.map(item => [
+          item.product_name,
+          item.sku || '',
+          item.warehouse_name,
+          item.current_quantity.toString()
+        ]);
+      }
+      
+      // Usar PapaParse para crear el CSV correctamente con manejo de comillas y caracteres especiales
+      const csv = Papa.unparse({
+        fields: headers,
+        data: dataRows
+      });
+      
+      // Crear un blob y URL para descargar
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      
+      // Crear elemento de enlace para descarga
+      const link = document.createElement('a');
+      const date = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
+      const fileName = format === 'physical' 
+        ? `conteo_fisico_inventario_${date}.csv` 
+        : `inventario_${date}.csv`;
+      
+      link.setAttribute('href', url);
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      
+      // Simular clic y eliminar el enlace
+      link.click();
+      document.body.removeChild(link);
+      
+      // Cerrar el modal de opciones
+      closeExportOptions();
+      
+    } catch (err: any) {
+      console.error('Error al exportar inventario:', err);
+      setError('Error al generar el archivo CSV: ' + err.message);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 inventory-report-container">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-semibold">Inventario General</h1>
+        <div className="flex space-x-3">
+          <button
+            onClick={openExportOptions}
+            className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 flex items-center"
+          >
+            <i className="fas fa-file-export mr-2"></i>
+            Exportar Inventario
+          </button>
+          <button
+            onClick={handlePrint}
+            className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 flex items-center"
+          >
+            <i className="fas fa-print mr-2"></i>
+            Imprimir para Conteo Físico
+          </button>
+        </div>
+      </div>
+      
+      {error && (
+        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded-md">
+          <p>{error}</p>
+        </div>
+      )}
+
+      <div className="bg-white p-6 rounded-lg shadow-md">
+        <div className="mb-6 flex flex-col md:flex-row md:items-center gap-4">
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setActiveTab('current')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                activeTab === 'current'
+                  ? 'bg-blue-500 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Inventario Actual
+            </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                activeTab === 'history'
+                  ? 'bg-blue-500 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Historial de Movimientos
+            </button>
+          </div>
+          
+          <div className="relative flex-grow">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <i className="fas fa-search text-gray-400"></i>
+            </div>
+            <input
+              type="text"
+              placeholder="Buscar por nombre o SKU..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1); // Reset a la primera página cuando se busca
+              }}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          
+          {(selectedProduct || selectedWarehouse || searchTerm) && (
+            <button
+              onClick={clearFilters}
+              className="px-4 py-2 rounded-md text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors whitespace-nowrap"
+            >
+              <i className="fas fa-times mr-2"></i>
+              Limpiar Filtros
+            </button>
+          )}
+        </div>
+
+        {isLoading ? (
+          <div className="flex justify-center items-center py-20">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
+          </div>
+        ) : activeTab === 'current' ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4">
+                    Producto
+                  </th>
+                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4">
+                    SKU
+                  </th>
+                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4">
+                    Almacén
+                  </th>
+                  <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4">
+                    Cantidad
+                  </th>
+                  <th className="text-center text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4">
+                    Acciones
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {currentItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-sm text-gray-500">
+                      <div className="flex flex-col items-center">
+                        <i className="fas fa-box-open text-gray-300 text-4xl mb-2"></i>
+                        <p>No hay datos de inventario disponibles</p>
+                        {searchTerm && (
+                          <p className="text-xs mt-1">
+                            No se encontraron resultados para "{searchTerm}"
+                          </p>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  currentItems.map((item) => (
+                    <tr key={`${item.product_id}-${item.warehouse_id}`} className="hover:bg-gray-50 transition-colors">
+                      <td className="py-3 px-4 text-sm">
+                        <a 
+                          href="#" 
+                          className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setSelectedProduct(item.product_id);
+                            setCurrentPage(1);
+                          }}
+                        >
+                          {item.product_name}
+                        </a>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-500">{item.sku || '-'}</td>
+                      <td className="py-3 px-4 text-sm">
+                        <a 
+                          href="#" 
+                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setSelectedWarehouse(item.warehouse_id);
+                            setCurrentPage(1);
+                          }}
+                        >
+                          {item.warehouse_name}
+                        </a>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-right font-medium">
+                        <span className={`
+                          ${item.current_quantity > 0 ? 'text-green-600' : 'text-red-600'}
+                          ${item.current_quantity === 0 ? 'text-yellow-600' : ''}
+                        `}>
+                          {item.current_quantity}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-center">
+                        <button
+                          onClick={() => fetchProductHistory(item.product_id)}
+                          className="text-blue-600 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 rounded-md px-2 py-1"
+                        >
+                          <i className="fas fa-history mr-1"></i>
+                          Ver Historial
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+
+            {/* Paginación */}
+            {filteredInventory.length > itemsPerPage && (
+              <div className="mt-4 flex items-center justify-between">
+                <div className="text-sm text-gray-500">
+                  Mostrando {indexOfFirstItem + 1}-{Math.min(indexOfLastItem, filteredInventory.length)} de {filteredInventory.length} items
+                </div>
+                <div className="flex space-x-1">
+                  <button
+                    onClick={() => paginate(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className={`px-3 py-1 rounded-md text-sm font-medium ${
+                      currentPage === 1
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <i className="fas fa-chevron-left"></i>
+                  </button>
+                  
+                  {/* Botones de página */}
+                  {Array.from({ length: Math.min(5, totalPages) }).map((_, i) => {
+                    // Si hay más de 5 páginas, mostrar racionalmente las páginas cercanas a la actual
+                    let pageNumber;
+                    if (totalPages <= 5) {
+                      pageNumber = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNumber = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNumber = totalPages - 4 + i;
+                    } else {
+                      pageNumber = currentPage - 2 + i;
+                    }
+                  
+                    return (
+                      <button
+                        key={pageNumber}
+                        onClick={() => paginate(pageNumber)}
+                        className={`px-3 py-1 rounded-md text-sm font-medium ${
+                          currentPage === pageNumber
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {pageNumber}
+                      </button>
+                    );
+                  })}
+                  
+                  <button
+                    onClick={() => paginate(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className={`px-3 py-1 rounded-md text-sm font-medium ${
+                      currentPage === totalPages
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <i className="fas fa-chevron-right"></i>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <h2 className="text-lg font-medium mb-4">
+              {selectedProduct ? 
+                `Historial de: ${inventory.find(i => i.product_id === selectedProduct)?.product_name}` : 
+                'Historial de Movimientos'}
+            </h2>
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Producto
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    SKU
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Almacén
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Stock
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                {movements.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                      <div className="flex flex-col items-center">
+                        <i className="fas fa-history text-gray-300 dark:text-gray-600 text-4xl mb-2"></i>
+                        <p>No hay movimientos disponibles</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  movements.map((movement) => (
+                    <tr key={movement.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                      <td className="py-3 px-4 text-sm dark:text-gray-300">
+                        {new Date(movement.movement_date).toLocaleDateString()} 
+                        <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
+                          {new Date(movement.movement_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-sm">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            movement.movement_type.code.startsWith('IN_')
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                              : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                          }`}
+                        >
+                          {movement.movement_type.code.startsWith('IN_') ? 
+                            <i className="fas fa-arrow-up mr-1"></i> : 
+                            <i className="fas fa-arrow-down mr-1"></i>}
+                          {movement.movement_type.description}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-sm font-medium dark:text-gray-300">{movement.product_name}</td>
+                      <td className="py-3 px-4 text-sm dark:text-gray-300">{movement.warehouse_name}</td>
+                      <td className="py-3 px-4 text-sm text-right font-medium">
+                        <span className={movement.movement_type.code.startsWith('IN_') ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
+                          {movement.movement_type.code.startsWith('IN_') ? '+' : '-'}{movement.quantity}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      
+      {/* Modal para opciones de exportación */}
+      {showExportOptions && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4 dark:text-gray-200">Opciones de Exportación</h3>
+            
+            <div className="mb-6 space-y-4">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="radio"
+                  id="csv-standard"
+                  name="export-format"
+                  checked={exportFormat === 'csv'}
+                  onChange={() => setExportFormat('csv')}
+                  className="h-4 w-4 text-blue-600 border-gray-300 dark:border-gray-600 rounded"
+                />
+                <label htmlFor="csv-standard" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Inventario Simple (CSV)
+                </label>
+                <span className="text-xs text-gray-500 dark:text-gray-400">- Lista básica del inventario actual</span>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <input
+                  type="radio"
+                  id="csv-physical"
+                  name="export-format"
+                  checked={exportFormat === 'physical'}
+                  onChange={() => setExportFormat('physical')}
+                  className="h-4 w-4 text-blue-600 border-gray-300 dark:border-gray-600 rounded"
+                />
+                <label htmlFor="csv-physical" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Formato para Conteo Físico (CSV)
+                </label>
+                <span className="text-xs text-gray-500 dark:text-gray-400">- Incluye columnas para registrar conteo</span>
+              </div>
+            </div>
+            
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={closeExportOptions}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-500"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => exportToCSV(exportFormat)}
+                disabled={isExporting}
+                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 flex items-center"
+              >
+                {isExporting ? (
+                  <span className="inline-block animate-spin mr-2">
+                    <i className="fas fa-spinner"></i>
+                  </span>
+                ) : (
+                  <i className="fas fa-download mr-2"></i>
+                )}
+                Exportar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Componente oculto para impresión de conteo físico */}
+      <div style={{ display: 'none' }}>
+        <div ref={printComponentRef} className="p-6">
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-bold">Formulario de Conteo Físico de Inventario</h1>
+            <p className="text-gray-600">Fecha de impresión: {new Date().toLocaleDateString()}</p>
+          </div>
+          
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="border border-gray-300 px-4 py-2 text-left">Producto</th>
+                <th className="border border-gray-300 px-4 py-2 text-left">SKU</th>
+                <th className="border border-gray-300 px-4 py-2 text-left">Almacén</th>
+                <th className="border border-gray-300 px-4 py-2 text-right">Cant. Sistema</th>
+                <th className="border border-gray-300 px-4 py-2 text-center">Cant. Física</th>
+                <th className="border border-gray-300 px-4 py-2 text-center">Diferencia</th>
+                <th className="border border-gray-300 px-4 py-2 text-center">Observaciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredInventory.map((item, index) => (
+                <tr key={`${item.product_id}-${item.warehouse_id}`} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                  <td className="border border-gray-300 px-4 py-3">{item.product_name}</td>
+                  <td className="border border-gray-300 px-4 py-3">{item.sku || '-'}</td>
+                  <td className="border border-gray-300 px-4 py-3">{item.warehouse_name}</td>
+                  <td className="border border-gray-300 px-4 py-3 text-right">{item.current_quantity}</td>
+                  <td className="border border-gray-300 px-4 py-3" style={{ minWidth: '100px' }}></td>
+                  <td className="border border-gray-300 px-4 py-3" style={{ minWidth: '100px' }}></td>
+                  <td className="border border-gray-300 px-4 py-3" style={{ minWidth: '150px' }}></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          
+          <div className="mt-8">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="font-semibold">Responsable del conteo:</p>
+                <div className="mt-2 border-b border-gray-400 h-8"></div>
+              </div>
+              <div>
+                <p className="font-semibold">Supervisor:</p>
+                <div className="mt-2 border-b border-gray-400 h-8"></div>
+              </div>
+            </div>
+            
+            <div className="mt-6">
+              <p className="font-semibold">Fecha de conteo:</p>
+              <div className="mt-2 border-b border-gray-400 h-8"></div>
+            </div>
+            
+            <div className="mt-6">
+              <p className="font-semibold">Observaciones generales:</p>
+              <div className="mt-2 border border-gray-400 h-24 p-2"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Estilos para impresión - solo visible cuando se imprime */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          .inventory-report-container,
+          .inventory-report-container * {
+            visibility: visible;
+          }
+          .inventory-report-container {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+          }
+          .no-print,
+          .no-print * {
+            display: none !important;
+          }
+          thead {
+            display: table-header-group;
+          }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default InventoryGeneral; 
