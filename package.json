@@ -21,8 +21,9 @@
     "vite",
     "react"
   ],
-  "author": "",
+  "author": "SuitCore",
   "license": "MIT",
+  "description": "Aplicación de gestión de inventario.",
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "^22.15.3",
