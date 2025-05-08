@@ -13,7 +13,9 @@
     {
       "provider": "github",
       "owner": "Limpi23",
-      "repo": "inventory-suit"
+      "repo": "inventory-pro-sc",
+      "draft": false,
+      "prerelease": false
     }
   ],
   "mac": {
@@ -59,8 +61,11 @@
     "runAfterFinish": true,
     "perMachine": false,
     "differentialPackage": true,
-    "installerLanguages": ["es-ES", "en-US"],
+    "installerLanguages": [
+      "es-ES",
+      "en-US"
+    ],
     "language": "3082"
   },
   "afterPack": "./scripts/afterPack.cjs"
-} 
+}
