@@ -9,16 +9,15 @@
     "dist/**/*",
     "electron.cjs"
   ],
-  "publish": [
-    {
-      "provider": "github",
-      "owner": "Limpi23",
-      "repo": "inventory-pro-sc",
-      "releaseType": "release",
-      "draft": false,
-      "prerelease": false
-    }
-  ],
+  "publish": {
+    "provider": "github",
+    "private": false,
+    "releaseType": "release",
+    "token": "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",
+    "owner": "Limpi23",
+    "repo": "inventory-pro-sc",
+    "publishAutoUpdate": true
+  },
   "mac": {
     "category": "public.app-category.business",
     "target": [
