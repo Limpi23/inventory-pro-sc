@@ -1,9 +1,9 @@
 {
-  "appId": "com.inventariopro.app",
-  "productName": "Inventario Pro - SC",
+  "appId": "com.suitcore.inventorypro",
+  "productName": "Inventario Pro",
   "copyright": "Copyright © 2025",
   "directories": {
-    "output": "release/"
+    "output": "dist"
   },
   "files": [
     "dist/**/*",
@@ -28,11 +28,31 @@
   },
   "win": {
     "target": [
-      "nsis"
+      {
+        "target": "msi",
+        "arch": ["x64"]
+      }
     ],
     "icon": "src/assets/app-icon.ico",
-    "publisherName": "Inventario Pro",
-    "verifyUpdateCodeSignature": false
+    "artifactName": "${productName}-Setup-${version}.${ext}",
+    "publisherName": "SuitCore",
+    "requestedExecutionLevel": "requireAdministrator",
+    "msi": {
+      "language": 3082,
+      "codepage": 65001,
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Inventario Pro",
+      "wixToolsetVersion": "3.14",
+      "wixToolsetArchitecture": "x64",
+      "wixToolsetOptions": {
+        "codepage": 65001,
+        "language": 3082,
+        "cultures": ["es-ES"]
+      }
+    }
   },
   "linux": {
     "target": [
@@ -48,7 +68,7 @@
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "shortcutName": "Inventario Pro",
-    "uninstallDisplayName": "Inventario Pro - SC",
+    "uninstallDisplayName": "Inventario Pro",
     "artifactName": "Inventario-Pro-Setup-${version}.${ext}",
     "deleteAppDataOnUninstall": false,
     "displayLanguageSelector": true,
@@ -60,14 +80,7 @@
       "es-ES",
       "en-US"
     ],
-    "language": "3082",
-    "include": "installer.nsh",
-    "removeDefaultUninstallWelcomePage": true,
-    "installerHeader": null,
-    "installerSidebar": null,
-    "installerIcon": null,
-    "uninstallerIcon": null,
-    "installerHeaderIcon": null
+    "language": "3082"
   },
   "afterPack": "./scripts/afterPack.cjs"
 }

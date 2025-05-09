@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+    <Product Id="*" 
+             Name="Inventario Pro" 
+             Language="3082" 
+             Version="1.0.0" 
+             Manufacturer="SuitCore" 
+             UpgradeCode="12345678-1234-1234-1234-123456789012"
+             Codepage="65001">
+        <Package InstallerVersion="200" 
+                 Compressed="yes" 
+                 InstallScope="perMachine"
+                 Languages="3082"
+                 SummaryCodepage="65001"/>
+        
+        <MediaTemplate EmbedCab="yes"/>
+        
+        <Feature Id="ProductFeature" Title="Inventario Pro" Level="1">
+            <ComponentGroupRef Id="ProductComponents"/>
+        </Feature>
+
+        <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+        <UIRef Id="WixUI_InstallDir" />
+        <WixVariable Id="WixUILicenseRtf" Value="LICENSE.txt" />
+        <WixVariable Id="WixUIBannerBmp" Value="src/assets/installer-header.bmp" />
+        <WixVariable Id="WixUIDialogBmp" Value="src/assets/installer-sidebar.bmp" />
+    </Product>
+</Wix> 
