@@ -1,7 +1,7 @@
 {
   "name": "inventory-suit",
   "private": true,
-  "version": "1.2.9",
+  "version": "1.3.0",
   "type": "module",
   "main": "electron.cjs",
   "scripts": {
@@ -9,14 +9,11 @@
     "dev:electron": "cross-env NODE_ENV=development concurrently \"vite --port 8080\" \"electron .\"",
     "build": "tsc && vite build",
     "build:electron": "tsc --skipLibCheck && vite build && electron-builder",
-    "build:windows": "npm run build && electron-builder --win --x64 --config.win.target=msi --config.win.msi.wixConfig=installer-config.xml",
+    "build:windows": "npm run build && electron-builder --win --x64 --config.win.target=nsis",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "db:migration:new": "supabase migration new",
     "db:migration:apply": "supabase migration up",
-    "start": "electron-forge start",
-    "package": "electron-forge package",
-    "make": "electron-forge make",
     "make:win": "npm run build:windows"
   },
   "keywords": [
@@ -29,15 +26,6 @@
   "license": "MIT",
   "description": "Aplicación de gestión de inventario.",
   "devDependencies": {
-    "@electron-forge/cli": "^7.8.0",
-    "@electron-forge/maker-deb": "^7.8.0",
-    "@electron-forge/maker-rpm": "^7.8.0",
-    "@electron-forge/maker-squirrel": "^7.8.0",
-    "@electron-forge/maker-wix": "^7.8.0",
-    "@electron-forge/maker-zip": "^7.8.0",
-    "@electron-forge/plugin-auto-unpack-natives": "^7.8.0",
-    "@electron-forge/plugin-fuses": "^7.8.0",
-    "@electron/fuses": "^1.8.0",
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "^22.15.3",
     "@types/react": "^18.2.56",
