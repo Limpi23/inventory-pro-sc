@@ -61,7 +61,13 @@
       "en-US"
     ],
     "language": "3082",
-    "include": "installer.nsh"
+    "include": "installer.nsh",
+    "removeDefaultUninstallWelcomePage": true,
+    "installerHeader": null,
+    "installerSidebar": null,
+    "installerIcon": null,
+    "uninstallerIcon": null,
+    "installerHeaderIcon": null
   },
   "afterPack": "./scripts/afterPack.cjs"
 }
