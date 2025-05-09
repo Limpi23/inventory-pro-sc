@@ -1,5 +1,5 @@
 {
-  "appId": "com.suitcore.inventorypro",
+  "appId": "com.suitcore.inventory",
   "productName": "Inventario Pro",
   "copyright": "Copyright © 2025",
   "directories": {
@@ -13,7 +13,6 @@
     "provider": "github",
     "private": false,
     "releaseType": "release",
-    "token": "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",
     "owner": "Limpi23",
     "repo": "inventory-pro-sc",
     "publishAutoUpdate": true
@@ -27,32 +26,8 @@
     "icon": "src/assets/app-icon.icns"
   },
   "win": {
-    "target": [
-      {
-        "target": "msi",
-        "arch": ["x64"]
-      }
-    ],
-    "icon": "src/assets/app-icon.ico",
-    "artifactName": "${productName}-Setup-${version}.${ext}",
-    "publisherName": "SuitCore",
-    "requestedExecutionLevel": "requireAdministrator",
-    "msi": {
-      "language": 3082,
-      "codepage": 65001,
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "Inventario Pro",
-      "wixToolsetVersion": "3.14",
-      "wixToolsetArchitecture": "x64",
-      "wixToolsetOptions": {
-        "codepage": 65001,
-        "language": 3082,
-        "cultures": ["es-ES"]
-      }
-    }
+    "target": "nsis",
+    "icon": "src/assets/app-icon.ico"
   },
   "linux": {
     "target": [
@@ -68,19 +43,8 @@
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "shortcutName": "Inventario Pro",
-    "uninstallDisplayName": "Inventario Pro",
-    "artifactName": "Inventario-Pro-Setup-${version}.${ext}",
-    "deleteAppDataOnUninstall": false,
-    "displayLanguageSelector": true,
-    "license": "LICENSE.txt",
-    "runAfterFinish": true,
-    "perMachine": false,
-    "differentialPackage": true,
-    "installerLanguages": [
-      "es-ES",
-      "en-US"
-    ],
-    "language": "3082"
+    "installerIcon": "src/assets/app-icon.ico",
+    "uninstallerIcon": "src/assets/app-icon.ico"
   },
   "afterPack": "./scripts/afterPack.cjs"
 }
