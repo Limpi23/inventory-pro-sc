@@ -19,6 +19,32 @@ export const getSupabaseClient = async () => {
   });
 };
 
+// Cliente de Supabase global
+let supabaseInstance: ReturnType<typeof createClient> | null = null;
+
+export const supabase = {
+  getClient: async () => {
+    if (!supabaseInstance) {
+      // @ts-ignore
+      const config = await window.supabaseConfig.get();
+      if (!config?.url || !config?.anonKey) {
+        throw new Error('Supabase no configurado');
+      }
+      supabaseInstance = createClient(config.url, config.anonKey, {
+        auth: {
+          autoRefreshToken: true,
+          persistSession: true,
+          detectSessionInUrl: true
+        },
+        global: {
+          headers: { 'x-cache-control': 'no-cache' }
+        }
+      });
+    }
+    return supabaseInstance;
+  }
+};
+
 // Tipos basados en el esquema de la base de datos
 export interface Product {
   id: string;

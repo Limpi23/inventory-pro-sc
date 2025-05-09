@@ -8,13 +8,14 @@
     "dev": "vite --port 8080",
     "dev:electron": "cross-env NODE_ENV=development concurrently \"vite --port 8080\" \"electron .\"",
     "build": "tsc && vite build",
-    "build:electron": "tsc --skipLibCheck && vite build && electron-builder",
-    "build:windows": "npm run build && electron-builder --win --x64 --config.win.target=nsis",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "db:migration:new": "supabase migration new",
     "db:migration:apply": "supabase migration up",
-    "make:win": "npm run build:windows"
+    "start": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "make:win": "electron-forge make --platform win32 --arch x64"
   },
   "keywords": [
     "inventario",
@@ -26,6 +27,9 @@
   "license": "MIT",
   "description": "Aplicación de gestión de inventario.",
   "devDependencies": {
+    "@electron-forge/cli": "^7.8.0",
+    "@electron-forge/maker-squirrel": "^7.8.0",
+    "@electron-forge/maker-zip": "^7.2.0",
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "^22.15.3",
     "@types/react": "^18.2.56",
@@ -37,8 +41,6 @@
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
     "electron": "^27.0.0",
-    "electron-builder": "^26.0.12",
-    "electron-wix-msi": "^3.2.0",
     "eslint": "^8.56.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
