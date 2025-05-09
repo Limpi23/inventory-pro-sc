@@ -45,4 +45,13 @@ ipcRenderer.on('update-available', () => {
 });
 ipcRenderer.on('update-downloaded', () => {
   ipcRenderer.sendToHost('update-message', 'Actualización descargada. Reinicia para instalar.');
+});
+
+contextBridge.exposeInMainWorld('supabaseConfig', {
+  get: () => new Promise((resolve) => {
+    ipcRenderer.once('supabase-config', (_, config) => {
+      resolve(config);
+    });
+    ipcRenderer.send('get-supabase-config');
+  })
 }); 

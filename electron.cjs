@@ -146,6 +146,7 @@ function createWindow() {
     
     // Enviar la configuración de la base de datos desde el archivo .env
     sendDatabaseConfigToRenderer();
+    sendSupabaseConfigToRenderer();
   });
 
   // Evento de cierre
@@ -186,6 +187,15 @@ function sendDatabaseConfigToRenderer() {
       }
     `);
   }
+}
+
+// Función para enviar la configuración de Supabase al renderizador
+function sendSupabaseConfigToRenderer() {
+  if (!mainWindow) return;
+  mainWindow.webContents.send('supabase-config', {
+    url: process.env.SUPABASE_URL || '',
+    anonKey: process.env.SUPABASE_ANON_KEY || ''
+  });
 }
 
 // Función para leer configuración del registro de Windows
@@ -292,6 +302,14 @@ ipcMain.on('check-for-updates', () => {
 // Escuchar solicitudes para instalar actualizaciones
 ipcMain.on('install-update', () => {
   autoUpdater.quitAndInstall();
+});
+
+// Permitir que el renderer solicite la config de Supabase en cualquier momento
+ipcMain.on('get-supabase-config', (event) => {
+  event.sender.send('supabase-config', {
+    url: process.env.SUPABASE_URL || '',
+    anonKey: process.env.SUPABASE_ANON_KEY || ''
+  });
 });
 
 // Salir cuando todas las ventanas estén cerradas, excepto en macOS

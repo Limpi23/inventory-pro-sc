@@ -1,20 +1,37 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Configuración exacta de Supabase según supabase status
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'http://127.0.0.1:54321';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
-
-// Crear el cliente de Supabase
-export const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true
-  },
-  global: {
-    headers: { 'x-cache-control': 'no-cache' }
+// Cliente de Supabase dinámico según entorno
+export const getSupabaseClient = async () => {
+  if (import.meta.env.DEV) {
+    // Desarrollo: usa variables de entorno de Vite
+    const url = import.meta.env.VITE_SUPABASE_URL;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    return createClient(url, anonKey, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true
+      },
+      global: {
+        headers: { 'x-cache-control': 'no-cache' }
+      }
+    });
+  } else {
+    // Producción: usa preload y .env generado por el instalador
+    // @ts-ignore
+    const config = await window.supabaseConfig.get();
+    return createClient(config.url, config.anonKey, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true
+      },
+      global: {
+        headers: { 'x-cache-control': 'no-cache' }
+      }
+    });
   }
-});
+};
 
 // Tipos basados en el esquema de la base de datos
 export interface Product {
@@ -161,15 +178,16 @@ export interface PurchaseReceipt {
 // Servicios para interactuar con Supabase
 export const productService = {
   getAll: async (): Promise<Product[]> => {
+    const supabase = await getSupabaseClient();
     const { data, error } = await supabase
       .from('products')
       .select('*');
-    
     if (error) throw error;
     return data || [];
   },
   
   getById: async (id: string): Promise<Product | null> => {
+    const supabase = await getSupabaseClient();
     const { data, error } = await supabase
       .from('products')
       .select('*')
@@ -181,6 +199,7 @@ export const productService = {
   },
   
   create: async (product: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Promise<Product> => {
+    const supabase = await getSupabaseClient();
     const { data, error } = await supabase
       .from('products')
       .insert([product])
@@ -192,6 +211,7 @@ export const productService = {
   },
   
   update: async (id: string, updates: Partial<Product>): Promise<Product> => {
+    const supabase = await getSupabaseClient();
     const { data, error } = await supabase
       .from('products')
       .update(updates)
@@ -204,6 +224,7 @@ export const productService = {
   },
   
   delete: async (id: string): Promise<void> => {
+    const supabase = await getSupabaseClient();
     const { error } = await supabase
       .from('products')
       .delete()
@@ -221,6 +242,7 @@ export const categoryService = {
 export const stockMovementService = {
   // Obtener todos los movimientos de stock
   getAll: async (): Promise<StockMovement[]> => {
+    const supabase = await getSupabaseClient();
     const { data, error } = await supabase
       .from('stock_movements')
       .select(`
@@ -243,6 +265,7 @@ export const stockMovementService = {
     start_date?: string;
     end_date?: string;
   }): Promise<StockMovement[]> => {
+    const supabase = await getSupabaseClient();
     let query = supabase
       .from('stock_movements')
       .select(`
@@ -281,6 +304,7 @@ export const stockMovementService = {
   
   // Obtener un movimiento por su ID
   getById: async (id: string): Promise<StockMovement | null> => {
+    const supabase = await getSupabaseClient();
     const { data, error } = await supabase
       .from('stock_movements')
       .select(`
@@ -298,6 +322,7 @@ export const stockMovementService = {
   
   // Crear un nuevo movimiento de stock (entrada o salida)
   create: async (movement: Omit<StockMovement, 'id' | 'created_at'>): Promise<StockMovement> => {
+    const supabase = await getSupabaseClient();
     const { data, error } = await supabase
       .from('stock_movements')
       .insert([movement])
@@ -310,6 +335,7 @@ export const stockMovementService = {
   
   // Obtener los tipos de movimiento disponibles
   getMovementTypes: async (): Promise<MovementType[]> => {
+    const supabase = await getSupabaseClient();
     const { data, error } = await supabase
       .from('movement_types')
       .select('*')
@@ -321,6 +347,7 @@ export const stockMovementService = {
   
   // Obtener el stock actual de un producto en un almacén específico
   getCurrentStock: async (product_id: string, warehouse_id: string): Promise<number> => {
+    const supabase = await getSupabaseClient();
     const { data, error } = await supabase
       .from('current_stock')
       .select('current_quantity')
@@ -339,6 +366,7 @@ export const stockMovementService = {
   
   // Obtener el stock actual de todos los productos
   getAllCurrentStock: async (): Promise<any[]> => {
+    const supabase = await getSupabaseClient();
     const { data, error } = await supabase
       .from('current_stock')
       .select('*')
