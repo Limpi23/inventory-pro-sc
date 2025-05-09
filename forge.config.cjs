@@ -20,12 +20,18 @@ module.exports = {
           chooseDirectory: true,
         },
         wixOptions: {
-          codepage: 1252,
+          codepage: 65001,
           language: 3082,
           manufacturer: 'SuitCore',
           productName: 'Inventario Pro',
           productVersion: '1.0.0',
-          upgradeCode: '12345678-1234-1234-1234-123456789012'
+          upgradeCode: '12345678-1234-1234-1234-123456789012',
+          features: {
+            autoUpdate: true,
+            autoLaunch: true
+          },
+          extensions: ['WixUtilExtension'],
+          cultures: ['es-ES']
         }
       },
     },
