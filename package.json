@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite --port 8080",
     "dev:electron": "cross-env NODE_ENV=development concurrently \"vite --port 8080\" \"electron .\"",
-    "build": "tsc && vite build",
+    "build": "tsc --skipLibCheck --noEmit false && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "db:migration:new": "supabase migration new",
@@ -27,8 +27,8 @@
   "license": "MIT",
   "description": "Aplicación de gestión de inventario.",
   "devDependencies": {
-    "@electron-forge/cli": "^7.8.0",
-    "@electron-forge/maker-squirrel": "^7.8.0",
+    "@electron-forge/cli": "^7.2.0",
+    "@electron-forge/maker-squirrel": "^7.2.0",
     "@electron-forge/maker-zip": "^7.2.0",
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "^22.15.3",
