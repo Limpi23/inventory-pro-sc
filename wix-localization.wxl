@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<WixLocalization Culture="es-ES" Codepage="65001" xmlns="http://schemas.microsoft.com/wix/2006/localization">
+    <String Id="ProductName">Inventario Pro</String>
+    <String Id="ManufacturerName">SuitCore</String>
+    <String Id="AppDescription">Sistema de gestión de inventario</String>
+</WixLocalization> 

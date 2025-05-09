@@ -31,7 +31,16 @@ module.exports = {
             autoLaunch: true
           },
           extensions: ['WixUtilExtension'],
-          cultures: ['es-ES']
+          cultures: ['es-ES'],
+          wixToolsetPath: process.env.WIX || undefined,
+          wixToolsetVersion: '3.14',
+          wixToolsetArchitecture: 'x64',
+          wixToolsetOptions: {
+            codepage: 65001,
+            language: 3082,
+            cultures: ['es-ES']
+          },
+          localizationFile: './wix-localization.wxl'
         }
       },
     },
