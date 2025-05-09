@@ -15,7 +15,15 @@ module.exports = {
         description: 'Inventario Pro - SC',
         manufacturer: 'SuitCore',
         exe: 'inventory-suit.exe',
-        name: 'inventory-suit'
+        name: 'inventory-suit',
+        ui: {
+          chooseDirectory: true,
+        },
+        culture: 'es-ES',
+        codepage: 65001,
+        features: {
+          autoUpdate: true,
+        },
       },
     },
   ],
