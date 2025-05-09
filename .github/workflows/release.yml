@@ -1,4 +1,4 @@
-name: Build and Release MSI
+name: Build and Release EXE
 
 on:
   push:
@@ -23,19 +23,15 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build MSI with electron-forge
+      - name: Build EXE with electron-forge
         run: npm run make:win
 
       - name: List build artifacts
-        run: |
-          dir out\make\wix
-          dir out\make\squirrel.windows
+        run: dir out\make\squirrel.windows
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            out/make/wix/*.msi
-            out/make/squirrel.windows/*.exe
+          files: out/make/squirrel.windows/*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
