@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*.*.*'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -23,9 +26,16 @@ jobs:
       - name: Build MSI with electron-forge
         run: npm run make:win
 
+      - name: List build artifacts
+        run: |
+          dir out\make\wix
+          dir out\make\squirrel.windows
+
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: out/make/wix/*.msi
+          files: |
+            out/make/wix/*.msi
+            out/make/squirrel.windows/*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
