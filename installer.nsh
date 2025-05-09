@@ -1,5 +1,7 @@
 !include "LogicLib.nsh"
 !include "nsDialogs.nsh"
+!undef MUI_WELCOMEFINISHPAGE_BITMAP
+!undef MUI_UNWELCOMEFINISHPAGE_BITMAP
 ; Script personalizado para el instalador de Inventario Pro con configuración de Supabase
 
 !define MANUFACTURER "Inventario Pro"
