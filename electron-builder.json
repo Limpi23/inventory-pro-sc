@@ -52,11 +52,6 @@
     "artifactName": "Inventario-Pro-Setup-${version}.${ext}",
     "deleteAppDataOnUninstall": false,
     "displayLanguageSelector": true,
-    "installerIcon": "src/assets/app-icon.ico",
-    "uninstallerIcon": "src/assets/app-icon.ico",
-    "installerHeader": "src/assets/installer-header.bmp",
-    "installerSidebar": "src/assets/installer-sidebar.bmp",
-    "include": "installer.nsh",
     "license": "LICENSE.txt",
     "runAfterFinish": true,
     "perMachine": false,
@@ -65,7 +60,8 @@
       "es-ES",
       "en-US"
     ],
-    "language": "3082"
+    "language": "3082",
+    "include": "installer.nsh"
   },
   "afterPack": "./scripts/afterPack.cjs"
 }
