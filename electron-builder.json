@@ -61,7 +61,9 @@
       "en-US"
     ],
     "language": "3082",
-    "include": "installer.nsh"
+    "include": "installer.nsh",
+    "includeUninstallerIcon": false,
+    "includeInstallerIcon": false
   },
   "afterPack": "./scripts/afterPack.cjs"
 }
