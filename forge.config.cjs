@@ -4,7 +4,8 @@ const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 module.exports = {
   packagerConfig: {
     asar: true,
-    icon: './src/assets/app-icon'
+    icon: './src/assets/app-icon',
+    executableName: 'Inventario Pro'
   },
   rebuildConfig: {},
   makers: [
