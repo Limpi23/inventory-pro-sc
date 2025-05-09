@@ -1,5 +1,9 @@
 ; Script personalizado para el instalador de Inventario Pro con configuración de Supabase
 
+!include "MUI2.nsh"
+!include "LogicLib.nsh"
+!include "nsDialogs.nsh"
+
 !define MANUFACTURER "Inventario Pro"
 !define PRODUCT_VERSION "${version}"
 !define COPYRIGHT "Copyright © 2025"
