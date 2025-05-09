@@ -49,6 +49,7 @@
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
     "electron": "^27.0.0",
+    "electron-wix-msi": "^3.2.0",
     "eslint": "^8.56.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",

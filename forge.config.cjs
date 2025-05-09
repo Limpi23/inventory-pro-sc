@@ -12,27 +12,20 @@ module.exports = {
       name: '@electron-forge/maker-wix',
       config: {
         language: 3082,
-        description: 'Inventario Pro - SC',
+        description: 'Inventario Pro',
         manufacturer: 'SuitCore',
         exe: 'inventory-suit.exe',
         name: 'inventory-suit',
         ui: {
           chooseDirectory: true,
         },
-        culture: 'es-ES',
-        codepage: 1252,
-        features: {
-          autoUpdate: true,
-        },
         wixOptions: {
           codepage: 1252,
           language: 3082,
           manufacturer: 'SuitCore',
-          productName: 'Inventario Pro - SC',
+          productName: 'Inventario Pro',
           productVersion: '1.0.0',
-          upgradeCode: '12345678-1234-1234-1234-123456789012',
-          lightOptions: ['-cultures:es-ES'],
-          candleOptions: ['-cultures:es-ES']
+          upgradeCode: '12345678-1234-1234-1234-123456789012'
         }
       },
     },
