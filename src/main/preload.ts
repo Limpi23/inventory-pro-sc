@@ -48,10 +48,6 @@ ipcRenderer.on('update-downloaded', () => {
 });
 
 contextBridge.exposeInMainWorld('supabaseConfig', {
-  get: () => new Promise((resolve) => {
-    ipcRenderer.once('supabase-config', (_, config) => {
-      resolve(config);
-    });
-    ipcRenderer.send('get-supabase-config');
-  })
+  save: (config) => ipcRenderer.invoke('save-supabase-config', config),
+  get: () => ipcRenderer.invoke('get-supabase-config')
 }); 

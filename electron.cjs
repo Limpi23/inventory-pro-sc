@@ -5,6 +5,7 @@ const { autoUpdater } = require('electron-updater');
 const os = require('os');
 const { Registry } = require('winreg'); // Para Windows solamente
 const fs = require('fs');
+const Store = require('electron-store');
 
 // Mantener referencia global al objeto window
 let mainWindow;
@@ -334,4 +335,14 @@ ipcMain.on('select-directory', async (event) => {
   if (!result.canceled) {
     event.reply('directory-selected', result.filePaths[0]);
   }
+});
+
+const store = new Store();
+
+ipcMain.handle('save-supabase-config', (event, config) => {
+  store.set('supabase', config);
+});
+
+ipcMain.handle('get-supabase-config', () => {
+  return store.get('supabase');
 }); 

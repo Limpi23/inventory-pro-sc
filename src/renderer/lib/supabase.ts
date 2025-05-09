@@ -2,35 +2,21 @@ import { createClient } from '@supabase/supabase-js';
 
 // Cliente de Supabase dinámico según entorno
 export const getSupabaseClient = async () => {
-  if (import.meta.env.DEV) {
-    // Desarrollo: usa variables de entorno de Vite
-    const url = import.meta.env.VITE_SUPABASE_URL;
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-    return createClient(url, anonKey, {
-      auth: {
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: true
-      },
-      global: {
-        headers: { 'x-cache-control': 'no-cache' }
-      }
-    });
-  } else {
-    // Producción: usa preload y .env generado por el instalador
-    // @ts-ignore
-    const config = await window.supabaseConfig.get();
-    return createClient(config.url, config.anonKey, {
-      auth: {
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: true
-      },
-      global: {
-        headers: { 'x-cache-control': 'no-cache' }
-      }
-    });
+  // @ts-ignore
+  const config = await window.supabaseConfig.get();
+  if (!config?.url || !config?.anonKey) {
+    throw new Error('Supabase no configurado');
   }
+  return createClient(config.url, config.anonKey, {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true
+    },
+    global: {
+      headers: { 'x-cache-control': 'no-cache' }
+    }
+  });
 };
 
 // Tipos basados en el esquema de la base de datos

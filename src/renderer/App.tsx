@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import Layout from './components/Layout';
 import Dashboard from './views/Dashboard';
@@ -40,6 +40,7 @@ import { Toaster } from 'react-hot-toast';
 import SubscriptionExpired from './views/SubscriptionExpired';
 import SubscriptionRenew from './views/SubscriptionRenew';
 import SubscriptionGuard from './components/SubscriptionGuard';
+import Onboarding from './Onboarding';
 
 // Inicializar el tema
 const initializeTheme = () => {
@@ -90,10 +91,41 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-const App: React.FC = () => {
+const App = () => {
+  const [ready, setReady] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    (window as any).supabaseConfig.get().then((config: any) => {
+      if (config?.url && config?.anonKey) {
+        setReady(true);
+      }
+    });
+  }, []);
+
+  const handleReconfigure = async () => {
+    await (window as any).supabaseConfig.save({ url: '', anonKey: '' });
+    setReady(false);
+    setShowOnboarding(true);
+  };
+
+  if (!ready || showOnboarding) {
+    return <Onboarding onFinish={() => { setReady(true); setShowOnboarding(false); }} />;
+  }
+
   return (
     <AuthProvider>
       <Toaster position="top-right" />
+      {user?.role_name === 'admin' && (
+        <button
+          onClick={handleReconfigure}
+          style={{ position: 'fixed', top: 16, right: 16, zIndex: 1000, background: '#f59e42', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 16px', fontWeight: 'bold', cursor: 'pointer' }}
+          title="Reconfigurar Supabase"
+        >
+          Reconfigurar Supabase
+        </button>
+      )}
       <Routes>
         {/* Ruta pública para login */}
         <Route path="/login" element={<Login />} />
