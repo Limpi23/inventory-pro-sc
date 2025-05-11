@@ -19,8 +19,8 @@ const Returns: React.FC = () => {
   const fetchReturns = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('returns')
+      const client = await supabase.getClient();
+      const { data, error } = await client.from('returns')
         .select(`
           *,
           invoice:invoices(id, invoice_number, customer_id, customer:customers(id, name, identification_number))
@@ -63,8 +63,8 @@ const Returns: React.FC = () => {
     }
 
     try {
-      const { error } = await supabase
-        .from('returns')
+      const client = await supabase.getClient();
+      const { error } = await client.from('returns')
         .update({ 
           status: newStatus,
           updated_at: new Date().toISOString()

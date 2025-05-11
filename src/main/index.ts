@@ -1,9 +1,13 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import { autoUpdater } from 'electron-updater';
+import fs from 'fs';
 
 // Mantener una referencia global del objeto window para evitar que se cierre automáticamente
 let mainWindow: BrowserWindow | null = null;
+
+// Ruta donde guardarás la configuración de Supabase
+const configPath = path.join(app.getPath('userData'), 'supabase-config.json');
 
 function createWindow() {
   // Crear ventana del navegador
@@ -11,9 +15,9 @@ function createWindow() {
     width: 1200,
     height: 800,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      preload: path.join(__dirname, 'preload.js')
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, '../dist/preload.js')
     }
   });
 
@@ -120,4 +124,27 @@ ipcMain.handle('create-sale-note', async (_event) => {
 ipcMain.handle('get-sale-notes', async () => {
   // Obtener notas de venta
   return [];
+});
+
+// Handler para guardar la configuración
+ipcMain.handle('save-supabase-config', async (_event, config) => {
+  try {
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Handler para obtener la configuración
+ipcMain.handle('get-supabase-config', async () => {
+  try {
+    if (fs.existsSync(configPath)) {
+      const data = fs.readFileSync(configPath, 'utf-8');
+      return JSON.parse(data);
+    }
+    return {};
+  } catch (error) {
+    return {};
+  }
 }); 

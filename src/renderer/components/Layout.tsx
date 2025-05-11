@@ -15,6 +15,7 @@ const cn = (...classes: (string | boolean | undefined)[]) => {
 
 interface LayoutProps {
   children: React.ReactNode;
+  onOpenConfig?: () => void;
 }
 
 interface NavigationItem {
@@ -26,7 +27,7 @@ interface NavigationItem {
   requiredPermission?: { resource: string; action: string };
 }
 
-const Layout: React.FC<LayoutProps> = ({ children }) => {
+const Layout: React.FC<LayoutProps> = ({ children, onOpenConfig }) => {
   const location = useLocation();
   const { user, signOut, hasPermission } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -309,6 +310,15 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               <SubscriptionHelpButton />
               <DatabaseStatus />
               <UpdateNotification />
+              {/* Botón de engranaje para configuración de conexión */}
+              <button
+                className="rounded-full w-10 h-10 flex items-center justify-center hover:bg-muted transition-colors"
+                title="Configurar conexión"
+                onClick={onOpenConfig}
+                style={{ marginRight: 8 }}
+              >
+                <i className="fas fa-cog text-xl text-gray-500" />
+              </button>
               <div className="relative">
                 <Button
                   variant="outline"

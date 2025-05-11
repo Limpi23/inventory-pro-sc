@@ -7,8 +7,9 @@ export const authService = {
   // Iniciar sesión con email y contraseña usando Supabase Auth
   login: async (email: string, password: string): Promise<User | null> => {
     try {
+      const client = await supabase.getClient();
       // Autenticar con Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      const { data: authData, error: authError } = await client.auth.signInWithPassword({
         email,
         password,
       });
@@ -17,7 +18,7 @@ export const authService = {
         return null;
       }
       // Buscar usuario en la tabla users para obtener datos adicionales
-      const { data: userData, error } = await supabase
+      const { data: userData, error } = await client
         .from('users')
         .select(`
           id, 
@@ -88,9 +89,10 @@ export const authService = {
   },
 
   // Cerrar sesión
-  logout: (): void => {
+  logout: async (): Promise<void> => {
+    const client = await supabase.getClient();
+    await client.auth.signOut();
     localStorage.removeItem(SESSION_KEY);
-    supabase.auth.signOut();
   },
 
   // Registrar un nuevo usuario usando Supabase Auth
@@ -101,8 +103,9 @@ export const authService = {
     role_id: number;
   }): Promise<User> => {
     try {
+      const client = await supabase.getClient();
       // Registrar en Supabase Auth directamente
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      const { data: signUpData, error: signUpError } = await client.auth.signUp({
         email: userData.email,
         password: userData.password,
         options: {
@@ -119,7 +122,7 @@ export const authService = {
         throw new Error(signUpError?.message || 'No se pudo registrar el usuario');
       }
       // Insertar en la tabla users
-      const { data: newUserData, error } = await supabase
+      const { data: newUserData, error } = await client
         .from('users')
         .insert({
           id: signUpData.user.id,
@@ -142,7 +145,7 @@ export const authService = {
         throw new Error(error?.message || 'No se pudo crear el usuario en la base de datos.');
       }
       // Obtener información del rol
-      const { data: roleData } = await supabase
+      const { data: roleData } = await client
         .from('roles')
         .select('name, description')
         .eq('id', userData.role_id)

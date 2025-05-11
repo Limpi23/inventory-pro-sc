@@ -70,8 +70,10 @@ const Dashboard: React.FC = () => {
     try {
       setLoading(true);
       
+      const client = await supabase.getClient();
+      
       // Fetch total products count
-      const { count: productsCount, error: productsError } = await supabase
+      const { count: productsCount, error: productsError } = await client
         .from('products')
         .select('*', { count: 'exact', head: true });
       
@@ -81,7 +83,7 @@ const Dashboard: React.FC = () => {
       const today = new Date();
       const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
       
-      const { data: monthlySales, error: salesError } = await supabase
+      const { data: monthlySales, error: salesError } = await client
         .from('invoices')
         .select('total_amount')
         .gte('invoice_date', firstDayOfMonth.toISOString())
@@ -92,7 +94,7 @@ const Dashboard: React.FC = () => {
       const monthlyTotal = monthlySales?.reduce((sum, invoice) => sum + (invoice.total_amount || 0), 0) || 0;
       
       // Fetch low stock products count
-      const { data: lowStockCount, error: lowStockError } = await supabase
+      const { data: lowStockCount, error: lowStockError } = await client
         .from('current_stock')
         .select('product_id')
         .lte('current_quantity', 5);
@@ -105,7 +107,7 @@ const Dashboard: React.FC = () => {
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
       
-      const { count: movementsCount, error: movementsError } = await supabase
+      const { count: movementsCount, error: movementsError } = await client
         .from('stock_movements')
         .select('*', { count: 'exact', head: true })
         .gte('movement_date', startOfDay.toISOString());
@@ -123,7 +125,7 @@ const Dashboard: React.FC = () => {
       setStats(updatedStats);
       
       // Fetch recent movements
-      const { data: movements, error: recentMovementsError } = await supabase
+      const { data: movements, error: recentMovementsError } = await client
         .from('stock_movements')
         .select(`
           id,
@@ -146,7 +148,7 @@ const Dashboard: React.FC = () => {
         const movementTypeIds = [...new Set(movements.map(m => m.movement_type_id))];
         
         // Obtener detalles de productos
-        const { data: products, error: productsError } = await supabase
+        const { data: products, error: productsError } = await client
           .from('products')
           .select('id, name, sku')
           .in('id', productIds);
@@ -154,7 +156,7 @@ const Dashboard: React.FC = () => {
         if (productsError) throw productsError;
         
         // Obtener detalles de almacenes
-        const { data: warehouses, error: warehousesError } = await supabase
+        const { data: warehouses, error: warehousesError } = await client
           .from('warehouses')
           .select('id, name')
           .in('id', warehouseIds);
@@ -162,7 +164,7 @@ const Dashboard: React.FC = () => {
         if (warehousesError) throw warehousesError;
         
         // Obtener detalles de tipos de movimiento
-        const { data: movementTypes, error: movementTypesError } = await supabase
+        const { data: movementTypes, error: movementTypesError } = await client
           .from('movement_types')
           .select('id, code, description')
           .in('id', movementTypeIds);
@@ -206,7 +208,7 @@ const Dashboard: React.FC = () => {
       // Fetch top 5 products by movement quantity
       try {
         // Intentar usar la función RPC
-        const { data: topProductsData, error: topProductsError } = await supabase
+        const { data: topProductsData, error: topProductsError } = await client
           .rpc('get_top_selling_products', { limit_count: 5 })
           .select('*');
         
@@ -217,7 +219,7 @@ const Dashboard: React.FC = () => {
           console.log("Usando método alternativo para obtener productos más vendidos");
           
           // Obtener todos los productos primero
-          const { data: products, error: productsError } = await supabase
+          const { data: products, error: productsError } = await client
             .from('products')
             .select('id, name, sku');
             
@@ -227,7 +229,7 @@ const Dashboard: React.FC = () => {
           const productMap = new Map(products?.map(p => [p.id, p]) || []);
           
           // Obtener movimientos de salida
-          const { data: outMovements, error: movementsError } = await supabase
+          const { data: outMovements, error: movementsError } = await client
             .from('stock_movements')
             .select(`
               product_id,
@@ -290,7 +292,7 @@ const Dashboard: React.FC = () => {
       // Fetch low stock products detail
       try {
         // Obtener productos con stock bajo directamente
-        const { data: lowStockItems, error: lowStockItemsError } = await supabase
+        const { data: lowStockItems, error: lowStockItemsError } = await client
           .from('current_stock')
           .select(`
             product_id,
@@ -315,7 +317,7 @@ const Dashboard: React.FC = () => {
           const productIds = lowStockItems.map(item => item.product_id);
           
           // Obtener detalles completos de los productos
-          const { data: productDetails, error: productDetailsError } = await supabase
+          const { data: productDetails, error: productDetailsError } = await client
             .from('products')
             .select('id, name, sku')
             .in('id', productIds);

@@ -70,8 +70,8 @@ const Reports: React.FC = () => {
 
   const fetchWarehouses = async () => {
     try {
-      const { data, error } = await supabase
-        .from('warehouses')
+      const client = await supabase.getClient();
+      const { data, error } = await client.from('warehouses')
         .select('id, name')
         .order('name');
       
@@ -88,8 +88,8 @@ const Reports: React.FC = () => {
     setError(null);
     
     try {
-      let query = supabase
-        .from('invoices')
+      const client = await supabase.getClient();
+      let query = client.from('invoices')
         .select(`
           id,
           invoice_number,
@@ -165,8 +165,8 @@ const Reports: React.FC = () => {
     setError(null);
     
     try {
-      let query = supabase
-        .from('purchase_orders')
+      const client = await supabase.getClient();
+      let query = client.from('purchase_orders')
         .select(`
           id,
           order_date,

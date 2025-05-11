@@ -4,10 +4,13 @@ import { createClient } from '@supabase/supabase-js';
 export const getSupabaseClient = async () => {
   // @ts-ignore
   const config = await window.supabaseConfig.get();
-  if (!config?.url || !config?.anonKey) {
+  // Aceptar ambos formatos de configuración
+  const url = config?.url || config?.supabaseUrl;
+  const anonKey = config?.anonKey || config?.supabaseKey;
+  if (!url || !anonKey) {
     throw new Error('Supabase no configurado');
   }
-  return createClient(config.url, config.anonKey, {
+  const client = createClient(url, anonKey, {
     auth: {
       autoRefreshToken: true,
       persistSession: true,
@@ -17,6 +20,7 @@ export const getSupabaseClient = async () => {
       headers: { 'x-cache-control': 'no-cache' }
     }
   });
+  return client;
 };
 
 // Cliente de Supabase global
@@ -27,10 +31,13 @@ export const supabase = {
     if (!supabaseInstance) {
       // @ts-ignore
       const config = await window.supabaseConfig.get();
-      if (!config?.url || !config?.anonKey) {
+      // Aceptar ambos formatos de configuración
+      const url = config?.url || config?.supabaseUrl;
+      const anonKey = config?.anonKey || config?.supabaseKey;
+      if (!url || !anonKey) {
         throw new Error('Supabase no configurado');
       }
-      supabaseInstance = createClient(config.url, config.anonKey, {
+      supabaseInstance = createClient(url, anonKey, {
         auth: {
           autoRefreshToken: true,
           persistSession: true,

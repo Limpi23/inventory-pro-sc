@@ -6,13 +6,14 @@ import {
   DialogTitle,
   DialogFooter,
   DialogClose
-} from './components/ui/dialog';
+} from './ui/dialog';
 
-interface OnboardingProps {
+interface SupabaseConfigModalProps {
   onFinish: () => void;
+  onClose: () => void;
 }
 
-const Onboarding: React.FC<OnboardingProps> = ({ onFinish }) => {
+const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ onFinish, onClose }) => {
   const [url, setUrl] = useState('');
   const [accessKey, setAccessKey] = useState('');
   const [loading, setLoading] = useState(true);
@@ -23,16 +24,14 @@ const Onboarding: React.FC<OnboardingProps> = ({ onFinish }) => {
     const win = window as any;
     if (win.supabaseConfig && typeof win.supabaseConfig.get === 'function') {
       win.supabaseConfig.get().then((config: any) => {
-        if (config?.url && config?.anonKey) {
-          onFinish();
-        } else {
-          setLoading(false);
-        }
+        setUrl(config?.url || '');
+        setAccessKey(config?.anonKey || '');
+        setLoading(false);
       });
     } else {
       setLoading(false);
     }
-  }, [onFinish]);
+  }, []);
 
   const validateUrl = (url: string) => {
     try {
@@ -70,10 +69,10 @@ const Onboarding: React.FC<OnboardingProps> = ({ onFinish }) => {
   };
 
   return (
-    <Dialog open>
+    <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Configurar conexión</DialogTitle>
+          <DialogTitle>Configurar conexión a Supabase</DialogTitle>
         </DialogHeader>
         {loading ? (
           <div style={{textAlign:'center',marginTop:32}}>Cargando configuración...</div>
@@ -112,4 +111,4 @@ const Onboarding: React.FC<OnboardingProps> = ({ onFinish }) => {
   );
 };
 
-export default Onboarding; 
+export default SupabaseConfigModal; 

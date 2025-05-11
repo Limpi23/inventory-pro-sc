@@ -54,8 +54,8 @@ const InventoryGeneral: React.FC = () => {
       setIsLoading(true);
       
       // Obtener el inventario actual
-      const { data: inventoryData, error: inventoryError } = await supabase
-        .from('current_stock')
+      const client = await supabase.getClient();
+      const { data: inventoryData, error: inventoryError } = await client.from('current_stock')
         .select('*')
         .order('product_name');
       
@@ -73,8 +73,8 @@ const InventoryGeneral: React.FC = () => {
   const fetchProductHistory = async (productId: string) => {
     setIsLoading(true);
     try {
-      const { data: movementsData, error: movementsError } = await supabase
-        .from('stock_movements')
+      const client = await supabase.getClient();
+      const { data: movementsData, error: movementsError } = await client.from('stock_movements')
         .select(`
           id,
           movement_date,

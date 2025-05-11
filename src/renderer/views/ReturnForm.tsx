@@ -32,8 +32,8 @@ const ReturnForm: React.FC = () => {
   const fetchInvoices = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('invoices')
+      const client = await supabase.getClient();
+      const { data, error } = await client.from('invoices')
         .select(`
           *,
           customer:customers(id, name, identification_number),
@@ -55,8 +55,8 @@ const ReturnForm: React.FC = () => {
   const fetchInvoiceItems = async (invoiceId: string) => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('invoice_items')
+      const client = await supabase.getClient();
+      const { data, error } = await client.from('invoice_items')
         .select(`
           *,
           product:products(id, name, sku)
@@ -160,8 +160,8 @@ const ReturnForm: React.FC = () => {
       };
       
       // Insertar la devolución en la base de datos
-      const { data: returnRecord, error: returnError } = await supabase
-        .from('returns')
+      const client = await supabase.getClient();
+      const { data: returnRecord, error: returnError } = await client.from('returns')
         .insert([{
           invoice_id: returnData.invoice_id,
           return_date: returnData.return_date,
@@ -193,8 +193,7 @@ const ReturnForm: React.FC = () => {
         };
       });
       
-      const { error: itemsError } = await supabase
-        .from('return_items')
+      const { error: itemsError } = await client.from('return_items')
         .insert(returnItemsData);
       
       if (itemsError) throw itemsError;

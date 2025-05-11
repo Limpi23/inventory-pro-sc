@@ -41,6 +41,7 @@ import SubscriptionExpired from './views/SubscriptionExpired';
 import SubscriptionRenew from './views/SubscriptionRenew';
 import SubscriptionGuard from './components/SubscriptionGuard';
 import Onboarding from './Onboarding';
+import SupabaseConfigModal from './components/SupabaseConfigModal';
 
 // Inicializar el tema
 const initializeTheme = () => {
@@ -64,9 +65,9 @@ const initializeTheme = () => {
 initializeTheme();
 
 // Componente contenedor para Layout
-const LayoutWrapper = () => {
+const LayoutWrapper = ({ onOpenConfig }: { onOpenConfig: () => void }) => {
   return (
-    <Layout>
+    <Layout onOpenConfig={onOpenConfig}>
       <Outlet />
     </Layout>
   );
@@ -93,61 +94,72 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 const App = () => {
   const [ready, setReady] = useState(false);
+  const [showConfigModal, setShowConfigModal] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
-    (window as any).supabaseConfig.get().then((config: any) => {
-      if (config?.url && config?.anonKey) {
-        setReady(true);
-      }
-    });
+    const win = window as any;
+    if (win.supabaseConfig && typeof win.supabaseConfig.get === 'function') {
+      win.supabaseConfig.get().then((config: any) => {
+        if (config?.url && config?.anonKey) {
+          setReady(true);
+        } else {
+          setShowOnboarding(true);
+        }
+      });
+    } else {
+      setReady(true);
+    }
   }, []);
 
-  const handleReconfigure = async () => {
-    await (window as any).supabaseConfig.save({ url: '', anonKey: '' });
-    setReady(false);
-    setShowOnboarding(true);
+  const handleOpenConfig = () => {
+    setShowConfigModal(true);
+  };
+  const handleConfigFinish = () => {
+    setReady(true);
+    setShowConfigModal(false);
+  };
+  const handleOnboardingFinish = () => {
+    setReady(true);
+    setShowOnboarding(false);
   };
 
-  if (!ready || showOnboarding) {
-    return <Onboarding onFinish={() => { setReady(true); setShowOnboarding(false); }} />;
+  if (!ready && !showOnboarding) {
+    // Esperar a que se determine si hay config o no
+    return null;
   }
 
   return (
-    <AuthProvider>
+    <>
       <Toaster position="top-right" />
-      {user?.role_name === 'admin' && (
-        <button
-          onClick={handleReconfigure}
-          style={{ position: 'fixed', top: 16, right: 16, zIndex: 1000, background: '#f59e42', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 16px', fontWeight: 'bold', cursor: 'pointer' }}
-          title="Reconfigurar Supabase"
-        >
-          Reconfigurar Supabase
-        </button>
+      {/* Modal de configuración de conexión */}
+      {showConfigModal && (
+        <SupabaseConfigModal onFinish={handleConfigFinish} onClose={() => setShowConfigModal(false)} />
+      )}
+      {/* Onboarding solo la primera vez */}
+      {showOnboarding && (
+        <Onboarding onFinish={handleOnboardingFinish} />
       )}
       <Routes>
         {/* Ruta pública para login */}
         <Route path="/login" element={<Login />} />
-        
         {/* Rutas de suscripción */}
         <Route path="/subscription/expired" element={
           <ProtectedRoute>
             <SubscriptionExpired />
           </ProtectedRoute>
         } />
-        
         <Route path="/subscription/renew" element={
           <ProtectedRoute>
             <SubscriptionRenew />
           </ProtectedRoute>
         } />
-        
         {/* Rutas protegidas con verificación de suscripción */}
         <Route path="/" element={
           <ProtectedRoute>
             <SubscriptionGuard>
-              <LayoutWrapper />
+              <LayoutWrapper onOpenConfig={handleOpenConfig} />
             </SubscriptionGuard>
           </ProtectedRoute>
         }>
@@ -160,7 +172,6 @@ const App = () => {
           <Route path="inventario" element={<Inventory />} />
           <Route path="inventario/general" element={<InventoryGeneral />} />
           <Route path="reportes" element={<Reports />} />
-          
           {/* Rutas de Órdenes de Compra */}
           <Route path="ordenes-compra" element={<PurchaseOrders />} />
           <Route path="ordenes-compra/lista" element={<PurchaseOrderList />} />
@@ -168,37 +179,30 @@ const App = () => {
           <Route path="ordenes-compra/editar/:id" element={<PurchaseOrderForm />} />
           <Route path="ordenes-compra/:id" element={<PurchaseOrderDetail />} />
           <Route path="ordenes-compra/:id/recibir" element={<PurchaseOrderDetail />} />
-          
           {/* Rutas del módulo de Ventas */}
           <Route path="ventas" element={<Sales />} />
-          
           {/* Rutas de Clientes */}
           <Route path="ventas/clientes" element={<Customers />} />
           <Route path="ventas/clientes/nuevo" element={<CustomerForm />} />
           <Route path="ventas/clientes/editar/:id" element={<CustomerForm />} />
-          
           {/* Rutas de Facturas */}
           <Route path="ventas/facturas" element={<Invoices />} />
           <Route path="ventas/facturas/nueva" element={<InvoiceForm />} />
           <Route path="ventas/facturas/editar/:id" element={<InvoiceForm />} />
           <Route path="ventas/facturas/:id" element={<InvoiceDetail />} />
-          
           {/* Rutas de Devoluciones */}
           <Route path="ventas/devoluciones" element={<Returns />} />
           <Route path="ventas/devoluciones/nueva" element={<ReturnForm />} />
           <Route path="ventas/devoluciones/:id" element={<ReturnDetail />} />
-          
           {/* Rutas de Gestión de Usuarios */}
           <Route path="usuarios" element={<Users />} />
           <Route path="usuarios/permisos" element={<RolePermissions />} />
-          
           {/* Ruta de Ajustes */}
           <Route path="ajustes" element={<Settings />} />
-          
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
-    </AuthProvider>
+    </>
   );
 };
 

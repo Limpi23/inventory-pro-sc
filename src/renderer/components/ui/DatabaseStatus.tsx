@@ -27,8 +27,11 @@ const DatabaseStatus: React.FC = () => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), CONNECTION_TIMEOUT);
       
+      // Obtener el cliente de Supabase
+      const client = await supabase.getClient();
+      
       // Consulta aún más liviana: select 1
-      const { error } = await supabase
+      const { error } = await client
         .rpc('select_one'); // Debes crear una función RPC en tu base de datos que haga SELECT 1
       
       clearTimeout(timeoutId);

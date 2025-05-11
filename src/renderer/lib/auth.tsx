@@ -27,27 +27,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const loadUser = async () => {
       try {
-        setLoading(true);
-        // Verificar usuario actual al iniciar
-        const currentUser = authService.getCurrentUser();
-        setUser(currentUser);
+        const client = await supabase.getClient();
+        const { data: { user }, error } = await client.auth.getUser();
         
-        if (currentUser) {
-          // Cargar permisos del usuario
-          const userPermissions = await userService.getUserPermissions(currentUser.id);
-          setPermissions(userPermissions.map(p => ({
-            resource: p.resource,
-            action: p.action
-          })));
-
-          // Verificar suscripción
-          if (currentUser.tenant_id) {
-            const subscriptionInfo = await checkSubscription();
-            setSubscription(subscriptionInfo);
-          }
+        if (error) throw error;
+        
+        if (user) {
+          const userData = await userService.getUserPermissions(user.id);
+          setUser(userData);
         }
       } catch (error) {
         console.error('Error al cargar datos de usuario:', error);
+        toast.error('Error al cargar datos de usuario');
       } finally {
         setLoading(false);
       }
@@ -90,7 +81,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       // Actualizar último acceso
       try {
-        await userService.updateLastLogin(userData.id);
+        const client = await supabase.getClient();
+        await client
+          .from('users')
+          .update({ last_login: new Date().toISOString() })
+          .eq('id', userData.id);
       } catch (e) {
         console.warn('No se pudo actualizar el último acceso:', e);
       }
@@ -98,7 +93,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setUser(userData);
       // Obtener tenant_id del usuario si no existe
       if (!userData.tenant_id) {
-        const { data, error } = await supabase
+        const client = await supabase.getClient();
+        const { data, error } = await client
           .from('users')
           .select('tenant_id')
           .eq('id', userData.id)

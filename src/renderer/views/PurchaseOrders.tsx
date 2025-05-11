@@ -36,8 +36,8 @@ const PurchaseOrders: React.FC = () => {
     try {
       setIsLoading(true);
       
-      let query = supabase
-        .from('purchase_orders')
+      const client = await supabase.getClient();
+      let query = client.from('purchase_orders')
         .select(`
           *,
           supplier:suppliers(name),

@@ -37,8 +37,9 @@ const PurchaseOrderList: React.FC = () => {
     try {
       setIsLoading(true);
       
-      let query = supabase
-        .from('purchase_orders')
+      const client = await supabase.getClient();
+      
+      let query = client.from('purchase_orders')
         .select(`
           id,
           supplier_id,
@@ -59,8 +60,7 @@ const PurchaseOrderList: React.FC = () => {
         
         try {
           // Primero buscamos proveedores cuyo nombre coincida
-          const { data: proveedores } = await supabase
-            .from('suppliers')
+          const { data: proveedores } = await client.from('suppliers')
             .select('id')
             .ilike('name', `%${searchTerm}%`);
           

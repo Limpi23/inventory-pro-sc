@@ -118,8 +118,8 @@ const PurchaseOrderDetail: React.FC = () => {
       setIsLoading(true);
       
       // Obtener los detalles de la orden de compra
-      const { data: orderData, error: orderError } = await supabase
-        .from('purchase_orders')
+      const client = await supabase.getClient();
+      const { data: orderData, error: orderError } = await client.from('purchase_orders')
         .select(`
           *,
           supplier:suppliers(*),
@@ -132,8 +132,7 @@ const PurchaseOrderDetail: React.FC = () => {
       setOrder(orderData);
       
       // Obtener los items de la orden
-      const { data: itemsData, error: itemsError } = await supabase
-        .from('purchase_order_items')
+      const { data: itemsData, error: itemsError } = await client.from('purchase_order_items')
         .select(`
           *,
           product:products(id, name, sku)
@@ -171,8 +170,8 @@ const PurchaseOrderDetail: React.FC = () => {
     }
     
     try {
-      const { error } = await supabase
-        .from('purchase_orders')
+      const client = await supabase.getClient();
+      const { error } = await client.from('purchase_orders')
         .update({ status: 'cancelada', updated_at: new Date().toISOString() })
         .eq('id', id);
       
@@ -249,6 +248,7 @@ const PurchaseOrderDetail: React.FC = () => {
     
     try {
       // Registrar cada ítem recibido
+      const client = await supabase.getClient();
       const receivedEntries = Object.entries(receivedItems)
         .filter(([_, qty]) => qty > 0)
         .map(([itemId, receivedQty]) => {
@@ -266,8 +266,7 @@ const PurchaseOrderDetail: React.FC = () => {
         });
       
       // Insertar registros de recepción
-      const { error: receiptError } = await supabase
-        .from('purchase_receipts')
+      const { error: receiptError } = await client.from('purchase_receipts')
         .insert(receivedEntries);
       
       if (receiptError) throw receiptError;
@@ -281,37 +280,24 @@ const PurchaseOrderDetail: React.FC = () => {
         
         const newReceivedQty = (item.received_quantity || 0) + receivedQty;
         
-        const { error: updateError } = await supabase
-          .from('purchase_order_items')
+        const { error: stockError } = await client.rpc('add_stock', {
+          p_product_id: item.product_id,
+          p_warehouse_id: order?.warehouse_id,
+          p_quantity: receivedQty,
+          p_reference: `Recepción orden #${id}`,
+          p_type: 'entrada'
+        });
+        
+        if (stockError) {
+          console.error('Error en la función add_stock:', stockError);
+          throw new Error(`Error al actualizar el inventario: ${stockError.message || 'Error desconocido'}`);
+        }
+        
+        const { error: updateError } = await client.from('purchase_order_items')
           .update({ received_quantity: newReceivedQty })
           .eq('id', itemId);
         
         if (updateError) throw updateError;
-        
-        try {
-          // Actualizar el inventario
-          const { error: stockError } = await supabase.rpc('add_stock', {
-            p_product_id: item.product_id,
-            p_warehouse_id: order?.warehouse_id,
-            p_quantity: receivedQty,
-            p_reference: `Recepción orden #${id}`,
-            p_type: 'entrada'
-          });
-          
-          if (stockError) {
-            console.error('Error en la función add_stock:', stockError);
-            throw new Error(`Error al actualizar el inventario: ${stockError.message || 'Error desconocido'}`);
-          }
-        } catch (stockErr: any) {
-          console.error('Error al actualizar inventario:', stockErr);
-          // Si falla la actualización del inventario, revertimos la actualización del ítem
-          await supabase
-            .from('purchase_order_items')
-            .update({ received_quantity: item.received_quantity || 0 })
-            .eq('id', itemId);
-          
-          throw new Error(`Error al actualizar el inventario: ${stockErr.message}`);
-        }
       }
       
       // Determinar el nuevo estado de la orden
@@ -327,8 +313,7 @@ const PurchaseOrderDetail: React.FC = () => {
       }
       
       // Actualizar el estado de la orden
-      const { error: orderUpdateError } = await supabase
-        .from('purchase_orders')
+      const { error: orderUpdateError } = await client.from('purchase_orders')
         .update({ 
           status: newStatus,
           updated_at: new Date().toISOString()

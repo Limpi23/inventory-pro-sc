@@ -6,8 +6,9 @@ export const userService = {
   // Obtener todos los usuarios
   getAllUsers: async (): Promise<User[]> => {
     try {
+      const client = await supabase.getClient();
       // Primero obtenemos los usuarios básicos
-      const { data: usersData, error: usersError } = await supabase
+      const { data: usersData, error: usersError } = await client
         .from('users')
         .select(`
           id, 
@@ -24,10 +25,10 @@ export const userService = {
       if (!usersData) return [];
       
       // Luego obtenemos todos los roles para hacer match
-      const { data: rolesData, error: rolesError } = await supabase
+      const { data: rolesData, error: rolesError } = await client
         .from('roles')
         .select('id, name, description');
-        
+      
       if (rolesError) throw rolesError;
       
       // Creamos un mapa de roles por id para acceder fácilmente
@@ -57,8 +58,9 @@ export const userService = {
   // Obtener un usuario por ID
   getUserById: async (id: string): Promise<User | null> => {
     try {
+      const client = await supabase.getClient();
       // Obtener los datos básicos del usuario
-      const { data: userData, error: userError } = await supabase
+      const { data: userData, error: userError } = await client
         .from('users')
         .select(`
           id, 
@@ -76,12 +78,12 @@ export const userService = {
       if (!userData) return null;
       
       // Obtener información del rol
-      const { data: roleData, error: roleError } = await supabase
+      const { data: roleData, error: roleError } = await client
         .from('roles')
         .select('id, name, description')
         .eq('id', userData.role_id)
         .single();
-        
+      
       if (roleError && roleError.code !== 'PGRST116') throw roleError;
       
       return {
@@ -104,8 +106,9 @@ export const userService = {
   // Obtener un usuario por email
   getUserByEmail: async (email: string): Promise<User | null> => {
     try {
+      const client = await supabase.getClient();
       // Obtener los datos básicos del usuario
-      const { data: userData, error: userError } = await supabase
+      const { data: userData, error: userError } = await client
         .from('users')
         .select(`
           id, 
@@ -130,12 +133,12 @@ export const userService = {
       if (!userData) return null;
       
       // Obtener información del rol
-      const { data: roleData, error: roleError } = await supabase
+      const { data: roleData, error: roleError } = await client
         .from('roles')
         .select('id, name, description')
         .eq('id', userData.role_id)
         .single();
-        
+      
       if (roleError && roleError.code !== 'PGRST116') throw roleError;
       
       return {
@@ -185,8 +188,9 @@ export const userService = {
     active?: boolean;
   }): Promise<User> => {
     try {
+      const client = await supabase.getClient();
       // Actualizar el usuario
-      const { error } = await supabase
+      const { error } = await client
         .from('users')
         .update(updates)
         .eq('id', id);
@@ -209,8 +213,9 @@ export const userService = {
   // Eliminar usuario
   deleteUser: async (id: string): Promise<void> => {
     try {
+      const client = await supabase.getClient();
       // Eliminar directamente de la tabla users
-      const { error } = await supabase
+      const { error } = await client
         .from('users')
         .delete()
         .eq('id', id);
@@ -224,7 +229,8 @@ export const userService = {
   
   // Actualizar última conexión
   updateLastLogin: async (id: string): Promise<void> => {
-    const { error } = await supabase
+    const client = await supabase.getClient();
+    const { error } = await client
       .from('users')
       .update({ last_login: new Date().toISOString() })
       .eq('id', id);
@@ -234,7 +240,8 @@ export const userService = {
   
   // Obtener todos los roles
   getAllRoles: async (): Promise<Role[]> => {
-    const { data, error } = await supabase
+    const client = await supabase.getClient();
+    const { data, error } = await client
       .from('roles')
       .select('*')
       .order('id');
@@ -245,7 +252,8 @@ export const userService = {
   
   // Obtener permisos de un usuario
   getUserPermissions: async (userId: string): Promise<Permission[]> => {
-    const { data, error } = await supabase
+    const client = await supabase.getClient();
+    const { data, error } = await client
       .rpc('get_user_permissions', { user_id: userId });
     
     if (error) throw error;
