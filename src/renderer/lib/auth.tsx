@@ -24,26 +24,63 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
   const [permissions, setPermissions] = useState<{ resource: string; action: string }[]>([]);
 
+  // Función para mapear y tipar correctamente el usuario
+  const mapUser = (userData: any): User => ({
+    id: String(userData.id),
+    email: String(userData.email),
+    full_name: String(userData.full_name),
+    active: Boolean(userData.active),
+    role_id: Number(userData.role_id),
+    role_name: String(userData.role_name || ''),
+    role_description: String(userData.role_description || ''),
+    last_login: String(userData.last_login || ''),
+    created_at: String(userData.created_at || ''),
+    tenant_id: userData.tenant_id ? String(userData.tenant_id) : undefined,
+  });
+
+  // Función para guardar la sesión de forma segura
+  const saveSession = (user: any) => {
+    localStorage.setItem('inventory_session', JSON.stringify(mapUser(user)));
+  };
+
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const client = await supabase.getClient();
-        const { data: { user }, error } = await client.auth.getUser();
-        
-        if (error) throw error;
-        
-        if (user) {
-          const userData = await userService.getUserPermissions(user.id);
-          setUser(userData);
+        const sessionData = localStorage.getItem('inventory_session');
+        if (sessionData) {
+          const sessionUser = JSON.parse(sessionData);
+          const client = await supabase.getClient();
+          const { data: userData, error } = await client
+            .from('users')
+            .select('*')
+            .eq('id', sessionUser.id)
+            .eq('active', true)
+            .single();
+          if (error || !userData) {
+            localStorage.removeItem('inventory_session');
+            setUser(null);
+            setPermissions([]);
+            setLoading(false);
+            return;
+          }
+          const userMapped = mapUser(userData);
+          saveSession(userMapped);
+          setUser(userMapped);
+          // Cargar permisos del usuario
+          const userPermissions = await userService.getUserPermissions(userMapped.id);
+          setPermissions(userPermissions.map(p => ({
+            resource: p.resource,
+            action: p.action
+          })));
         }
       } catch (error) {
-        console.error('Error al cargar datos de usuario:', error);
-        toast.error('Error al cargar datos de usuario');
+        localStorage.removeItem('inventory_session');
+        setUser(null);
+        setPermissions([]);
       } finally {
         setLoading(false);
       }
     };
-    
     loadUser();
     
     // Verificar suscripción periódicamente (cada hora)
@@ -100,8 +137,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           .eq('id', userData.id)
           .single();
         if (!error && data?.tenant_id) {
-          userData.tenant_id = data.tenant_id;
-          localStorage.setItem('inventory_session', JSON.stringify(userData));
+          userData.tenant_id = String(data.tenant_id);
+          const userMapped = mapUser(userData);
+          saveSession(userMapped);
+          setUser(userMapped);
         }
       }
       // Cargar permisos del usuario
