@@ -4,6 +4,7 @@ node_modules/
 # Build output
 dist/
 release/
+out/
 
 # Vite
 .vite/
@@ -11,6 +12,11 @@ release/
 # Electron
 *.log
 *.tsbuildinfo
+
+# Archivos temporales de build
+package.json.backup
+tsconfig.temp.json
+src/types/index.ts
 
 # Configuración local
 .env

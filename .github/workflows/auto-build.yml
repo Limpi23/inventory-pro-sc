@@ -1,0 +1,102 @@
+name: Auto Build on Push
+
+on:
+  push:
+    branches: [ main, master ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+
+permissions:
+  contents: write
+
+jobs:
+  auto-build:
+    runs-on: windows-latest
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Build preload script
+        run: npm run build:preload
+
+      - name: Generate Windows installer
+        run: npm run make:win
+
+      - name: Get commit info
+        id: commit
+        run: |
+          $shortSha = "${{ github.sha }}".Substring(0, 7)
+          $date = Get-Date -Format "yyyy-MM-dd"
+          $version = node -p "require('./package.json').version"
+          echo "short_sha=$shortSha" >> $env:GITHUB_OUTPUT
+          echo "date=$date" >> $env:GITHUB_OUTPUT
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "build_name=v$version-$date-$shortSha" >> $env:GITHUB_OUTPUT
+        shell: powershell
+
+      - name: List artifacts
+        run: |
+          echo "=== Generated Files ==="
+          Get-ChildItem "out\make\squirrel.windows\x64" | ForEach-Object { 
+            Write-Host "$($_.Name) - $([math]::Round($_.Length/1MB, 2)) MB" 
+          }
+        shell: powershell
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: inventario-pro-${{ steps.commit.outputs.build_name }}
+          path: |
+            out/make/squirrel.windows/x64/*.exe
+            out/make/squirrel.windows/x64/*.nupkg
+            out/make/squirrel.windows/x64/RELEASES
+          retention-days: 30
+
+      - name: Create development release
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: dev-${{ steps.commit.outputs.build_name }}
+          name: "🔧 Development Build ${{ steps.commit.outputs.build_name }}"
+          body: |
+            ## 🔧 Development Build
+            
+            **Commit**: [`${{ steps.commit.outputs.short_sha }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
+            **Branch**: `${{ github.ref_name }}`
+            **Date**: ${{ steps.commit.outputs.date }}
+            **Version**: ${{ steps.commit.outputs.version }}
+            
+            ### 📝 Recent Changes
+            ${{ github.event.head_commit.message }}
+            
+            ### ⚠️ Nota
+            Esta es una build de desarrollo automática. 
+            Para releases estables, usa los tags con versión.
+            
+            ### 📦 Archivos
+            - `Setup.exe` - Instalador completo
+            - `.nupkg` - Paquete de actualización
+            - `RELEASES` - Metadatos de versión
+            
+          files: |
+            out/make/squirrel.windows/x64/*.exe
+            out/make/squirrel.windows/x64/*.nupkg
+            out/make/squirrel.windows/x64/RELEASES
+          prerelease: true
+          make_latest: false 

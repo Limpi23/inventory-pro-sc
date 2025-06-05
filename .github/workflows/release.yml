@@ -1,37 +1,136 @@
-name: Build and Release EXE
+name: Build and Release
 
 on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.4.3)'
+        required: true
+        default: 'v1.4.3'
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  build-windows:
     runs-on: windows-latest
-
+    
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Build EXE with electron-forge
+      - name: Update version in package.json
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          $version = "${{ github.event.inputs.version }}" -replace '^v', ''
+          npm version $version --no-git-tag-version
+        shell: powershell
+
+      - name: Build application
+        run: npm run build
+
+      - name: Build preload script
+        run: npm run build:preload
+
+      - name: Build Windows installer
         run: npm run make:win
 
       - name: List build artifacts
-        run: dir out\make\squirrel.windows
+        run: |
+          echo "=== Build Artifacts ==="
+          dir out\make\squirrel.windows\x64
+          echo "=== File Details ==="
+          Get-ChildItem "out\make\squirrel.windows\x64" | ForEach-Object { 
+            Write-Host "$($_.Name) - $([math]::Round($_.Length/1MB, 2)) MB" 
+          }
+        shell: powershell
 
-      - name: Upload Release Asset
-        uses: softprops/action-gh-release@v2
-        with:
-          files: out/make/squirrel.windows/**/*.exe
+      - name: Get version
+        id: version
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $version = "${{ github.event.inputs.version }}"
+          } else {
+            $version = "${{ github.ref_name }}"
+          }
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "Version: $version"
+        shell: powershell
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          release_name: Inventario Pro ${{ steps.version.outputs.version }}
+          body: |
+            ## 🚀 Inventario Pro ${{ steps.version.outputs.version }}
+            
+            ### 📦 Archivos de Instalación
+            - **Setup.exe**: Instalador completo para Windows
+            - **nupkg**: Paquete para actualizaciones automáticas
+            
+            ### 💻 Requisitos del Sistema
+            - Windows 10 o superior
+            - Arquitectura x64
+            
+            ### 🔧 Instalación
+            1. Descarga `inventory-suit-${{ steps.version.outputs.version }} Setup.exe`
+            2. Ejecuta el instalador como administrador
+            3. Sigue las instrucciones en pantalla
+            4. Configura tu conexión a Supabase
+            
+            ### 🆕 Características
+            - Sistema completo de gestión de inventario
+            - Interfaz moderna y responsive
+            - Integración con Supabase
+            - Actualizaciones automáticas
+            
+            ---
+            **Desarrollado por SuitCore** | [Documentación](./README.md) | [Reporte de Issues](../../issues)
+          draft: false
+          prerelease: false
+
+      - name: Upload Setup Executable
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: out/make/squirrel.windows/x64/inventory-suit-${{ steps.version.outputs.version }} Setup.exe
+          asset_name: inventory-suit-${{ steps.version.outputs.version }}-Setup.exe
+          asset_content_type: application/octet-stream
+
+      - name: Upload Update Package
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: out/make/squirrel.windows/x64/inventory-suit-${{ steps.version.outputs.version }}-full.nupkg
+          asset_name: inventory-suit-${{ steps.version.outputs.version }}-full.nupkg
+          asset_content_type: application/octet-stream
+
+      - name: Upload RELEASES file
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: out/make/squirrel.windows/x64/RELEASES
+          asset_name: RELEASES
+          asset_content_type: text/plain 
