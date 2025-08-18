@@ -5,7 +5,13 @@ module.exports = {
   packagerConfig: {
     asar: true,
     icon: './src/assets/app-icon',
-    executableName: 'Inventario Pro'
+    executableName: 'Inventario Pro',
+    // Evita que electron-packager intente procesar archivos .env inexistentes
+    // (corrige error ENOENT lstat .env durante "Finalizing package" en Windows)
+    ignore: [
+      // Cualquier .env en la raíz o subcarpetas (incluye .env.local, etc.)
+      /(^|[\\/])\.env(\..*)?$/,
+    ]
   },
   rebuildConfig: {},
   makers: [

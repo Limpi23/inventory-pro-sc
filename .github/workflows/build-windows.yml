@@ -1,0 +1,43 @@
+name: Build Windows Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'electron-builder.json'
+      - 'package.json'
+      - 'installer.nsh'
+      - 'vite.config.ts'
+      - 'electron.cjs'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer (no publish)
+        run: npm run build:windows
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: |
+            release/*.exe
+            release/*.msi
+          if-no-files-found: error

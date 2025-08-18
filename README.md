@@ -24,8 +24,8 @@ Sistema profesional de inventario con Electron y Vite, diseñado para gestionar 
 
 1. Clona este repositorio:
 ```bash
-git clone https://github.com/tuusuario/inventory-suit.git
-cd inventory-suit
+git clone https://github.com/Limpi23/inventory-pro-sc.git
+cd inventory-pro-sc
 ```
 
 2. Instala las dependencias:
@@ -35,7 +35,7 @@ npm install
 
 3. Ejecuta en modo desarrollo:
 ```bash
-npm run electron:dev
+npm run dev:electron
 ```
 
 ## Estructura de Archivos
@@ -61,9 +61,17 @@ inventory-suit/
 ## Scripts
 
 - `npm run dev` - Inicia sólo el servidor de desarrollo de Vite
-- `npm run electron:dev` - Inicia el servidor de desarrollo y la aplicación Electron
+- `npm run dev:electron` - Inicia el servidor de desarrollo y la aplicación Electron
 - `npm run build` - Construye la aplicación para producción
-- `npm run electron:build` - Construye y empaqueta la aplicación Electron
+- `npm run make:win` - Genera instalador de Windows (ejecutar en Windows)
+
+Instalador Windows (forge + Squirrel):
+```bash
+npm run make:win
+```
+Salida: `out/make/squirrel.windows/x64/*.exe`.
+
+Notas: NSIS no se usa. Los archivos `.env` no se empaquetan; la configuración se realiza dentro de la app y se persiste en `electron-store`.
 
 ## Contribuir
 
