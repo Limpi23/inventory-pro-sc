@@ -50,32 +50,33 @@ const Inventory: React.FC = () => {
   useEffect(() => {
     async function fetchData() {
       try {
+  const client = await supabase.getClient();
         // Cargar productos
-        const { data: productsData, error: productsError } = await supabase
+  const { data: productsData, error: productsError } = await client
           .from('products')
           .select('*');
         
         if (productsError) throw productsError;
-        setProducts(productsData || []);
+  setProducts((productsData as unknown as Product[]) || []);
 
         // Cargar almacenes
-        const { data: warehousesData, error: warehousesError } = await supabase
+  const { data: warehousesData, error: warehousesError } = await client
           .from('warehouses')
           .select('*');
         
         if (warehousesError) throw warehousesError;
-        setWarehouses(warehousesData || []);
+  setWarehouses((warehousesData as unknown as Warehouse[]) || []);
 
         // Cargar tipos de movimiento
-        const { data: movementTypesData, error: movementTypesError } = await supabase
+  const { data: movementTypesData, error: movementTypesError } = await client
           .from('movement_types')
           .select('*');
         
         if (movementTypesError) throw movementTypesError;
-        setMovementTypes(movementTypesData || []);
+  setMovementTypes((movementTypesData as unknown as any[]) || []);
 
         // Cargar movimientos recientes
-        const { data: movementsData, error: movementsError } = await supabase
+  const { data: movementsData, error: movementsError } = await client
           .from('stock_movements')
           .select(`
             *,
@@ -87,15 +88,15 @@ const Inventory: React.FC = () => {
           .limit(10);
         
         if (movementsError) throw movementsError;
-        setStockMovements(movementsData || []);
+  setStockMovements((movementsData as unknown as StockMovement[]) || []);
 
         // Cargar stock actual
-        const { data: stockData, error: stockError } = await supabase
+  const { data: stockData, error: stockError } = await client
           .from('current_stock')
           .select('*');
         
         if (stockError) throw stockError;
-        setCurrentStock(stockData || []);
+  setCurrentStock((stockData as unknown as any[]) || []);
 
         setIsLoading(false);
       } catch (err: any) {
@@ -129,6 +130,7 @@ const Inventory: React.FC = () => {
     setError(null);
 
     try {
+  const client = await supabase.getClient();
       if (!productId || !warehouseId) {
         throw new Error('Selecciona un producto y un almacén');
       }
@@ -140,14 +142,14 @@ const Inventory: React.FC = () => {
 
       // Para salidas o transferencias, verificar stock disponible
       if (!isEntry || isTransfer) {
-        const { data: stockData } = await supabase
+  const { data: stockData } = await client
           .from('current_stock')
           .select('current_quantity')
           .eq('product_id', productId)
           .eq('warehouse_id', warehouseId)
           .single();
         
-        const currentQty = stockData?.current_quantity || 0;
+  const currentQty = Number((stockData as any)?.current_quantity ?? 0);
         if (quantity > currentQty) {
           throw new Error(`Stock insuficiente. Solo hay ${currentQty} unidades disponibles.`);
         }
@@ -163,7 +165,7 @@ const Inventory: React.FC = () => {
         // Generar un ID de transferencia para relacionar ambos movimientos
         const transferId = crypto.randomUUID();
         
-        const { error: outError } = await supabase
+  const { error: outError } = await client
           .from('stock_movements')
           .insert({
             product_id: productId,
@@ -184,7 +186,7 @@ const Inventory: React.FC = () => {
           throw new Error('Tipo de movimiento de entrada por transferencia no encontrado');
         }
         
-        const { error: inError } = await supabase
+  const { error: inError } = await client
           .from('stock_movements')
           .insert({
             product_id: productId,
@@ -209,7 +211,7 @@ const Inventory: React.FC = () => {
         }
 
         // Crear movimiento
-        const { error: insertError } = await supabase
+  const { error: insertError } = await client
           .from('stock_movements')
           .insert({
             product_id: productId,
@@ -225,7 +227,7 @@ const Inventory: React.FC = () => {
       }
 
       // Recargar datos
-      const { data: updatedMovements } = await supabase
+  const { data: updatedMovements } = await client
         .from('stock_movements')
         .select(`
           *,
@@ -236,13 +238,13 @@ const Inventory: React.FC = () => {
         .order('created_at', { ascending: false })
         .limit(10);
       
-      setStockMovements(updatedMovements || []);
+  setStockMovements((updatedMovements as unknown as StockMovement[]) || []);
 
-      const { data: updatedStock } = await supabase
+  const { data: updatedStock } = await client
         .from('current_stock')
         .select('*');
       
-      setCurrentStock(updatedStock || []);
+  setCurrentStock((updatedStock as unknown as any[]) || []);
 
       // Reset form
       setQuantity(1);

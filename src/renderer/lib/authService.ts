@@ -18,7 +18,7 @@ export const authService = {
         return null;
       }
       // Buscar usuario en la tabla users para obtener datos adicionales
-      const { data: userData, error } = await client
+      let { data: userData, error } = await client
         .from('users')
         .select(`
           id, 
@@ -35,7 +35,31 @@ export const authService = {
         `)
         .eq('id', authData.user.id)
         .single();
-      if (error || !userData) {
+      if (error?.code === 'PGRST116' || (error && /not found|No rows/.test(error.message)) || !userData) {
+        // Si no existe perfil en public.users, crearlo automáticamente
+        const insertPayload = {
+          id: authData.user.id,
+          email: (authData.user.email || '').toLowerCase(),
+          full_name: (authData.user.user_metadata?.full_name || authData.user.email || '').toString(),
+          active: true,
+          role_id: 1, // rol por defecto
+          created_at: new Date().toISOString(),
+          last_login: new Date().toISOString()
+        };
+        const { data: created, error: createErr } = await client
+          .from('users')
+          .insert(insertPayload)
+          .select(`
+            id, email, full_name, active, role_id, last_login, created_at,
+            roles (name, description)
+          `)
+          .single();
+        if (createErr) {
+          console.error('No se pudo crear el perfil de usuario:', createErr);
+          return null;
+        }
+        userData = created as any;
+      } else if (error) {
         console.error('Error al buscar usuario:', error);
         return null;
       }
@@ -43,27 +67,29 @@ export const authService = {
         console.error('Usuario desactivado:', email);
         throw new Error('Usuario desactivado');
       }
+      // Mapear datos y castear tipos para cumplir interfaz User
       let roleName = '';
       let roleDescription = '';
-      if (userData.roles) {
-        if (isRoleArray(userData.roles)) {
-          roleName = userData.roles[0] && typeof userData.roles[0].name === 'string' ? userData.roles[0].name : '';
-          roleDescription = userData.roles[0] && typeof userData.roles[0].description === 'string' ? userData.roles[0].description : '';
-        } else if (typeof userData.roles === 'object' && userData.roles !== null) {
-          roleName = (userData.roles as any).name || '';
-          roleDescription = (userData.roles as any).description || '';
+      if ((userData as any).roles) {
+        const roles = (userData as any).roles;
+        if (isRoleArray(roles)) {
+          roleName = roles[0]?.name || '';
+          roleDescription = roles[0]?.description || '';
+        } else if (typeof roles === 'object' && roles !== null) {
+          roleName = (roles as any).name || '';
+          roleDescription = (roles as any).description || '';
         }
       }
       const sessionUser: User = {
-        id: userData.id,
-        email: userData.email,
-        full_name: userData.full_name,
-        active: userData.active,
-        role_id: userData.role_id,
-        role_name: roleName,
-        role_description: roleDescription,
-        last_login: userData.last_login,
-        created_at: userData.created_at
+        id: String((userData as any).id),
+        email: String((userData as any).email),
+        full_name: String((userData as any).full_name || ''),
+        active: Boolean((userData as any).active),
+        role_id: Number((userData as any).role_id || 0),
+        role_name: String(roleName || ''),
+        role_description: String(roleDescription || ''),
+        last_login: (userData as any).last_login ? String((userData as any).last_login) : undefined,
+        created_at: String((userData as any).created_at || new Date().toISOString())
       };
       // Guardar sesión
       saveSession(sessionUser);
@@ -151,14 +177,14 @@ export const authService = {
         .eq('id', userData.role_id)
         .single();
       const user: User = {
-        id: newUserData.id,
-        email: newUserData.email,
-        full_name: newUserData.full_name,
-        active: newUserData.active,
-        role_id: newUserData.role_id,
-        role_name: roleData?.name || '',
-        role_description: roleData?.description || '',
-        created_at: newUserData.created_at
+        id: String((newUserData as any).id),
+        email: String((newUserData as any).email),
+        full_name: String((newUserData as any).full_name || ''),
+        active: Boolean((newUserData as any).active),
+        role_id: Number((newUserData as any).role_id || 0),
+        role_name: String((roleData as any)?.name || ''),
+        role_description: String((roleData as any)?.description || ''),
+        created_at: String((newUserData as any).created_at || new Date().toISOString())
       };
       return user;
     } catch (error) {

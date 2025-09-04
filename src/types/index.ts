@@ -1,11 +1,62 @@
-// Definiciones de tipos temporales para la compilación
-export interface Category { id: string; name: string; }
-export interface CategoryInput { name: string; }
-export interface Product { id: string; name: string; }
-export interface ProductInput { name: string; }
-export enum ProductStatus { ACTIVE = 'active', INACTIVE = 'inactive' }
-export interface Warehouse { id: string; name: string; }
-export interface WarehouseInput { name: string; }
+// Tipos de dominio
+export interface Category {
+	id: string;
+	name: string;
+	description?: string;
+}
+
+export interface CategoryInput {
+	name: string;
+	description?: string;
+}
+
+export type ProductStatus = 'active' | 'inactive' | 'discontinued';
+
+export interface Product {
+	id: string;
+	name: string;
+	description?: string;
+	sku?: string;
+	barcode?: string;
+	category_id?: string | null;
+	min_stock: number;
+	max_stock: number | null;
+	purchase_price: number | null;
+	sale_price: number | null;
+	tax_rate: number | null;
+	status: ProductStatus;
+	image_url?: string;
+	created_at?: string;
+	updated_at?: string;
+}
+
+export interface ProductInput {
+	name: string;
+	description?: string;
+	sku?: string;
+	barcode?: string;
+	category_id?: string | null;
+	min_stock: number;
+	max_stock: number | null;
+	purchase_price: number | null;
+	sale_price: number | null;
+	tax_rate: number | null;
+	status: ProductStatus;
+	image_url?: string;
+}
+export interface Warehouse {
+	id: string;
+	name: string;
+	location?: string;
+	description?: string;
+	created_at?: string;
+	updated_at?: string;
+}
+export interface WarehouseInput {
+	name: string;
+	location?: string;
+	description?: string;
+}
 export interface CompanySettings { name: string; taxId: string; address: string; phone: string; email?: string; website?: string; logoUrl?: string; footerText: string; }
 export interface PurchaseOrder { id: string; supplier_id: string; order_date: string; status: string; }
 export interface OrderItem { id: string; order_id: string; product_id: string; quantity: number; price: number; subtotal: number; }

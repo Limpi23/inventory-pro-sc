@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import PurchaseOrderItemsImport, { ImportOrderItem } from '../components/purchase/PurchaseOrderItemsImport';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 
 interface Supplier {
@@ -97,13 +98,14 @@ const PurchaseOrderForm: React.FC = () => {
   
   const fetchSuppliers = async () => {
     try {
-      const { data, error } = await supabase
+  const client = await supabase.getClient();
+  const { data, error } = await client
         .from('suppliers')
         .select('id, name')
         .order('name');
       
       if (error) throw error;
-      setSuppliers(data || []);
+  setSuppliers((data || []) as unknown as Supplier[]);
     } catch (err: any) {
       console.error('Error cargando proveedores:', err);
       setError(err.message);
@@ -112,13 +114,14 @@ const PurchaseOrderForm: React.FC = () => {
   
   const fetchWarehouses = async () => {
     try {
-      const { data, error } = await supabase
+  const client = await supabase.getClient();
+  const { data, error } = await client
         .from('warehouses')
         .select('id, name')
         .order('name');
       
       if (error) throw error;
-      setWarehouses(data || []);
+  setWarehouses((data || []) as unknown as Warehouse[]);
     } catch (err: any) {
       console.error('Error cargando almacenes:', err);
       setError(err.message);
@@ -127,13 +130,14 @@ const PurchaseOrderForm: React.FC = () => {
   
   const fetchProducts = async () => {
     try {
-      const { data, error } = await supabase
+  const client = await supabase.getClient();
+  const { data, error } = await client
         .from('products')
         .select('id, name, sku, purchase_price')
         .order('name');
       
       if (error) throw error;
-      setProducts(data || []);
+  setProducts((data || []) as unknown as Product[]);
     } catch (err: any) {
       console.error('Error cargando productos:', err);
       setError(err.message);
@@ -147,7 +151,8 @@ const PurchaseOrderForm: React.FC = () => {
       setIsLoading(true);
       
       // Obtener la orden
-      const { data: orderData, error: orderError } = await supabase
+  const client = await supabase.getClient();
+      const { data: orderData, error: orderError } = await client
         .from('purchase_orders')
         .select('*')
         .eq('id', id)
@@ -156,16 +161,17 @@ const PurchaseOrderForm: React.FC = () => {
       if (orderError) throw orderError;
       
       if (orderData) {
+        const od = orderData as any;
         setFormData({
-          supplier_id: orderData.supplier_id,
-          warehouse_id: orderData.warehouse_id,
-          status: orderData.status
+          supplier_id: String(od.supplier_id || ''),
+          warehouse_id: String(od.warehouse_id || ''),
+          status: String(od.status || 'borrador')
         });
         
-        setOrderDate(orderData.order_date);
+        setOrderDate(String(od.order_date || new Date().toISOString().split('T')[0]));
         
         // Obtener los items de la orden
-        const { data: itemsData, error: itemsError } = await supabase
+  const { data: itemsData, error: itemsError } = await client
           .from('purchase_order_items')
           .select(`
             id,
@@ -280,6 +286,30 @@ const PurchaseOrderForm: React.FC = () => {
     
     setProductSearchTerm('');
   };
+
+  const addImportedItems = (items: ImportOrderItem[]) => {
+    setOrderItems(prev => {
+      const map = new Map(prev.map(i => [i.product_id, { ...i }]));
+      for (const it of items) {
+        const existing = map.get(it.product_id);
+        if (existing) {
+          existing.quantity += it.quantity;
+          existing.unit_price = it.unit_price;
+          existing.total_price = existing.quantity * existing.unit_price;
+        } else {
+          map.set(it.product_id, {
+            product_id: it.product_id,
+            product_name: it.product_name,
+            product_sku: it.product_sku,
+            quantity: it.quantity,
+            unit_price: it.unit_price,
+            total_price: it.quantity * it.unit_price
+          });
+        }
+      }
+      return Array.from(map.values());
+    });
+  };
   
   const removeItemFromOrder = (index: number) => {
     setOrderItems(prev => prev.filter((_, i) => i !== index));
@@ -305,7 +335,8 @@ const PurchaseOrderForm: React.FC = () => {
       
       if (isEditing) {
         // Actualizar orden existente
-        const { error: updateError } = await supabase
+  const client = await supabase.getClient();
+  const { error: updateError } = await client
           .from('purchase_orders')
           .update({
             supplier_id: formData.supplier_id,
@@ -320,7 +351,7 @@ const PurchaseOrderForm: React.FC = () => {
         if (updateError) throw updateError;
         
         // Eliminar items existentes
-        const { error: deleteError } = await supabase
+  const { error: deleteError } = await client
           .from('purchase_order_items')
           .delete()
           .eq('purchase_order_id', id);
@@ -336,7 +367,7 @@ const PurchaseOrderForm: React.FC = () => {
           total_price: item.total_price
         }));
         
-        const { error: insertError } = await supabase
+  const { error: insertError } = await client
           .from('purchase_order_items')
           .insert(items);
         
@@ -345,7 +376,8 @@ const PurchaseOrderForm: React.FC = () => {
         navigate(`/ordenes-compra/${id}`);
       } else {
         // Crear nueva orden
-        const { data: orderData, error: orderError } = await supabase
+  const client = await supabase.getClient();
+  const { data: orderData, error: orderError } = await client
           .from('purchase_orders')
           .insert([{
             supplier_id: formData.supplier_id,
@@ -370,7 +402,7 @@ const PurchaseOrderForm: React.FC = () => {
             total_price: item.total_price
           }));
           
-          const { error: itemsError } = await supabase
+          const { error: itemsError } = await client
             .from('purchase_order_items')
             .insert(items);
           
@@ -489,7 +521,15 @@ const PurchaseOrderForm: React.FC = () => {
             
             {/* Sección para agregar productos */}
             <div className="mb-6 border p-4 rounded-md bg-gray-50">
-              <h2 className="text-lg font-medium mb-4">Agregar Productos</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-medium">Agregar Productos</h2>
+                <PurchaseOrderItemsImport
+                  products={products}
+                  onImport={addImportedItems}
+                  size="sm"
+                  disabled={isEditing && formData.status !== 'borrador'}
+                />
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="md:col-span-2">

@@ -68,14 +68,15 @@ const SupplierPurchases: React.FC = () => {
 
   const fetchSupplier = async () => {
     try {
-      const { data, error } = await supabase
+  const client = await supabase.getClient();
+  const { data, error } = await client
         .from('suppliers')
         .select('*')
         .eq('id', id)
         .single();
       
       if (error) throw error;
-      setSupplier(data);
+  setSupplier(data as unknown as Supplier);
     } catch (err: any) {
       console.error('Error cargando proveedor:', err);
       setError(err.message);
@@ -86,7 +87,8 @@ const SupplierPurchases: React.FC = () => {
     try {
       setIsLoading(true);
       
-      const { data, error } = await supabase
+  const client = await supabase.getClient();
+  const { data, error } = await client
         .from('purchase_orders')
         .select(`
           *,
@@ -130,7 +132,8 @@ const SupplierPurchases: React.FC = () => {
 
   const fetchPurchaseItems = async (purchaseId: string) => {
     try {
-      const { data, error } = await supabase
+  const client = await supabase.getClient();
+  const { data, error } = await client
         .from('purchase_order_items')
         .select(`
           *,

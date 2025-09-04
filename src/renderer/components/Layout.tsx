@@ -164,8 +164,9 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenConfig }) => {
                     <div>
                       <button
                         onClick={() => toggleExpand(item.name)}
+                        aria-expanded={expandedItems[item.name.toLowerCase()]}
                         className={cn(
-                          "flex items-center w-full py-3 px-4 transition-colors",
+                          "flex items-center w-full py-3 px-4 transition-colors rounded-md",
                           (location.pathname === item.path || location.pathname.startsWith(item.path + '/'))
                             ? "bg-primary/10 text-primary"
                             : "text-muted-foreground hover:bg-muted"
@@ -174,29 +175,37 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenConfig }) => {
                         <i className={`${item.icon} w-5`}></i>
                         {sidebarOpen && (
                           <>
-                            <span className="ml-3">{item.name}</span>
-                            <i className={`fas fa-chevron-${expandedItems[item.name.toLowerCase()] ? 'down' : 'right'} ml-auto`}></i>
+                            <span className="ml-3 flex-1 text-left">{item.name}</span>
+                            <i
+                              className={`fas fa-chevron-${expandedItems[item.name.toLowerCase()] ? 'down' : 'right'} ml-auto transition-transform text-gray-500 dark:text-gray-300`}
+                            ></i>
                           </>
                         )}
                       </button>
                       {expandedItems[item.name.toLowerCase()] && sidebarOpen && (
-                        <ul className="ml-6 mt-1 space-y-1">
-                          {item.children.map((child) => (
-                            <li key={child.path}>
-                              <Link
-                                to={child.path}
-                                className={cn(
-                                  "flex items-center py-2 px-4 text-sm transition-colors rounded-md",
-                                  location.pathname === child.path
-                                    ? "bg-primary/10 text-primary"
-                                    : "text-muted-foreground hover:bg-muted"
+                        <div className="relative ml-12 pl-5 mt-2">
+                          <div className="absolute left-0 top-0 bottom-0 border-l border-gray-200 dark:border-gray-700" />
+                          <ul className="mt-1 space-y-1">
+                            {item.children.map((child) => (
+                              <li key={child.path} className="relative">
+                                {location.pathname === child.path && (
+                                  <span className="absolute -left-[1px] top-1/2 -translate-y-1/2 h-6 w-[2px] bg-primary" />
                                 )}
-                              >
-                                {child.name}
-                              </Link>
-                            </li>
-                          ))}
-                        </ul>
+                                <Link
+                                  to={child.path}
+                                  className={cn(
+                                    "flex items-center py-2 px-3 text-sm transition-colors rounded-md",
+                                    location.pathname === child.path
+                                      ? "text-primary font-medium"
+                                      : "text-muted-foreground hover:bg-muted"
+                                  )}
+                                >
+                                  {child.name}
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       )}
                     </div>
                   ) : (
@@ -229,8 +238,13 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenConfig }) => {
               {/* Menú móvil */}
               <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
                 <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon" className="lg:hidden">
-                    <i className="fas fa-bars"></i>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="lg:hidden text-gray-700 hover:text-gray-900 dark:text-gray-100 dark:hover:text-white hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                    aria-label="Abrir menú"
+                  >
+                    <i className="fas fa-bars text-2xl"></i>
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="p-0 w-72">
@@ -248,6 +262,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenConfig }) => {
                               <div>
                                 <button
                                   onClick={() => toggleExpand(item.name)}
+                                  aria-expanded={expandedItems[item.name.toLowerCase()]}
                                   className={cn(
                                     "flex items-center w-full py-3 px-4 rounded-md transition-colors",
                                     (location.pathname === item.path || location.pathname.startsWith(item.path + '/'))
@@ -256,28 +271,34 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenConfig }) => {
                                   )}
                                 >
                                   <i className={`${item.icon} w-5`}></i>
-                                  <span className="ml-3">{item.name}</span>
-                                  <i className={`fas fa-chevron-${expandedItems[item.name.toLowerCase()] ? 'down' : 'right'} ml-auto`}></i>
+                                  <span className="ml-3 flex-1 text-left">{item.name}</span>
+                                  <i className={`fas fa-chevron-${expandedItems[item.name.toLowerCase()] ? 'down' : 'right'} ml-auto transition-transform text-gray-500 dark:text-gray-300`}></i>
                                 </button>
                                 {expandedItems[item.name.toLowerCase()] && (
-                                  <ul className="ml-6 mt-1 space-y-1">
-                                    {item.children.map((child) => (
-                                      <li key={child.path}>
-                                        <Link
-                                          to={child.path}
-                                          className={cn(
-                                            "flex items-center py-2 px-4 text-sm rounded-md transition-colors",
-                                            location.pathname === child.path
-                                              ? "bg-primary/10 text-primary"
-                                              : "text-muted-foreground hover:bg-muted"
+                                  <div className="relative ml-12 pl-5 mt-2">
+                                    <div className="absolute left-0 top-0 bottom-0 border-l border-gray-200 dark:border-gray-700" />
+                                    <ul className="mt-1 space-y-1">
+                                      {item.children.map((child) => (
+                                        <li key={child.path} className="relative">
+                                          {location.pathname === child.path && (
+                                            <span className="absolute -left-[1px] top-1/2 -translate-y-1/2 h-6 w-[2px] bg-primary" />
                                           )}
-                                          onClick={() => setMobileOpen(false)}
-                                        >
-                                          {child.name}
-                                        </Link>
-                                      </li>
-                                    ))}
-                                  </ul>
+                                          <Link
+                                            to={child.path}
+                                            className={cn(
+                                              "flex items-center py-2 px-3 text-sm rounded-md transition-colors",
+                                              location.pathname === child.path
+                                                ? "text-primary font-medium"
+                                                : "text-muted-foreground hover:bg-muted"
+                                            )}
+                                            onClick={() => setMobileOpen(false)}
+                                          >
+                                            {child.name}
+                                          </Link>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
                                 )}
                               </div>
                             ) : (

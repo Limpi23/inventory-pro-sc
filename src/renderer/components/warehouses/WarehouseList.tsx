@@ -52,11 +52,17 @@ export default function WarehouseList() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Almacenes</CardTitle>
-        <Button onClick={() => setIsModalOpen(true)}>
-          Agregar Almacén
-        </Button>
+      <CardHeader className="space-y-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <CardTitle className="text-xl md:text-2xl">Almacenes</CardTitle>
+          <Button
+            onClick={() => setIsModalOpen(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto"
+            size="sm"
+          >
+            Agregar Almacén
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {isLoading ? (

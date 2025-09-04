@@ -54,13 +54,14 @@ const Suppliers: React.FC = () => {
   const fetchSuppliers = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
+  const client = await supabase.getClient();
+  const { data, error } = await client
         .from('suppliers')
         .select('*')
         .order('name');
       
       if (error) throw error;
-      setSuppliers(data || []);
+  setSuppliers((data as unknown as Supplier[]) || []);
     } catch (err: any) {
       console.error('Error cargando proveedores:', err);
       setError(err.message);
@@ -135,7 +136,8 @@ const Suppliers: React.FC = () => {
 
       if (currentSupplier) {
         // Actualizar proveedor existente
-        const { error } = await supabase
+  const client = await supabase.getClient();
+  const { error } = await client
           .from('suppliers')
           .update({
             name: formData.name,
@@ -147,7 +149,8 @@ const Suppliers: React.FC = () => {
         if (error) throw error;
       } else {
         // Crear nuevo proveedor
-        const { error } = await supabase
+  const client = await supabase.getClient();
+  const { error } = await client
           .from('suppliers')
           .insert([{
             name: formData.name,
@@ -173,7 +176,8 @@ const Suppliers: React.FC = () => {
     }
     
     try {
-      const { error } = await supabase
+  const client = await supabase.getClient();
+  const { error } = await client
         .from('suppliers')
         .delete()
         .eq('id', id);

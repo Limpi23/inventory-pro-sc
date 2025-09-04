@@ -1,16 +1,28 @@
 import { createClient } from '@supabase/supabase-js';
 
+// Carga config desde el archivo guardado por la app y hace fallback a variables de entorno Vite
+async function loadSupabaseConfig() {
+  let saved: any = {};
+  const win = window as any;
+  if (win?.supabaseConfig && typeof win.supabaseConfig.get === 'function') {
+    try {
+      saved = await win.supabaseConfig.get();
+    } catch {
+      // ignorar
+    }
+  }
+  const url = saved?.url || saved?.supabaseUrl || import.meta.env.VITE_SUPABASE_URL;
+  const anonKey = saved?.anonKey || saved?.supabaseKey || import.meta.env.VITE_SUPABASE_ANON_KEY;
+  return { url, anonKey };
+}
+
 // Cliente de Supabase dinámico según entorno
 export const getSupabaseClient = async () => {
-  // @ts-ignore
-  const config = await window.supabaseConfig.get();
-  // Aceptar ambos formatos de configuración
-  const url = config?.url || config?.supabaseUrl;
-  const anonKey = config?.anonKey || config?.supabaseKey;
+  const { url, anonKey } = await loadSupabaseConfig();
   if (!url || !anonKey) {
-    throw new Error('Supabase no configurado');
+    throw new Error('Supabase no configurado: faltan URL o anon key');
   }
-  const client = createClient(url, anonKey, {
+  const client = createClient(url as string, anonKey as string, {
     auth: {
       autoRefreshToken: true,
       persistSession: true,
@@ -29,15 +41,11 @@ let supabaseInstance: ReturnType<typeof createClient> | null = null;
 export const supabase = {
   getClient: async () => {
     if (!supabaseInstance) {
-      // @ts-ignore
-      const config = await window.supabaseConfig.get();
-      // Aceptar ambos formatos de configuración
-      const url = config?.url || config?.supabaseUrl;
-      const anonKey = config?.anonKey || config?.supabaseKey;
+      const { url, anonKey } = await loadSupabaseConfig();
       if (!url || !anonKey) {
-        throw new Error('Supabase no configurado');
+        throw new Error('Supabase no configurado: faltan URL o anon key');
       }
-      supabaseInstance = createClient(url, anonKey, {
+      supabaseInstance = createClient(url as string, anonKey as string, {
         auth: {
           autoRefreshToken: true,
           persistSession: true,
