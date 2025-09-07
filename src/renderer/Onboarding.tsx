@@ -20,16 +20,21 @@ const Onboarding: React.FC<OnboardingProps> = ({ onFinish }) => {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const win = window as any;
-    if (win.supabaseConfig && typeof win.supabaseConfig.get === 'function') {
-      win.supabaseConfig.get().then((config: any) => {
+    const win: any = window as any;
+    const api = win?.supabaseConfig;
+    if (api && typeof api.get === 'function') {
+      api.get().then((config: any) => {
         if (config?.url && config?.anonKey) {
           onFinish();
         } else {
           setLoading(false);
         }
+      }).catch((e: any) => {
+        console.warn('[Onboarding] Error obteniendo config', e);
+        setLoading(false);
       });
     } else {
+      console.warn('[Onboarding] supabaseConfig API no disponible');
       setLoading(false);
     }
   }, [onFinish]);
@@ -54,8 +59,14 @@ const Onboarding: React.FC<OnboardingProps> = ({ onFinish }) => {
       return;
     }
     setSaving(true);
+    const win: any = window as any;
+    const api = win?.supabaseConfig;
+    if (!api || typeof api.save !== 'function') {
+      setError('API de configuración no disponible (preload no cargado). Reinicia la aplicación.');
+      return;
+    }
     try {
-      const result = await (window as any).supabaseConfig.save({ url, anonKey: accessKey });
+      const result = await api.save({ url, anonKey: accessKey });
       if (result && result.error) {
         setError('Error al guardar: ' + result.error);
         return;
@@ -75,7 +86,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onFinish }) => {
         <DialogHeader>
           <DialogTitle>Configurar conexión</DialogTitle>
         </DialogHeader>
-        {loading ? (
+  {loading ? (
           <div style={{textAlign:'center',marginTop:32}}>Cargando configuración...</div>
         ) : (
           <form onSubmit={e => { e.preventDefault(); handleSave(); }}>

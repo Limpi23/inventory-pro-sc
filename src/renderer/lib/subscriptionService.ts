@@ -6,7 +6,8 @@ export const subscriptionService = {
   getCurrentSubscription: async (tenantId: string): Promise<SubscriptionInfo> => {
     try {
       // Obtener la suscripción más reciente
-      const { data, error } = await supabase
+      const client = await supabase.getClient();
+      const { data, error } = await client
         .from('subscriptions')
         .select('*')
         .eq('tenant_id', tenantId)
@@ -26,7 +27,7 @@ export const subscriptionService = {
         };
       }
       
-      const subscription = data as Subscription;
+  const subscription = data as unknown as Subscription;
       
       // Verificar si está activa por fecha
       const now = new Date();
@@ -53,13 +54,14 @@ export const subscriptionService = {
   // Obtener todos los planes disponibles
   getPlans: async (): Promise<SubscriptionPlan[]> => {
     try {
-      const { data, error } = await supabase
+      const client = await supabase.getClient();
+      const { data, error } = await client
         .from('subscription_plans')
         .select('*')
         .order('price');
       
       if (error) throw error;
-      return data || [];
+  return (data as unknown as SubscriptionPlan[]) || [];
     } catch (error) {
       console.error('Error al obtener planes:', error);
       throw error;
@@ -78,7 +80,8 @@ export const subscriptionService = {
       endDate.setDate(endDate.getDate() + durationDays);
       
       // Crear suscripción
-      const { error } = await supabase
+      const client = await supabase.getClient();
+      const { error } = await client
         .from('subscriptions')
         .insert({
           tenant_id: tenantId,
@@ -101,7 +104,8 @@ export const subscriptionService = {
     status: number
   ): Promise<void> => {
     try {
-      const { error } = await supabase
+      const client = await supabase.getClient();
+      const { error } = await client
         .from('subscriptions')
         .update({ status, updated_at: new Date().toISOString() })
         .eq('id', subscriptionId);
@@ -116,7 +120,8 @@ export const subscriptionService = {
   // Obtener información básica del tenant
   getTenantInfo: async (tenantId: string) => {
     try {
-      const { data, error } = await supabase
+      const client = await supabase.getClient();
+      const { data, error } = await client
         .from('tenants')
         .select('*')
         .eq('id', tenantId)

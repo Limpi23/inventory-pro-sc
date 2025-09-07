@@ -45,7 +45,8 @@ const CustomerForm: React.FC = () => {
         .single();
 
       if (error) throw error;
-      setFormData(data || formData);
+  // Cast porque select('*') retorna any
+  setFormData((data as CustomerInput) || formData);
     } catch (error: any) {
       console.error('Error al cargar datos del cliente:', error.message);
       toast.error(`Error al cargar datos del cliente: ${error.message}`);

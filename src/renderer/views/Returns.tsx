@@ -28,7 +28,7 @@ const Returns: React.FC = () => {
         .order('return_date', { ascending: false });
 
       if (error) throw error;
-      setReturns(data || []);
+  setReturns((data as any[]) || []);
     } catch (error: any) {
       console.error('Error al cargar devoluciones:', error.message);
       toast.error(`Error al cargar devoluciones: ${error.message}`);

@@ -129,7 +129,32 @@ const PurchaseOrderDetail: React.FC = () => {
         .single();
       
       if (orderError) throw orderError;
-      setOrder(orderData);
+      // Cast defensivo: el resultado de supabase se tipa como any/unknown
+      // Aseguramos estructura mínima para evitar fallo de tipos en TS
+      const normalized: PurchaseOrder = {
+        id: (orderData as any).id,
+        supplier_id: (orderData as any).supplier_id,
+        warehouse_id: (orderData as any).warehouse_id,
+        order_date: (orderData as any).order_date,
+        status: (orderData as any).status,
+        total_amount: (orderData as any).total_amount ?? 0,
+        created_at: (orderData as any).created_at ?? new Date().toISOString(),
+        updated_at: (orderData as any).updated_at ?? (orderData as any).created_at ?? new Date().toISOString(),
+        supplier: {
+          id: (orderData as any)?.supplier?.id || '',
+          name: (orderData as any)?.supplier?.name || 'Desconocido',
+          contact_name: (orderData as any)?.supplier?.contact_name || '',
+          phone: (orderData as any)?.supplier?.phone || '',
+            email: (orderData as any)?.supplier?.email || '',
+          address: (orderData as any)?.supplier?.address || ''
+        },
+        warehouse: {
+          id: (orderData as any)?.warehouse?.id || '',
+          name: (orderData as any)?.warehouse?.name || 'Principal',
+          location: (orderData as any)?.warehouse?.location || ''
+        }
+      };
+      setOrder(normalized);
       
       // Obtener los items de la orden
       const { data: itemsData, error: itemsError } = await client.from('purchase_order_items')

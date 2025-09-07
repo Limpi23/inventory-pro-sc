@@ -60,7 +60,7 @@ const InventoryGeneral: React.FC = () => {
         .order('product_name');
       
       if (inventoryError) throw inventoryError;
-      setInventory(inventoryData || []);
+  setInventory((inventoryData as any[]) || []);
       
       setIsLoading(false);
     } catch (err: any) {

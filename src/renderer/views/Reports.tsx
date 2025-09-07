@@ -76,7 +76,7 @@ const Reports: React.FC = () => {
         .order('name');
       
       if (error) throw error;
-      setWarehouses(data || []);
+  setWarehouses((data as any[]) || []);
     } catch (err: any) {
       console.error('Error cargando almacenes:', err);
       setError('Error cargando almacenes: ' + err.message);

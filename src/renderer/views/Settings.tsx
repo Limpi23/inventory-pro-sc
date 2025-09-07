@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Switch } from '../components/ui/switch';
 import { CompanySettings } from '../../types';
 import { useTheme } from '../hooks/useTheme';
-import { Sun, Moon } from 'lucide-react';
+import { Sun, Moon, Database } from 'lucide-react';
 
 const DEFAULT_SETTINGS: CompanySettings = {
   name: 'Inventario Pro - SC',
@@ -26,6 +26,9 @@ const Settings: React.FC = () => {
   const [settings, setSettings] = useState<CompanySettings>(DEFAULT_SETTINGS);
   const [saving, setSaving] = useState(false);
   const { theme, toggleTheme } = useTheme();
+  const [supabaseConfig, setSupabaseConfig] = useState<any>(null);
+  const [loadingConfig, setLoadingConfig] = useState(false);
+  const win: any = typeof window !== 'undefined' ? (window as any) : {};
 
   // Cargar configuración guardada al iniciar
   useEffect(() => {
@@ -36,6 +39,13 @@ const Settings: React.FC = () => {
       } catch (error) {
         console.error('Error al cargar configuración:', error);
       }
+    }
+    // cargar supabase
+    if (win.supabaseConfig?.get) {
+      setLoadingConfig(true);
+      win.supabaseConfig.get().then((cfg: any) => {
+        setSupabaseConfig(cfg || null);
+      }).finally(() => setLoadingConfig(false));
     }
   }, []);
 
@@ -69,11 +79,12 @@ const Settings: React.FC = () => {
     <div className="container mx-auto py-6">
       <h1 className="text-2xl font-bold mb-6">Ajustes</h1>
       
-      <Tabs defaultValue="company">
+    <Tabs defaultValue="company">
         <TabsList className="mb-6">
           <TabsTrigger value="company">Información de Empresa</TabsTrigger>
           <TabsTrigger value="document">Documentos</TabsTrigger>
           <TabsTrigger value="appearance">Apariencia</TabsTrigger>
+      <TabsTrigger value="connection">Conexión</TabsTrigger>
         </TabsList>
         
         <TabsContent value="company">
@@ -239,6 +250,61 @@ const Settings: React.FC = () => {
                     <Moon className="h-5 w-5 text-muted-foreground" />
                   </div>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="connection">
+          <Card>
+            <CardHeader>
+              <CardTitle>Conexión Supabase</CardTitle>
+              <CardDescription>Configurar o restablecer la conexión al backend.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {loadingConfig ? (
+                  <p>Cargando configuración...</p>
+                ) : supabaseConfig?.url ? (
+                  <div className="p-3 border rounded-md bg-gray-50 dark:bg-gray-800 text-sm">
+                    <p><strong>URL:</strong> {supabaseConfig.url}</p>
+                    <p className="truncate"><strong>Anon Key:</strong> {supabaseConfig.anonKey?.slice(0,20)}...</p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-yellow-600">No hay configuración guardada.</p>
+                )}
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      if (!win.supabaseConfig?.get) return;
+                      setLoadingConfig(true);
+                      try { setSupabaseConfig(await win.supabaseConfig.get()); } finally { setLoadingConfig(false); }
+                    }}
+                  >Refrescar</Button>
+                  <Button
+                    variant="destructive"
+                    onClick={async () => {
+                      if (!confirm('¿Eliminar configuración Supabase guardada? Se cerrará la sesión.')) return;
+                      try {
+                        await win.supabaseConfig.save({ url: '', anonKey: '' });
+                        localStorage.removeItem('inventory_session');
+                        setSupabaseConfig(null);
+                        toast.success('Configuración eliminada. Reinicia o vuelve a abrir para onboarding.');
+                      } catch (e:any) {
+                        toast.error('Error eliminando configuración');
+                      }
+                    }}
+                  >Eliminar configuración</Button>
+                  <Button
+                    onClick={() => {
+                      // Forzar mostrar Onboarding almacenando un flag y recargando
+                      localStorage.removeItem('inventory_session');
+                      sessionStorage.setItem('forceOnboarding','1');
+                      location.reload();
+                    }}
+                  >Mostrar Onboarding</Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Si instalaste por primera vez y no apareció el asistente, puedes forzarlo aquí.</p>
               </div>
             </CardContent>
           </Card>

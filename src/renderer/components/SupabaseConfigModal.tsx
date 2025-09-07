@@ -19,16 +19,19 @@ const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ onFinish, onC
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [apiReady, setApiReady] = useState(false);
+  const win: any = typeof window !== 'undefined' ? (window as any) : {};
 
   useEffect(() => {
-    const win = window as any;
     if (win.supabaseConfig && typeof win.supabaseConfig.get === 'function') {
       win.supabaseConfig.get().then((config: any) => {
         setUrl(config?.url || '');
         setAccessKey(config?.anonKey || '');
+        setApiReady(true);
         setLoading(false);
       });
     } else {
+      console.warn('[SupabaseConfigModal] API supabaseConfig no disponible en preload');
       setLoading(false);
     }
   }, []);
@@ -50,6 +53,10 @@ const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ onFinish, onC
     }
     if (!validateUrl(url)) {
       setError('La URL del servicio no es válida.');
+      return;
+    }
+    if (!win.supabaseConfig || typeof win.supabaseConfig.save !== 'function') {
+      setError('La API de configuración no está disponible (preload). Reinicia la aplicación.');
       return;
     }
     setSaving(true);
@@ -78,6 +85,11 @@ const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ onFinish, onC
           <div style={{textAlign:'center',marginTop:32}}>Cargando configuración...</div>
         ) : (
           <form onSubmit={e => { e.preventDefault(); handleSave(); }}>
+            {!apiReady && (
+              <div style={{background:'#fff3cd',color:'#856404',padding:8,borderRadius:6,fontSize:12,marginBottom:12}}>
+                No se detectó la API de configuración. Asegúrate de ejecutar el ejecutable instalado (no solo el .exe suelto) y que el preload se haya construido. Luego reinicia.
+              </div>
+            )}
             <label style={{fontWeight:'bold'}}>URL del servicio</label>
             <input
               type="text"

@@ -1,10 +1,40 @@
 import React from 'react';
-import { PurchaseOrder, OrderItem } from '../../types';
+// Definimos tipos locales extendidos porque las interfaces base no incluyen relaciones y campos calculados
+interface PurchaseOrderBase {
+  id: string;
+  order_date: string;
+  status: string;
+  total_amount?: number;
+}
+interface PurchaseOrderWithRelations extends PurchaseOrderBase {
+  supplier?: {
+    name?: string;
+    contact_name?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+  };
+  warehouse?: {
+    name?: string;
+    location?: string;
+  };
+}
+interface OrderItemBase {
+  id: string;
+  product_id?: string;
+  quantity: number;
+  unit_price?: number;
+  total_price?: number;
+}
+interface OrderItemExtended extends OrderItemBase {
+  received_quantity?: number;
+  product?: { name?: string; sku?: string };
+}
 import useCompanySettings from '../hooks/useCompanySettings';
 
 interface PrintableOrderProps {
-  order: PurchaseOrder;
-  orderItems: OrderItem[];
+  order: PurchaseOrderWithRelations;
+  orderItems: OrderItemExtended[];
   format: 'letter' | 'roll';
   formatCurrency: (amount: number) => string;
   formatDate: (dateString: string) => string;

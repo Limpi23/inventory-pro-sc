@@ -77,6 +77,10 @@ const Login: React.FC = () => {
           <p className="mt-2 text-sm text-gray-600">
             Ingresa tus credenciales para acceder al sistema
           </p>
+          {/* Aviso si no hay configuración Supabase */}
+          {typeof (window as any).supabaseConfig !== 'undefined' && (
+            <ConfigNotice />
+          )}
         </div>
         
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
@@ -176,3 +180,30 @@ const Login: React.FC = () => {
 };
 
 export default Login; 
+
+// Componente interno para mostrar aviso y botón de configuración
+const ConfigNotice: React.FC = () => {
+  const [checking, setChecking] = React.useState(true);
+  const [needsConfig, setNeedsConfig] = React.useState(false);
+  React.useEffect(() => {
+    const api: any = (window as any).supabaseConfig;
+    if (!api || typeof api.get !== 'function') {
+      setNeedsConfig(true);
+      setChecking(false);
+      return;
+    }
+    api.get().then((cfg: any) => {
+      if (!cfg || !cfg.url || !cfg.anonKey) setNeedsConfig(true);
+    }).finally(() => setChecking(false));
+  }, []);
+  if (checking || !needsConfig) return null;
+  return (
+    <div className="mt-4 text-left p-3 rounded-md bg-amber-100 text-amber-900 text-xs border border-amber-300">
+      Falta configurar la conexión a Supabase.
+      <button
+        onClick={() => { sessionStorage.setItem('forceOnboarding','1'); location.reload(); }}
+        className="ml-2 underline font-semibold"
+      >Configurar ahora</button>
+    </div>
+  );
+};

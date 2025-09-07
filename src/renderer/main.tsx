@@ -1,22 +1,24 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter, HashRouter } from 'react-router-dom';
 import App from './App';
 import './index.css';
 import { AuthProvider } from './lib/auth';
 
-// LIMPIEZA TEMPORAL DE LOCALSTORAGE PARA DEPURACIÓN EN ELECTRON
-if (window.location.protocol === 'file:') {
-  localStorage.clear();
-  console.log('LocalStorage limpiado automáticamente en modo Electron.');
+// En producción (protocolo file://) usamos HashRouter para evitar problemas de rutas con file system
+const UsingHash = window.location.protocol === 'file:';
+const Router: React.FC<{ children: React.ReactNode }> = ({ children }) => UsingHash ? <HashRouter>{children}</HashRouter> : <BrowserRouter>{children}</BrowserRouter>;
+
+if (UsingHash) {
+  console.log('[bootstrap] Ejecutando en modo producción file:// usando HashRouter');
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <AuthProvider>
-      <BrowserRouter>
+      <Router>
         <App />
-      </BrowserRouter>
+      </Router>
     </AuthProvider>
   </React.StrictMode>
-); 
+);

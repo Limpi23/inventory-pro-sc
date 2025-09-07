@@ -8,7 +8,7 @@ export const userService = {
     try {
       const client = await supabase.getClient();
       // Primero obtenemos los usuarios básicos
-      const { data: usersData, error: usersError } = await client
+  const { data: usersData, error: usersError } = await client
         .from('users')
         .select(`
           id, 
@@ -32,23 +32,23 @@ export const userService = {
       if (rolesError) throw rolesError;
       
       // Creamos un mapa de roles por id para acceder fácilmente
-      const rolesMap = (rolesData || []).reduce((map, role) => {
-        map[role.id] = role;
+      const rolesMap = (rolesData as any[] || []).reduce((map, role: any) => {
+        map[role.id as number] = role;
         return map;
       }, {} as Record<number, { id: number, name: string, description?: string }>);
       
       // Mapear los datos de usuarios con sus roles
-      return usersData.map(user => ({
-        id: user.id,
-        email: user.email,
-        full_name: user.full_name,
-        active: user.active,
-        role_id: user.role_id,
-        role_name: rolesMap[user.role_id]?.name || '',
-        role_description: rolesMap[user.role_id]?.description || '',
-        last_login: user.last_login,
-        created_at: user.created_at
-      }));
+      return (usersData as any[]).map((user: any) => ({
+        id: String(user.id),
+        email: String(user.email),
+        full_name: String(user.full_name || ''),
+        active: Boolean(user.active),
+        role_id: Number(user.role_id),
+        role_name: rolesMap[Number(user.role_id)]?.name || '',
+        role_description: rolesMap[Number(user.role_id)]?.description || '',
+        last_login: user.last_login ? String(user.last_login) : undefined,
+        created_at: String(user.created_at || new Date().toISOString())
+      })) as User[];
     } catch (error) {
       console.error('Error al obtener usuarios:', error);
       throw error;
@@ -86,17 +86,18 @@ export const userService = {
       
       if (roleError && roleError.code !== 'PGRST116') throw roleError;
       
+      const u: any = userData;
       return {
-        id: userData.id,
-        email: userData.email,
-        full_name: userData.full_name,
-        active: userData.active,
-        role_id: userData.role_id,
+        id: String(u.id),
+        email: String(u.email),
+        full_name: String(u.full_name || ''),
+        active: Boolean(u.active),
+        role_id: Number(u.role_id),
         role_name: roleData?.name || '',
         role_description: roleData?.description || '',
-        last_login: userData.last_login,
-        created_at: userData.created_at
-      };
+        last_login: u.last_login ? String(u.last_login) : undefined,
+        created_at: String(u.created_at || new Date().toISOString())
+      } as User;
     } catch (error) {
       console.error('Error al obtener usuario por ID:', error);
       throw error;
@@ -141,17 +142,18 @@ export const userService = {
       
       if (roleError && roleError.code !== 'PGRST116') throw roleError;
       
+      const u: any = userData;
       return {
-        id: userData.id,
-        email: userData.email,
-        full_name: userData.full_name,
-        active: userData.active,
-        role_id: userData.role_id,
+        id: String(u.id),
+        email: String(u.email),
+        full_name: String(u.full_name || ''),
+        active: Boolean(u.active),
+        role_id: Number(u.role_id),
         role_name: roleData?.name || '',
         role_description: roleData?.description || '',
-        last_login: userData.last_login,
-        created_at: userData.created_at
-      };
+        last_login: u.last_login ? String(u.last_login) : undefined,
+        created_at: String(u.created_at || new Date().toISOString())
+      } as User;
     } catch (error) {
       console.error('Error al obtener usuario por email:', error);
       throw error;
@@ -247,7 +249,7 @@ export const userService = {
       .order('id');
     
     if (error) throw error;
-    return data || [];
+  return (data as unknown as Role[]) || [];
   },
   
   // Obtener permisos de un usuario
@@ -257,7 +259,7 @@ export const userService = {
       .rpc('get_user_permissions', { user_id: userId });
     
     if (error) throw error;
-    return data || [];
+  return (data as unknown as Permission[]) || [];
   },
   
   // Cambiar contraseña

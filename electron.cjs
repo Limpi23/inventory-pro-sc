@@ -2,7 +2,7 @@
 // Cambiaremos los require por import.
 // ... el resto del código se migrará en el siguiente paso ... 
 
-const { app, BrowserWindow, session, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, session, ipcMain, dialog, Menu } = require('electron');
 const path = require('path');
 const url = require('url');
 const { autoUpdater } = require('electron-updater');
@@ -100,7 +100,8 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'dist/preload.js')
+  // Usamos preload.cjs en raíz para garantizar CommonJS dentro de ASAR
+  preload: path.join(__dirname, 'preload.cjs')
     }
   });
   const startUrl = process.env.NODE_ENV === 'development'
@@ -128,6 +129,9 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  // Configurar menú de la aplicación (solo una vez)
+  setupApplicationMenu();
 }
 
 function sendDatabaseConfigToRenderer() {
@@ -267,6 +271,94 @@ ipcMain.on('select-directory', async (event) => {
   }
 });
 const store = new Store();
+
+async function testSupabaseConnection(showDialogs = true) {
+  const started = Date.now();
+  try {
+    const saved = store.get('supabase') || {};
+    const url = (saved && saved.url) || process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const anonKey = (saved && saved.anonKey) || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    if (!url || !anonKey) {
+      if (showDialogs) dialog.showErrorBox('Supabase', 'No hay configuración (URL / anonKey) definida.');
+      return { success: false, message: 'Sin configuración' };
+    }
+    const healthUrl = url.replace(/\/$/, '') + '/auth/v1/health';
+    const res = await fetch(healthUrl, {
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${anonKey}`
+      }
+    });
+    const ms = Date.now() - started;
+    if (res.ok) {
+      const msg = `Conexión OK (${res.status}) en ${ms}ms`;
+      if (showDialogs) dialog.showMessageBox({ type: 'info', title: 'Supabase', message: msg, detail: url });
+      return { success: true, message: msg, url };
+    }
+    const text = await res.text();
+    const errMsg = `Fallo (${res.status}) ${text.slice(0,120)}`;
+    if (showDialogs) dialog.showErrorBox('Supabase', errMsg);
+    return { success: false, message: errMsg, url };
+  } catch (e) {
+    const errMsg = 'Error: ' + (e && e.message ? e.message : e);
+    if (showDialogs) dialog.showErrorBox('Supabase', errMsg);
+    return { success: false, message: errMsg };
+  }
+}
+
+function setupApplicationMenu() {
+  const template = [
+    {
+      label: 'Archivo',
+      submenu: [
+        { role: 'quit', label: 'Salir' }
+      ]
+    },
+    {
+      label: 'Herramientas',
+      submenu: [
+        {
+          label: 'Probar conexión Supabase',
+          click: () => { testSupabaseConnection(true); }
+        },
+        {
+          label: 'Mostrar Onboarding',
+          click: () => {
+            try {
+              const Store = require('electron-store');
+              const s = new Store();
+              s.set('supabase', { url: '', anonKey: '' }); // limpiar
+            } catch (e) {
+              console.warn('No se pudo limpiar supabase store', e);
+            }
+            if (mainWindow) {
+              mainWindow.webContents.executeJavaScript("sessionStorage.setItem('forceOnboarding','1'); location.reload();");
+            }
+          }
+        },
+        { type: 'separator' },
+        { role: 'reload', label: 'Recargar Ventana' },
+        { role: 'toggledevtools', label: 'Toggle DevTools' }
+      ]
+    },
+    {
+      label: 'Ayuda',
+      submenu: [
+        {
+          label: 'Acerca de',
+          click: () => dialog.showMessageBox({
+            type: 'info',
+            title: 'Inventario Pro - SC',
+            message: 'Inventario Pro - SC',
+            detail: `Versión ${app.getVersion()}\n©2025`
+          })
+        }
+      ]
+    }
+  ];
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
 ipcMain.handle('save-supabase-config', (event, config) => {
   try {
     store.set('supabase', config);
@@ -278,3 +370,4 @@ ipcMain.handle('save-supabase-config', (event, config) => {
 ipcMain.handle('get-supabase-config', () => {
   return store.get('supabase');
 }); 
+ipcMain.handle('test-supabase-connection', () => testSupabaseConnection(false));

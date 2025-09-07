@@ -5,7 +5,8 @@ module.exports = {
   packagerConfig: {
     asar: true,
     icon: './src/assets/app-icon',
-    executableName: 'Inventario Pro',
+    // Nombre del ejecutable sin espacios para evitar problemas con Squirrel (dummy update.exe)
+    executableName: 'InventarioPro',
     // Evita que electron-packager intente procesar archivos .env inexistentes
     // (corrige error ENOENT lstat .env durante "Finalizing package" en Windows)
     ignore: [
@@ -20,7 +21,8 @@ module.exports = {
       config: {
         name: 'inventory-suit',
         authors: 'SuitCore',
-        exe: 'Inventario Pro.exe',
+        // Debe coincidir con packagerConfig.executableName + '.exe'
+        exe: 'InventarioPro.exe',
         setupIcon: './src/assets/app-icon.ico',
         loadingGif: './src/assets/installer.gif'
       }

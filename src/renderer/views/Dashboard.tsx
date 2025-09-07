@@ -91,7 +91,10 @@ const Dashboard: React.FC = () => {
       
       if (salesError) throw salesError;
       
-      const monthlyTotal = monthlySales?.reduce((sum, invoice) => sum + (invoice.total_amount || 0), 0) || 0;
+      const monthlyTotal = (monthlySales as any[])?.reduce(
+        (sum, invoice: any) => sum + (Number(invoice?.total_amount) || 0),
+        0
+      ) || 0;
       
       // Fetch low stock products count
       const { data: lowStockCount, error: lowStockError } = await client
@@ -172,12 +175,12 @@ const Dashboard: React.FC = () => {
         if (movementTypesError) throw movementTypesError;
         
         // Crear mapas para búsqueda rápida
-        const productMap = new Map(products?.map(p => [p.id, p]));
-        const warehouseMap = new Map(warehouses?.map(w => [w.id, w]));
-        const movementTypeMap = new Map(movementTypes?.map(mt => [mt.id, mt]));
+  const productMap = new Map((products as any[])?.map((p: any) => [p.id, p]));
+  const warehouseMap = new Map((warehouses as any[])?.map((w: any) => [w.id, w]));
+  const movementTypeMap = new Map((movementTypes as any[])?.map((mt: any) => [mt.id, mt]));
         
         // Formatear los datos de movimientos correctamente
-        const formattedMovements = movements.map(movement => {
+  const formattedMovements = (movements as any[]).map((movement: any) => {
           const product = productMap.get(movement.product_id);
           const warehouse = warehouseMap.get(movement.warehouse_id);
           const movementType = movementTypeMap.get(movement.movement_type_id);
@@ -208,7 +211,7 @@ const Dashboard: React.FC = () => {
       // Fetch top 5 products by movement quantity
       try {
         // Intentar usar la función RPC
-        const { data: topProductsData, error: topProductsError } = await client
+  const { data: topProductsData, error: topProductsError } = await client
           .rpc('get_top_selling_products', { limit_count: 5 })
           .select('*');
         
@@ -226,7 +229,7 @@ const Dashboard: React.FC = () => {
           if (productsError) throw productsError;
           
           // Mapeo de productos para acceso rápido
-          const productMap = new Map(products?.map(p => [p.id, p]) || []);
+          const productMap = new Map((products as any[])?.map((p: any) => [p.id, p]) || []);
           
           // Obtener movimientos de salida
           const { data: outMovements, error: movementsError } = await client
@@ -244,8 +247,8 @@ const Dashboard: React.FC = () => {
           // Agregar cantidades por producto
           const productQuantityMap: Record<string, number> = {};
           
-          outMovements?.forEach(movement => {
-            const productId = movement.product_id;
+          (outMovements as any[])?.forEach((movement: any) => {
+            const productId = movement.product_id as string;
             if (!productQuantityMap[productId]) {
               productQuantityMap[productId] = 0;
             }
@@ -256,7 +259,7 @@ const Dashboard: React.FC = () => {
           const topProductsList: TopProduct[] = [];
           
           Object.entries(productQuantityMap).forEach(([productId, totalQuantity]) => {
-            const product = productMap.get(productId);
+            const product: any = productMap.get(productId);
             if (product) {
               topProductsList.push({
                 id: productId,
@@ -275,7 +278,7 @@ const Dashboard: React.FC = () => {
           setTopProducts(sortedProducts);
         } else {
           // Si la función RPC funcionó correctamente
-          const formattedTopProducts = topProductsData.map(item => ({
+          const formattedTopProducts = (topProductsData as any[])?.map((item: any) => ({
             id: item.product_id,
             name: item.product_name,
             sku: item.sku || 'Sin SKU',
@@ -292,7 +295,7 @@ const Dashboard: React.FC = () => {
       // Fetch low stock products detail
       try {
         // Obtener productos con stock bajo directamente
-        const { data: lowStockItems, error: lowStockItemsError } = await client
+  const { data: lowStockItems, error: lowStockItemsError } = await client
           .from('current_stock')
           .select(`
             product_id,
@@ -311,10 +314,10 @@ const Dashboard: React.FC = () => {
         }
         
         // Si los datos de la vista no tienen toda la información, obtener los detalles de los productos
-        if (lowStockItems && lowStockItems.length > 0 && 
-            (lowStockItems[0].product_name === null || lowStockItems[0].sku === null)) {
+    if (lowStockItems && (lowStockItems as any[]).length > 0 && 
+      ((lowStockItems as any[])[0].product_name === null || (lowStockItems as any[])[0].sku === null)) {
           
-          const productIds = lowStockItems.map(item => item.product_id);
+          const productIds = (lowStockItems as any[]).map((item: any) => item.product_id);
           
           // Obtener detalles completos de los productos
           const { data: productDetails, error: productDetailsError } = await client
@@ -324,11 +327,11 @@ const Dashboard: React.FC = () => {
             
           if (productDetailsError) throw productDetailsError;
           
-          const productMap = new Map(productDetails?.map(p => [p.id, p]) || []);
+          const productMap = new Map((productDetails as any[])?.map((p: any) => [p.id, p]) || []);
           
           // Formatear los datos con la información completa de productos
-          const formattedLowStock = lowStockItems.map(item => {
-            const product = productMap.get(item.product_id);
+          const formattedLowStock = (lowStockItems as any[]).map((item: any) => {
+            const product: any = productMap.get(item.product_id);
             
             return {
               current_quantity: Number(item.current_quantity),
@@ -346,7 +349,7 @@ const Dashboard: React.FC = () => {
           setLowStockProducts(formattedLowStock);
         } else {
           // Si la vista ya tiene toda la información necesaria
-          const formattedLowStock = lowStockItems.map(item => ({
+          const formattedLowStock = (lowStockItems as any[]).map((item: any) => ({
             current_quantity: Number(item.current_quantity),
             product: {
               id: item.product_id,

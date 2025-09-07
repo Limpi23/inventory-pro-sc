@@ -43,7 +43,7 @@ const ReturnForm: React.FC = () => {
         .order('invoice_date', { ascending: false });
 
       if (error) throw error;
-      setInvoices(data || []);
+  setInvoices((data as any[]) || []);
     } catch (error: any) {
       console.error('Error al cargar facturas:', error.message);
       toast.error(`Error al cargar facturas: ${error.message}`);
@@ -64,7 +64,7 @@ const ReturnForm: React.FC = () => {
         .eq('invoice_id', invoiceId);
 
       if (error) throw error;
-      setInvoiceItems(data || []);
+  setInvoiceItems((data as any[]) || []);
     } catch (error: any) {
       console.error('Error al cargar items de factura:', error.message);
       toast.error(`Error al cargar items de factura: ${error.message}`);

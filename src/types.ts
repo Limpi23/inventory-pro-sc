@@ -55,3 +55,166 @@ export interface SubscriptionInfo {
 } 
 
 export * from './types/index'; 
+
+// --- Tipos extendidos usados en la UI ---
+
+export interface Customer {
+  id: string;
+  name: string;
+  identification_type?: string;
+  identification_number?: string;
+  contact_name?: string;
+  email?: string;
+  phone?: string;
+  tax_status?: string;
+  payment_terms?: string;
+  credit_limit?: number;
+  is_active?: boolean;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip_code?: string;
+  country?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Invoice {
+  id: string;
+  invoice_number?: string;
+  customer_id: string;
+  warehouse_id?: string;
+  invoice_date: string;
+  due_date?: string;
+  payment_method?: string;
+  subtotal?: number;
+  discount_amount?: number;
+  tax_amount?: number;
+  total_amount: number;
+  status: string;
+  notes?: string;
+  customer?: Customer;
+  warehouse?: { id?: string; name?: string };
+}
+
+export interface InvoiceItem {
+  id: string;
+  invoice_id: string;
+  product_id: string;
+  quantity: number;
+  unit_price?: number;
+  total_price?: number;
+  product?: { id?: string; name?: string; sku?: string };
+}
+
+export interface Return {
+  id: string;
+  invoice_id: string;
+  return_date: string;
+  total_amount: number;
+  status: string;
+  reason?: string;
+  notes?: string;
+  invoice?: Invoice;
+}
+
+export interface ReturnItem {
+  id: string;
+  return_id: string;
+  invoice_item_id: string;
+  product_id: string;
+  quantity: number;
+  reason?: string;
+  unit_price?: number;
+  total_price?: number;
+  product?: { id?: string; name?: string; sku?: string };
+}
+
+export interface Role {
+  id: number;
+  name: string;
+  description?: string;
+  created_at?: string;
+}
+
+export interface Permission {
+  id: number;
+  // Nombre compuesto opcional (resource_action) usado en UI localStorage
+  name?: string;
+  action: string;
+  resource: string;
+  description?: string;
+  created_at?: string;
+}
+
+export interface RolePermission {
+  id?: number;
+  role_id: number;
+  permission_id: number;
+  created_at?: string;
+}
+
+export interface InventoryItem {
+  product_id: string;
+  product_name: string;
+  sku?: string;
+  warehouse_id: string;
+  warehouse_name?: string;
+  current_quantity: number;
+}
+
+export interface StockMovement {
+  id: string;
+  product_id: string;
+  warehouse_id: string;
+  quantity: number;
+  movement_type_id: number;
+  movement_date: string;
+  product?: { id?: string; name?: string; sku?: string };
+  warehouse?: { id?: string; name?: string };
+  movement_type?: { id?: number; code?: string; description?: string };
+}
+
+export interface TopProduct { name: string; sku: string; totalQuantity: number; }
+export interface LowStockProduct { product: { id: string; name: string; sku?: string }; warehouse: { name?: string }; current_quantity: number; }
+
+// ---------------- Form / Input helper interfaces (para formularios UI) ----------------
+
+// Customer form input (sin id)
+export interface CustomerInput {
+  name: string;
+  identification_type?: string;
+  identification_number?: string;
+  contact_name?: string;
+  email?: string;
+  phone?: string;
+  tax_status?: string;
+  payment_terms?: string;
+  credit_limit?: number | ""; // permitir string vacío en formulario
+  is_active?: boolean;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip_code?: string;
+  country?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+// Return (devoluciones) inputs
+export interface ReturnItemInput {
+  invoice_item_id: string;
+  product_id: string;
+  quantity: number;
+  reason?: string; // motivo específico
+  unit_price?: number;
+  total_price?: number;
+}
+
+export interface ReturnInput {
+  invoice_id: string;
+  return_date: string; // YYYY-MM-DD
+  reason: string; // motivo general
+  notes?: string;
+  items: ReturnItemInput[];
+}

@@ -100,15 +100,28 @@ const App = () => {
 
   useEffect(() => {
     const win = window as any;
+    const forced = sessionStorage.getItem('forceOnboarding') === '1';
+    if (forced) {
+      console.log('[App] forceOnboarding activo');
+      setShowOnboarding(true);
+      sessionStorage.removeItem('forceOnboarding');
+      return;
+    }
     if (win.supabaseConfig && typeof win.supabaseConfig.get === 'function') {
       win.supabaseConfig.get().then((config: any) => {
+        console.log('[App] Supabase config obtenida:', config);
         if (config?.url && config?.anonKey) {
           setReady(true);
         } else {
+          console.log('[App] No hay config guardada: mostrando onboarding');
           setShowOnboarding(true);
         }
+      }).catch((e: any) => {
+        console.warn('[App] Error obteniendo config supabase:', e);
+        setShowOnboarding(true);
       });
     } else {
+      console.log('[App] win.supabaseConfig no disponible; continuando');
       setReady(true);
     }
   }, []);
@@ -126,8 +139,12 @@ const App = () => {
   };
 
   if (!ready && !showOnboarding) {
-    // Esperar a que se determine si hay config o no
-    return null;
+    return (
+      <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',fontFamily:'system-ui'}}>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mb-4" />
+        <div style={{opacity:0.7,fontSize:14}}>Inicializando aplicación...</div>
+      </div>
+    );
   }
 
   return (

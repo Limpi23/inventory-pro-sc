@@ -57,6 +57,13 @@ export const supabase = {
       });
     }
     return supabaseInstance;
+  },
+  // Compat: permite usar supabase.from('tabla') como antes
+  from: (table: string) => {
+    if (!supabaseInstance) {
+      throw new Error('Supabase aún no inicializado. Usa await supabase.getClient() primero.');
+    }
+    return (supabaseInstance as any).from(table);
   }
 };
 

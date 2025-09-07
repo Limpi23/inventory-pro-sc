@@ -65,7 +65,7 @@ const PurchaseOrderList: React.FC = () => {
             .ilike('name', `%${searchTerm}%`);
           
           if (proveedores && proveedores.length > 0) {
-            proveedoresIds = proveedores.map(p => p.id);
+            proveedoresIds = (proveedores as { id: string }[]).map(p => p.id);
           }
         } catch (err) {
           console.error("Error al buscar proveedores:", err);
