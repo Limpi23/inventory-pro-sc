@@ -57,6 +57,15 @@ jobs:
           }
         shell: powershell
 
+      - name: Validate Setup size
+        run: |
+          $setup = Get-ChildItem out\make\squirrel.windows\x64 | Where-Object { $_.Name -like '*Setup.exe' } | Select-Object -First 1
+          if (-not $setup) { Write-Error 'No se encontró Setup.exe'; exit 1 }
+          $mb = [math]::Round($setup.Length/1MB,2)
+          Write-Host "Setup size: $mb MB"
+          if ($mb -lt 50) { Write-Error 'Setup demasiado pequeño (posible dummy update.exe)'; exit 1 }
+        shell: powershell
+
       - name: Get version
         id: version
         run: |

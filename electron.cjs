@@ -371,3 +371,5 @@ ipcMain.handle('get-supabase-config', () => {
   return store.get('supabase');
 }); 
 ipcMain.handle('test-supabase-connection', () => testSupabaseConnection(false));
+// Versión de la aplicación para mostrar en el renderer
+ipcMain.handle('app-version', () => app.getVersion());

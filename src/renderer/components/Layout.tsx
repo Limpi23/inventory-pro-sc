@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '../components/ui/sheet';
@@ -129,6 +129,12 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenConfig }) => {
       console.error('Error al cerrar sesión:', error);
     }
   };
+
+  const [appVersion, setAppVersion] = useState<string>('');
+  useEffect(() => {
+    const w = window as typeof window & { appVersion?: { get: () => Promise<string> } };
+    w.appVersion?.get?.().then((v: string) => setAppVersion(v)).catch(()=>{});
+  }, []);
 
   return (
     <div className="flex h-screen bg-background">
@@ -329,6 +335,11 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenConfig }) => {
 
             <div className="flex items-center space-x-2">
               <SubscriptionHelpButton />
+              {appVersion && (
+                <span className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground select-none" title="Versión de la aplicación">
+                  v{appVersion}
+                </span>
+              )}
               <DatabaseStatus />
               <UpdateNotification />
               {/* Botón de engranaje para configuración de conexión */}

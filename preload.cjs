@@ -11,6 +11,11 @@ contextBridge.exposeInMainWorld('electron', {
   }
 });
 
+// Versión de la app
+contextBridge.exposeInMainWorld('appVersion', {
+  get: () => ipcRenderer.invoke('app-version')
+});
+
 // Configuración Supabase persistida vía electron-store (manejada en electron.cjs)
 contextBridge.exposeInMainWorld('supabaseConfig', {
   save: (config) => ipcRenderer.invoke('save-supabase-config', config),

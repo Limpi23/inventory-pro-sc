@@ -29,11 +29,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build application
-        run: npm run build
-
       - name: Build preload script
         run: npm run build:preload
+
+      - name: Build application
+        run: npm run build
 
       - name: Generate Windows installer
         run: npm run make:win
@@ -50,12 +50,17 @@ jobs:
           echo "build_name=v$version-$date-$shortSha" >> $env:GITHUB_OUTPUT
         shell: powershell
 
-      - name: List artifacts
+      - name: List artifacts & validate size
         run: |
           echo "=== Generated Files ==="
+          $ok = $true
           Get-ChildItem "out\make\squirrel.windows\x64" | ForEach-Object { 
-            Write-Host "$($_.Name) - $([math]::Round($_.Length/1MB, 2)) MB" 
+            $sizeMB = [math]::Round($_.Length/1MB,2)
+            Write-Host "$($_.Name) - $sizeMB MB" 
+            if ($_.Name -like '*Setup.exe' -and $sizeMB -lt 50) { 
+              Write-Error "Setup demasiado pequeño (stub)"; $ok = $false }
           }
+          if (-not $ok) { exit 1 }
         shell: powershell
 
       - name: Upload artifacts

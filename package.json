@@ -1,7 +1,7 @@
 {
   "name": "inventory-suit",
   "private": true,
-  "version": "1.4.5",
+  "version": "1.4.6",
   "type": "module",
   "main": "electron.cjs",
   "scripts": {
@@ -22,6 +22,7 @@
     "release:win": "npm run kill:app && npm run clean:out && npm run build:preload && npm run build && cross-env NODE_ENV=production electron-forge make",
   "release:win:single": "npm run release:win && powershell -NoLogo -NoProfile -Command \"New-Item -ItemType Directory -Force -Path release | Out-Null; $f = Get-ChildItem -Path out/make/squirrel.windows/x64 -Filter '*Setup*.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1; if ($f) { Copy-Item $f.FullName -Destination release/ -Force; Write-Host 'Copiado instalador a release/' $f.Name } else { Write-Host 'No se encontró Setup exe.' }; if (Test-Path out/inventory-suit-win32-x64) { Remove-Item -Recurse -Force out/inventory-suit-win32-x64; Write-Host 'Carpeta empaquetada eliminada.' }\"",
   "release:win2": "node scripts/release-win.cjs"
+  ,"build:windows": "npm run clean:out && npm run build:preload && npm run build && npm run make:win"
   },
   "keywords": [
     "inventario",
@@ -32,6 +33,10 @@
   "author": "SuitCore",
   "license": "MIT",
   "description": "Aplicación de gestión de inventario.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Limpi23/inventory-pro-sc"
+  },
   "devDependencies": {
     "@electron-forge/cli": "^7.2.0",
     "@electron-forge/maker-squirrel": "^7.8.0",
