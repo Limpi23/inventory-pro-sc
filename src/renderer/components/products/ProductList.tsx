@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Product } from "../../../types";
-import { productsService } from "../../../lib/supabase";
+import { productService } from "../../lib/supabase";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
@@ -26,7 +26,7 @@ export default function ProductList() {
   async function fetchProducts() {
     try {
       setIsLoading(true);
-  const data = await productsService.getAll();
+  const data = await productService.getAll();
   setProducts((data as unknown as UIProduct[]) || []);
     } catch (error) {
       console.error("Error al cargar productos:", error);
@@ -43,7 +43,7 @@ export default function ProductList() {
 
     try {
       setIsLoading(true);
-  const data = await productsService.search(searchQuery);
+  const data = await productService.search(searchQuery);
   setProducts((data as unknown as UIProduct[]) || []);
     } catch (error) {
       console.error("Error al buscar productos:", error);
@@ -60,7 +60,7 @@ export default function ProductList() {
   async function handleDelete(id: string) {
     if (confirm("¿Estás seguro de que deseas eliminar este producto?")) {
       try {
-        await productsService.delete(id);
+  await productService.delete(id);
         fetchProducts();
       } catch (error) {
         console.error("Error al eliminar producto:", error);

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
-import { productsService } from "../../../lib/supabase";
+import { productService } from "../../lib/supabase";
 import Papa from 'papaparse';
 
 interface ProductImportProps {
@@ -46,7 +46,7 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
       });
       
       // Obtener SKUs ya existentes en la base de datos
-      const existingProducts = await productsService.getAll();
+  const existingProducts = await productService.getAll();
       const existingSkus = new Set((existingProducts as any[]).map((p: any) => (p.sku || '').trim()).filter(Boolean));
       
       // Validar y procesar los datos
@@ -104,7 +104,7 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
       // Intentar crear todos los productos en lote
       if (validProducts.length > 0) {
         try {
-          const createdProducts = await productsService.createBatch(validProducts);
+          const createdProducts = await productService.createBatch(validProducts);
           successCount = createdProducts.length;
         } catch (error: any) {
           errors.push(`Error al crear productos en lote: ${error.message || 'Error desconocido'}`);

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Warehouse } from "../../../types";
-import { warehousesService } from "../../../lib/supabase";
+// Usar la versión dinámica de supabase dentro de renderer
+import { warehousesService } from "../../lib/supabase";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";

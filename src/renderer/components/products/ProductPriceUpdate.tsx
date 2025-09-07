@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
-import { productsService } from '../../../lib/supabase';
+import { productService } from '../../lib/supabase';
 import Papa from 'papaparse';
 
 interface ProductPriceUpdateProps {
@@ -25,7 +25,7 @@ const ProductPriceUpdate: React.FC<ProductPriceUpdateProps> = ({ open, onClose, 
 
   const downloadTemplate = async () => {
     // Obtener productos actuales
-    const products = await productsService.getAll();
+  const products = await productService.getAll();
     const headers = 'sku,precio_compra,precio_venta\n';
     const rows = products.map((p: any) => `${p.sku || ''},,`).join('\n');
     const csvContent = headers + rows;
@@ -52,7 +52,7 @@ const ProductPriceUpdate: React.FC<ProductPriceUpdateProps> = ({ open, onClose, 
           error: (error) => reject(error)
         });
       });
-      const products = await productsService.getAll();
+  const products = await productService.getAll();
       const skuMap = new Map((products as any[]).map((p: any) => [(p.sku || '').trim(), p]));
       const updates = [];
       const errors: string[] = [];
@@ -90,7 +90,7 @@ const ProductPriceUpdate: React.FC<ProductPriceUpdateProps> = ({ open, onClose, 
           if (upd.compra !== null) updateData.purchase_price = upd.compra;
           if (upd.venta !== null) updateData.sale_price = upd.venta;
           if (Object.keys(updateData).length > 0) {
-            await productsService.update(prod.id, updateData);
+            await productService.update(prod.id, updateData);
             successCount++;
           }
         } catch (e: any) {

@@ -208,7 +208,8 @@ export const productService = {
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase
       .from('products')
-      .select('*');
+	.select(`*, category:categories(id, name)`)
+	.order('name');
     if (error) throw error;
     return data || [];
   },
@@ -217,12 +218,33 @@ export const productService = {
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase
       .from('products')
-      .select('*')
+      .select(`*, category:categories(id, name)`)
       .eq('id', id)
       .single();
-    
     if (error) throw error;
     return data;
+  },
+
+  getByCategory: async (categoryId: string): Promise<Product[]> => {
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase
+      .from('products')
+      .select(`*, category:categories(id, name)`)
+      .eq('category_id', categoryId)
+      .order('name');
+    if (error) throw error;
+    return data || [];
+  },
+
+  search: async (query: string): Promise<Product[]> => {
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase
+      .from('products')
+      .select(`*, category:categories(id, name)`)
+      .or(`name.ilike.%${query}%, sku.ilike.%${query}%, barcode.ilike.%${query}%`)
+      .order('name');
+    if (error) throw error;
+    return data || [];
   },
   
   create: async (product: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Promise<Product> => {
@@ -258,12 +280,184 @@ export const productService = {
       .eq('id', id);
     
     if (error) throw error;
+  },
+
+  createBatch: async (products: Omit<Product, 'id' | 'created_at' | 'updated_at'>[]): Promise<Product[]> => {
+    if (!products.length) return [];
+    const supabase = await getSupabaseClient();
+    const batchSize = 100;
+    const results: Product[] = [];
+    const errors: any[] = [];
+    for (let i = 0; i < products.length; i += batchSize) {
+      const batch = products.slice(i, i + batchSize);
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .insert(batch as any)
+          .select();
+        if (error) throw error;
+        if (data) results.push(...(data as Product[]));
+      } catch (e) {
+        errors.push(e);
+        console.error('Error lote productos', e);
+      }
+    }
+    if (errors.length) {
+      console.warn(`Insertados ${results.length} con ${errors.length} errores`);
+    }
+    return results;
   }
 };
 
-// Puedes agregar servicios similares para las demás tablas
-export const categoryService = {
-  // Implementación similar a productService
+// Servicio de categorías
+export const categoriesService = {
+  getAll: async (): Promise<Category[]> => {
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .order('name');
+    if (error) throw error;
+    return data || [];
+  },
+  getById: async (id: string): Promise<Category | null> => {
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error) throw error;
+    return data;
+  },
+  create: async (category: Omit<Category, 'id' | 'created_at' | 'updated_at'>): Promise<Category> => {
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase
+      .from('categories')
+      .insert([category])
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+  update: async (id: string, updates: Partial<Category>): Promise<Category> => {
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase
+      .from('categories')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+  delete: async (id: string): Promise<void> => {
+    const supabase = await getSupabaseClient();
+    const { error } = await supabase
+      .from('categories')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  },
+  exportToCSV: async (): Promise<string> => {
+    const categories = await (await categoriesService.getAll());
+    let csv = 'Nombre,Descripción\n';
+    categories.forEach(c => {
+      const name = c.name?.includes(',') ? `"${c.name}"` : c.name;
+      const description = c.description ? (c.description.includes(',') ? `"${c.description}"` : c.description) : '';
+      csv += `${name},${description}\n`;
+    });
+    return csv;
+  },
+  importFromCSV: async (fileContent: string): Promise<{ success: number; errors: number; messages: string[] }> => {
+    const lines = fileContent.split('\n');
+    const dataLines = lines.slice(1).filter(l => l.trim() !== '');
+    const categories: any[] = [];
+    const errors: string[] = [];
+    dataLines.forEach((line, idx) => {
+      try {
+        const [name, description = ''] = line.split(',').map(i => i.trim().replace(/^"|"$/g, ''));
+        if (!name) {
+          errors.push(`Fila ${idx + 2}: nombre requerido`);
+          return;
+        }
+        categories.push({ name, description: description || undefined });
+      } catch (e: any) {
+        errors.push(`Fila ${idx + 2}: ${e.message || 'error'}`);
+      }
+    });
+    if (!categories.length) {
+      return { success: 0, errors: dataLines.length, messages: ['Sin categorías válidas', ...errors] };
+    }
+    const supabase = await getSupabaseClient();
+    let successCount = 0;
+    for (let i = 0; i < categories.length; i += 50) {
+      const batch = categories.slice(i, i + 50);
+      try {
+        const { data, error } = await supabase
+          .from('categories')
+          .insert(batch)
+          .select();
+        if (error) throw error;
+        if (data) successCount += data.length;
+      } catch (e: any) {
+        if (e.code === '23505') errors.push('Algunas categorías ya existían'); else errors.push(e.message || 'Error al importar lote');
+      }
+    }
+    return { success: successCount, errors: dataLines.length - successCount, messages: errors };
+  }
+};
+
+// Servicio de almacenes
+export const warehousesService = {
+  getAll: async (): Promise<Warehouse[]> => {
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase
+      .from('warehouses')
+      .select('*')
+      .order('name');
+    if (error) throw error;
+    return data || [];
+  },
+  getById: async (id: string): Promise<Warehouse | null> => {
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase
+      .from('warehouses')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error) throw error;
+    return data;
+  },
+  create: async (warehouse: Omit<Warehouse, 'id' | 'created_at' | 'updated_at'>): Promise<Warehouse> => {
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase
+      .from('warehouses')
+      .insert([warehouse])
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+  update: async (id: string, updates: Partial<Warehouse>): Promise<Warehouse> => {
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase
+      .from('warehouses')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+  delete: async (id: string): Promise<void> => {
+    const supabase = await getSupabaseClient();
+    const { error } = await supabase
+      .from('warehouses')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  }
 };
 
 export const stockMovementService = {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Product, ProductInput, ProductStatus, Category } from "../../../types";
-import { productsService, categoriesService } from "../../../lib/supabase";
+import { productService, categoriesService } from "../../lib/supabase";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -36,7 +36,7 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
   useEffect(() => {
     async function loadCategories() {
       try {
-        const data = await categoriesService.getAll();
+  const data = await categoriesService.getAll();
         setCategories(data || []);
       } catch (error) {
         console.error("Error al cargar categorías:", error);
@@ -119,10 +119,10 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
 
       if (product) {
         // Actualizar producto existente
-        await productsService.update(product.id, formData);
+  await productService.update(product.id, formData);
       } else {
         // Crear nuevo producto
-        await productsService.create(formData);
+  await productService.create(formData);
       }
       
       onClose();

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Category, CategoryInput } from "../../../types";
-import { categoriesService } from "../../../lib/supabase";
+import { categoriesService } from "../../lib/supabase";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";

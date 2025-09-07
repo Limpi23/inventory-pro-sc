@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Warehouse, WarehouseInput } from "../../../types";
-import { warehousesService } from "../../../lib/supabase";
+import { warehousesService } from "../../lib/supabase";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
