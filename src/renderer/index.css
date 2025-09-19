@@ -93,16 +93,6 @@
   }
 }
 
-:root {
-  --primary: #3b82f6;
-  --primary-dark: #2563eb;
-  --secondary: #10b981;
-  --secondary-dark: #059669;
-  --danger: #ef4444;
-  --warning: #f59e0b;
-  --info: #3b82f6;
-  --success: #10b981;
-}
 
 /* Scrollbar personalizado */
 ::-webkit-scrollbar {

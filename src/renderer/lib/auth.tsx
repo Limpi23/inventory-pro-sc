@@ -195,8 +195,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const hasPermission = (resource: string, action: string) => {
     if (!user) return false;
     
-    // Los administradores tienen acceso a todo
-    if (user.role_name === 'admin') return true;
+    // Los administradores tienen acceso a todo (soporta variantes/localización)
+    const roleName = (user.role_name || '').toLowerCase();
+    if (roleName === 'admin' || roleName.includes('admin') || user.role_id === 1) return true;
     
     // Verificar si el usuario tiene el permiso específico
     return permissions.some(p => 

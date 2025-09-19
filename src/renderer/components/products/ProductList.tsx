@@ -1,33 +1,59 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Product } from "../../../types";
 import { productService } from "../../lib/supabase";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Input } from "../ui/input";
+import { Checkbox } from "../ui/checkbox";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
+import { MoreHorizontal, Pencil, Trash2, Ban } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import * as XLSX from "xlsx";
 import ProductModal from "./ProductModal";
 import ProductImport from "./ProductImport";
 import ProductPriceUpdate from './ProductPriceUpdate';
+import { useAuth } from "../../lib/auth";
+import { toast } from "react-hot-toast";
 
 type UIProduct = Product & { category?: { id: string; name: string } | null };
 
 export default function ProductList() {
+  const { user, hasPermission } = useAuth();
+  const isAdmin = ((user?.role_name || '').toLowerCase().includes('admin')) || user?.role_id === 1;
+  const canUpdateProducts = (
+    isAdmin ||
+    hasPermission('products', 'update') ||
+    hasPermission('product', 'update') ||
+    hasPermission('productos', 'update') ||
+    hasPermission('inventory', 'update') ||
+    hasPermission('*', 'update') ||
+    hasPermission('products', '*') ||
+    hasPermission('*', '*')
+  );
   const [products, setProducts] = useState<UIProduct[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isPriceUpdateOpen, setIsPriceUpdateOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   useEffect(() => {
     fetchProducts();
   }, []);
 
-  async function fetchProducts() {
+  async function fetchProducts(opts?: { keepPage?: boolean }) {
     try {
       setIsLoading(true);
   const data = await productService.getAll();
-  setProducts((data as unknown as UIProduct[]) || []);
+  const list = (data as unknown as UIProduct[]) || [];
+  setProducts(list);
+  // Si los IDs seleccionados ya no están, límpialos
+  setSelectedIds(prev => new Set([...prev].filter(id => list.some(p => p.id === id))));
+  if (!opts?.keepPage) setPage(1);
     } catch (error) {
       console.error("Error al cargar productos:", error);
     } finally {
@@ -44,13 +70,54 @@ export default function ProductList() {
     try {
       setIsLoading(true);
   const data = await productService.search(searchQuery);
-  setProducts((data as unknown as UIProduct[]) || []);
+  const list = (data as unknown as UIProduct[]) || [];
+  setProducts(list);
+  setSelectedIds(prev => new Set([...prev].filter(id => list.some(p => p.id === id))));
+  setPage(1);
     } catch (error) {
       console.error("Error al buscar productos:", error);
     } finally {
       setIsLoading(false);
     }
   }
+
+  // Paginación
+  const total = products.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const startIndex = (page - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, total);
+  const visibleProducts = useMemo(() => products.slice(startIndex, endIndex), [products, startIndex, endIndex]);
+
+  useEffect(() => {
+    // Ajustar página si cambia el total y la página actual queda fuera de rango
+    if (page > totalPages) setPage(totalPages);
+  }, [totalPages, page]);
+
+  // Selección: todos y por fila (sólo visibles en la página actual)
+  const allVisibleSelected = useMemo(() => visibleProducts.length > 0 && visibleProducts.every(p => selectedIds.has(p.id)), [visibleProducts, selectedIds]);
+  const someVisibleSelected = useMemo(() => visibleProducts.some(p => selectedIds.has(p.id)) && !allVisibleSelected, [visibleProducts, selectedIds, allVisibleSelected]);
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) {
+      // deseleccionar visibles
+      const next = new Set(selectedIds);
+      visibleProducts.forEach(p => next.delete(p.id));
+      setSelectedIds(next);
+    } else {
+      // seleccionar visibles
+      const next = new Set(selectedIds);
+      visibleProducts.forEach(p => next.add(p.id));
+      setSelectedIds(next);
+    }
+  };
+
+  const toggleOne = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   function handleEdit(product: Product) {
     setEditingProduct(product);
@@ -61,17 +128,37 @@ export default function ProductList() {
     if (confirm("¿Estás seguro de que deseas eliminar este producto?")) {
       try {
   await productService.delete(id);
-        fetchProducts();
+    fetchProducts({ keepPage: true });
       } catch (error) {
         console.error("Error al eliminar producto:", error);
       }
     }
   }
 
+  async function handleMarkInactive(id: string, alreadyInactive: boolean) {
+    if (alreadyInactive) return;
+    try {
+  await productService.update(id, { status: 'inactive' });
+  fetchProducts({ keepPage: true });
+    } catch (error) {
+      console.error('Error al marcar inactivo:', error);
+    }
+  }
+
+  async function handleMarkActive(id: string, alreadyActive: boolean) {
+    if (alreadyActive) return;
+    try {
+  await productService.update(id, { status: 'active' });
+  fetchProducts({ keepPage: true });
+    } catch (error) {
+      console.error('Error al marcar activo:', error);
+    }
+  }
+
   function handleModalClose() {
     setIsModalOpen(false);
     setEditingProduct(null);
-    fetchProducts();
+  fetchProducts({ keepPage: true });
   }
 
   // Formatear el precio como moneda
@@ -83,6 +170,28 @@ export default function ProductList() {
     }).format(value);
   };
 
+  // Exportar a Excel (seleccionados o todos si no hay selección)
+  const handleExportExcel = () => {
+    const items = selectedIds.size > 0
+      ? products.filter(p => selectedIds.has(p.id))
+      : products;
+
+    const rows = items.map(p => ({
+      ID: p.id,
+      Nombre: p.name,
+      SKU: p.sku || "",
+      Categoria: p.category?.name || "",
+      "Precio Compra": p.purchase_price ?? 0,
+      "Precio Venta": p.sale_price ?? 0,
+      Estado: p.status,
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Productos");
+    XLSX.writeFile(wb, `productos_${new Date().toISOString().slice(0,10)}.xlsx`);
+  };
+
   return (
     <Card>
       <CardHeader className="space-y-3">
@@ -90,6 +199,14 @@ export default function ProductList() {
           <CardTitle className="text-xl md:text-2xl">Productos</CardTitle>
           <div className="flex gap-2 sm:justify-end w-full sm:w-auto">
             <ProductImport onImportComplete={fetchProducts} size="sm" className="w-full sm:w-auto" />
+            <Button
+              onClick={handleExportExcel}
+              variant="outline"
+              className="whitespace-nowrap w-full sm:w-auto"
+              size="sm"
+            >
+              Exportar Excel {selectedIds.size > 0 ? `(${selectedIds.size})` : ""}
+            </Button>
             <Button
               onClick={() => setIsPriceUpdateOpen(true)}
               className="bg-yellow-500 hover:bg-yellow-600 text-white whitespace-nowrap text-xs md:text-sm w-full sm:w-auto"
@@ -128,6 +245,13 @@ export default function ProductList() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={someVisibleSelected ? 'indeterminate' : allVisibleSelected}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="Seleccionar todos"
+                    />
+                  </TableHead>
                   <TableHead>Nombre</TableHead>
                   <TableHead className="hidden md:table-cell">SKU</TableHead>
                   <TableHead className="hidden lg:table-cell">Categoría</TableHead>
@@ -140,13 +264,20 @@ export default function ProductList() {
               <TableBody>
                 {products.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center">
+                    <TableCell colSpan={8} className="text-center">
                       No hay productos registrados
                     </TableCell>
                   </TableRow>
                 ) : (
-                  products.map((product) => (
+                  visibleProducts.map((product) => (
                     <TableRow key={product.id}>
+                      <TableCell className="w-10">
+                        <Checkbox
+                          checked={selectedIds.has(product.id)}
+                          onCheckedChange={() => toggleOne(product.id)}
+                          aria-label={`Seleccionar ${product.name}`}
+                        />
+                      </TableCell>
                       <TableCell>{product.name}</TableCell>
                       <TableCell className="hidden md:table-cell">{product.sku || "-"}</TableCell>
                       <TableCell className="hidden lg:table-cell">{product.category?.name || "-"}</TableCell>
@@ -170,27 +301,86 @@ export default function ProductList() {
                         </span>
                       </TableCell>
                       <TableCell className="text-right whitespace-nowrap">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="mr-2"
-                          onClick={() => handleEdit(product)}
-                        >
-                          Editar
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDelete(product.id)}
-                        >
-                          Eliminar
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="h-4 w-4" />
+                              <span className="sr-only">Abrir menú</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleEdit(product)} className="gap-2">
+                              <Pencil className="h-4 w-4" /> Editar
+                            </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  if (!canUpdateProducts) {
+                                    toast.error('No tienes permiso para cambiar el estado del producto');
+                                    return;
+                                  }
+                                  if (product.status === 'active') {
+                                    handleMarkInactive(product.id, false);
+                                  } else {
+                                    handleMarkActive(product.id, false);
+                                  }
+                                }}
+                                className="gap-2"
+                              >
+                                {product.status === 'active' ? (
+                                  <>
+                                    <Ban className="h-4 w-4" /> Marcar inactivo
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                                      <path fillRule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm13.36-2.46a.75.75 0 1 0-1.22-.88l-3.236 4.49-1.49-1.49a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.616-4.836Z" clipRule="evenodd" />
+                                    </svg>
+                                    Marcar activo
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDelete(product.id)} className="gap-2 text-red-600 focus:text-red-600">
+                              <Trash2 className="h-4 w-4" /> Eliminar
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))
                 )}
               </TableBody>
             </Table>
+            {/* Controles de paginación */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-4">
+              <div className="text-sm text-muted-foreground">
+                Mostrando {total === 0 ? 0 : startIndex + 1}–{endIndex} de {total}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm">Por página</span>
+                <Select value={String(pageSize)} onValueChange={(val) => { setPageSize(Number(val)); setPage(1); }}>
+                  <SelectTrigger className="w-[80px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="20">20</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-2 ml-2">
+                  <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}>
+                    Anterior
+                  </Button>
+                  <div className="text-sm">
+                    Página {page} de {totalPages}
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
+                    Siguiente
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </CardContent>
