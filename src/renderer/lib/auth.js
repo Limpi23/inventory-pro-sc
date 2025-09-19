@@ -178,8 +178,9 @@ export const AuthProvider = ({ children }) => {
     const hasPermission = (resource, action) => {
         if (!user)
             return false;
-        // Los administradores tienen acceso a todo
-        if (user.role_name === 'admin')
+        // Los administradores tienen acceso a todo (soporta variantes/localización)
+        const roleName = (user.role_name || '').toLowerCase();
+        if (roleName === 'admin' || roleName.includes('admin') || user.role_id === 1)
             return true;
         // Verificar si el usuario tiene el permiso específico
         return permissions.some(p => p.resource === resource &&

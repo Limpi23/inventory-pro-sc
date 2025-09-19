@@ -5,6 +5,7 @@ on:
     branches: [ main, master, develop ]
   pull_request:
     branches: [ main, master, develop ]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -44,9 +45,11 @@ jobs:
           echo "Build artifacts:"
           dir out\make\squirrel.windows\x64
 
-      - name: Upload build artifacts
+      - name: Upload build artifacts (manual or [artifacts] only)
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[artifacts]'))
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: windows-installer-${{ github.sha }}
           path: out/make/squirrel.windows/x64/*.exe
-          retention-days: 7 
+          retention-days: 7

@@ -66,16 +66,19 @@ jobs:
           if ($mb -lt 50) { Write-Error 'Setup demasiado pequeño (posible dummy update.exe)'; exit 1 }
         shell: powershell
 
-      - name: Get version
+      - name: Get tag and file version
         id: version
         run: |
           if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $version = "${{ github.event.inputs.version }}"
+            $tag = "${{ github.event.inputs.version }}"
           } else {
-            $version = "${{ github.ref_name }}"
+            $tag = "${{ github.ref_name }}"
           }
-          echo "version=$version" >> $env:GITHUB_OUTPUT
-          echo "Version: $version"
+          # Remove leading 'v' for file naming (forge output uses plain semver)
+          $fileVersion = $tag -replace '^v', ''
+          echo "tag=$tag" >> $env:GITHUB_OUTPUT
+          echo "fileVersion=$fileVersion" >> $env:GITHUB_OUTPUT
+          Write-Host "Tag: $tag | FileVersion: $fileVersion"
         shell: powershell
 
       - name: Create Release
@@ -84,10 +87,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ steps.version.outputs.version }}
-          release_name: Inventario Pro ${{ steps.version.outputs.version }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          release_name: Inventario Pro ${{ steps.version.outputs.tag }}
           body: |
-            ## 🚀 Inventario Pro ${{ steps.version.outputs.version }}
+            ## 🚀 Inventario Pro ${{ steps.version.outputs.tag }}
             
             ### 📦 Archivos de Instalación
             - **Setup.exe**: Instalador completo para Windows
@@ -98,7 +101,7 @@ jobs:
             - Arquitectura x64
             
             ### 🔧 Instalación
-            1. Descarga `inventory-suit-${{ steps.version.outputs.version }} Setup.exe`
+            1. Descarga `inventory-suit-${{ steps.version.outputs.fileVersion }} Setup.exe`
             2. Ejecuta el instalador como administrador
             3. Sigue las instrucciones en pantalla
             4. Configura tu conexión a Supabase
@@ -120,8 +123,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: out/make/squirrel.windows/x64/inventory-suit-${{ steps.version.outputs.version }} Setup.exe
-          asset_name: inventory-suit-${{ steps.version.outputs.version }}-Setup.exe
+          asset_path: out/make/squirrel.windows/x64/inventory-suit-${{ steps.version.outputs.fileVersion }} Setup.exe
+          asset_name: inventory-suit-${{ steps.version.outputs.fileVersion }}-Setup.exe
           asset_content_type: application/octet-stream
 
       - name: Upload Update Package
@@ -130,8 +133,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: out/make/squirrel.windows/x64/inventory-suit-${{ steps.version.outputs.version }}-full.nupkg
-          asset_name: inventory-suit-${{ steps.version.outputs.version }}-full.nupkg
+          asset_path: out/make/squirrel.windows/x64/inventory-suit-${{ steps.version.outputs.fileVersion }}-full.nupkg
+          asset_name: inventory-suit-${{ steps.version.outputs.fileVersion }}-full.nupkg
           asset_content_type: application/octet-stream
 
       - name: Upload RELEASES file
