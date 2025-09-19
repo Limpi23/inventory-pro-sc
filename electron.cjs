@@ -234,6 +234,21 @@ app.whenReady().then(async () => {
     await ses.clearCache();
   }
   createWindow();
+  // Configurar feed de actualizaciones (GitHub Releases público)
+  try {
+    // Permitir sobreescribir vía variable de entorno si se desea apuntar a un feed genérico
+    const FEED_URL = process.env.UPDATE_FEED_URL;
+    if (FEED_URL) {
+      autoUpdater.setFeedURL({ provider: 'generic', url: FEED_URL });
+      sendStatusToWindow('Update feed configurado (GENERIC)');
+    } else {
+      // Por defecto usamos GitHub Releases del repo público
+      autoUpdater.setFeedURL({ provider: 'github', owner: 'Limpi23', repo: 'inventory-pro-sc' });
+      sendStatusToWindow('Update feed configurado (GITHUB)');
+    }
+  } catch (e) {
+    console.warn('No se pudo configurar el feed de actualizaciones:', e);
+  }
   if (process.env.NODE_ENV !== 'development') {
     setTimeout(() => {
       autoUpdater.checkForUpdates();
@@ -320,6 +335,17 @@ function setupApplicationMenu() {
         {
           label: 'Probar conexión Supabase',
           click: () => { testSupabaseConnection(true); }
+        },
+        {
+          label: 'Buscar actualizaciones',
+          click: () => {
+            try {
+              sendStatusToWindow('Buscando actualizaciones (manual)...');
+              autoUpdater.checkForUpdates();
+            } catch (e) {
+              sendStatusToWindow('Error al buscar actualizaciones: ' + (e && e.message ? e.message : e));
+            }
+          }
         },
         {
           label: 'Mostrar Onboarding',
