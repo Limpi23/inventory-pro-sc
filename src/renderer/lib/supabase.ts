@@ -140,6 +140,7 @@ export interface StockMovement {
   id: string;
   product_id: string;
   warehouse_id: string;
+  location_id?: string | null;
   quantity: number;
   movement_type_id: number;
   reference?: string;
@@ -552,6 +553,7 @@ export const stockMovementService = {
   getFiltered: async (filters: {
     product_id?: string;
     warehouse_id?: string;
+    location_id?: string;
     movement_type_id?: number;
     start_date?: string;
     end_date?: string;
@@ -573,6 +575,9 @@ export const stockMovementService = {
     
     if (filters.warehouse_id) {
       query = query.eq('warehouse_id', filters.warehouse_id);
+    }
+    if (filters.location_id) {
+      query = query.eq('location_id', filters.location_id);
     }
     
     if (filters.movement_type_id) {
@@ -653,6 +658,15 @@ export const stockMovementService = {
     }
     
     return data?.current_quantity || 0;
+  },
+  // Obtener el stock actual por ubicación
+  getCurrentStockByLocation: async (product_id: string, warehouse_id?: string) => {
+    const supabase = await getSupabaseClient();
+    let query = supabase.from('current_stock_by_location').select('*').eq('product_id', product_id);
+    if (warehouse_id) query = query.eq('warehouse_id', warehouse_id);
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
   },
   
   // Obtener el stock actual de todos los productos

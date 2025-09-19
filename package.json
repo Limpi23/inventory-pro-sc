@@ -1,7 +1,7 @@
 {
   "name": "inventory-suit",
   "private": true,
-  "version": "1.4.8",
+  "version": "1.4.9",
   "type": "module",
   "main": "electron.cjs",
   "scripts": {
@@ -15,6 +15,8 @@
     "preview": "vite preview",
     "db:migration:new": "supabase migration new",
     "db:migration:apply": "supabase migration up",
+    "db:link": "supabase link --project-ref nwsnxceydflfkrylyzud",
+    "db:migration:apply:remote": "supabase db push",
     "start": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",

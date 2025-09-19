@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
-import { productService } from "../../lib/supabase";
+import { productService, locationsService } from "../../lib/supabase";
 import Papa from 'papaparse';
 
 interface ProductImportProps {
@@ -47,6 +47,12 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
       
       // Obtener SKUs ya existentes en la base de datos
   const existingProducts = await productService.getAll();
+      // Cargar ubicaciones para mapear por nombre -> id si el archivo trae 'location'
+      const allLocations = await locationsService.getAll();
+      const locationByName = new Map<string, string>();
+      (allLocations as any[]).forEach((l: any) => {
+        if (l?.name) locationByName.set(String(l.name).toLowerCase().trim(), l.id);
+      });
       const existingSkus = new Set((existingProducts as any[]).map((p: any) => (p.sku || '').trim()).filter(Boolean));
       
       // Validar y procesar los datos
@@ -81,12 +87,19 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
           }
           
           // Transformar los datos al formato esperado
+          let location_id: string | null = (row.location_id || '').trim() || null;
+          if (!location_id && row.location) {
+            const match = locationByName.get(String(row.location).toLowerCase().trim());
+            if (match) location_id = match;
+          }
+
           const productData = {
             name: row.name,
             description: row.description || '',
             sku: sku,
             barcode: row.barcode || '',
             category_id: row.category_id || null,
+            location_id,
             min_stock: parseFloat(row.min_stock) || 0,
             max_stock: parseFloat(row.max_stock) || null,
             purchase_price: parseFloat(row.purchase_price) || 0,
@@ -132,9 +145,9 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
   };
 
   const downloadTemplate = () => {
-    const headers = "name,description,sku,barcode,category_id,min_stock,max_stock,purchase_price,sale_price,tax_rate,status\n";
-    const sampleData = "Producto 1,Descripción del producto 1,ABC123,123456789,9e91d103-7c4c-472d-9566-981274a13ff4,10,100,15000,20000,19,active\n" +
-                        "Producto 2,Descripción del producto 2,DEF456,987654321,,5,50,25000,35000,19,active\n";
+  const headers = "name,description,sku,barcode,category_id,location_id,location,min_stock,max_stock,purchase_price,sale_price,tax_rate,status\n";
+  const sampleData = "Producto 1,Descripción del producto 1,ABC123,123456789,9e91d103-7c4c-472d-9566-981274a13ff4,,Pasillo A - Estante 1,10,100,15000,20000,19,active\n" +
+            "Producto 2,Descripción del producto 2,DEF456,987654321,,,Bodega - Rack 2,5,50,25000,35000,19,active\n";
     
     const csvContent = headers + sampleData;
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -142,7 +155,7 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
     
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', 'plantilla_productos.csv');
+  link.setAttribute('download', 'plantilla_productos.csv');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

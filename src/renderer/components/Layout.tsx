@@ -124,7 +124,16 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenConfig }) => {
   // Filtrar elementos de navegación según permisos
   const filteredNavigationItems = navigationItems.filter(item => {
     if (!item.requiredPermission) return true;
-    return hasPermission(item.requiredPermission.resource, item.requiredPermission.action);
+    // Mostrar siempre para administradores
+    const roleName = (user?.role_name || '').toLowerCase();
+    const isAdmin = roleName.includes('admin') || (user?.role_id === 1);
+    if (isAdmin) return true;
+    const allowed = hasPermission(item.requiredPermission.resource, item.requiredPermission.action);
+    // Debug puntual para Ubicaciones
+    if (item.requiredPermission.resource === 'ubicaciones') {
+      try { console.log('[Layout] Ubicaciones visible?', { roleName, role_id: user?.role_id, allowed }); } catch {}
+    }
+    return allowed;
   });
 
   const handleLogout = async () => {

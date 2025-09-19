@@ -42,6 +42,12 @@ const Layout = ({ children, onOpenConfig }) => {
             requiredPermission: { resource: 'almacenes', action: 'read' }
         },
         {
+            name: 'Ubicaciones',
+            path: '/ubicaciones',
+            icon: 'fas fa-map-marker-alt',
+            requiredPermission: { resource: 'ubicaciones', action: 'read' }
+        },
+        {
             name: 'Proveedores',
             path: '/proveedores',
             icon: 'fas fa-truck',
@@ -101,7 +107,20 @@ const Layout = ({ children, onOpenConfig }) => {
     const filteredNavigationItems = navigationItems.filter(item => {
         if (!item.requiredPermission)
             return true;
-        return hasPermission(item.requiredPermission.resource, item.requiredPermission.action);
+        // Mostrar siempre para administradores
+        const roleName = (user?.role_name || '').toLowerCase();
+        const isAdmin = roleName.includes('admin') || (user?.role_id === 1);
+        if (isAdmin)
+            return true;
+        const allowed = hasPermission(item.requiredPermission.resource, item.requiredPermission.action);
+        // Debug puntual para Ubicaciones
+        if (item.requiredPermission.resource === 'ubicaciones') {
+            try {
+                console.log('[Layout] Ubicaciones visible?', { roleName, role_id: user?.role_id, allowed });
+            }
+            catch { }
+        }
+        return allowed;
     });
     const handleLogout = async () => {
         try {

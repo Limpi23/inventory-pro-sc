@@ -1,6 +1,6 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { useEffect, useMemo, useState } from "react";
-import { productService } from "../../lib/supabase";
+import { productService, warehousesService, locationsService } from "../../lib/supabase";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
@@ -13,6 +13,7 @@ import * as XLSX from "xlsx";
 import ProductModal from "./ProductModal";
 import ProductImport from "./ProductImport";
 import ProductPriceUpdate from './ProductPriceUpdate';
+import ProductBulkAssignLocation from './ProductBulkAssignLocation';
 import { useAuth } from "../../lib/auth";
 import { toast } from "react-hot-toast";
 export default function ProductList() {
@@ -35,8 +36,23 @@ export default function ProductList() {
     const [selectedIds, setSelectedIds] = useState(new Set());
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
+    const [warehouseFilter, setWarehouseFilter] = useState('');
+    const [locationFilter, setLocationFilter] = useState('');
+    const [warehouses, setWarehouses] = useState([]);
+    const [locations, setLocations] = useState([]);
     useEffect(() => {
         fetchProducts();
+        // Cargar listas para filtros
+        (async () => {
+            try {
+                const [whs, locs] = await Promise.all([warehousesService.getAll(), locationsService.getAll()]);
+                setWarehouses(whs?.map(w => ({ id: w.id, name: w.name })) || []);
+                setLocations(locs?.map(l => ({ id: l.id, name: l.name, warehouse_id: l.warehouse_id })) || []);
+            }
+            catch (e) {
+                console.error('Error cargando filtros almacén/ubicación', e);
+            }
+        })();
     }, []);
     async function fetchProducts(opts) {
         try {
@@ -77,11 +93,21 @@ export default function ProductList() {
         }
     }
     // Paginación
-    const total = products.length;
+    const filteredProducts = useMemo(() => {
+        let list = products;
+        if (warehouseFilter) {
+            list = list.filter(p => (p.location?.warehouse_id === warehouseFilter) || (p.warehouse_id === warehouseFilter));
+        }
+        if (locationFilter) {
+            list = list.filter(p => (p.location?.id === locationFilter) || (p.location_id === locationFilter));
+        }
+        return list;
+    }, [products, warehouseFilter, locationFilter]);
+    const total = filteredProducts.length;
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const startIndex = (page - 1) * pageSize;
     const endIndex = Math.min(startIndex + pageSize, total);
-    const visibleProducts = useMemo(() => products.slice(startIndex, endIndex), [products, startIndex, endIndex]);
+    const visibleProducts = useMemo(() => filteredProducts.slice(startIndex, endIndex), [filteredProducts, startIndex, endIndex]);
     useEffect(() => {
         // Ajustar página si cambia el total y la página actual queda fuera de rango
         if (page > totalPages)
@@ -183,7 +209,9 @@ export default function ProductList() {
         XLSX.utils.book_append_sheet(wb, ws, "Productos");
         XLSX.writeFile(wb, `productos_${new Date().toISOString().slice(0, 10)}.xlsx`);
     };
-    return (_jsxs(Card, { children: [_jsxs(CardHeader, { className: "space-y-3", children: [_jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", children: [_jsx(CardTitle, { className: "text-xl md:text-2xl", children: "Productos" }), _jsxs("div", { className: "flex gap-2 sm:justify-end w-full sm:w-auto", children: [_jsx(ProductImport, { onImportComplete: fetchProducts, size: "sm", className: "w-full sm:w-auto" }), _jsxs(Button, { onClick: handleExportExcel, variant: "outline", className: "whitespace-nowrap w-full sm:w-auto", size: "sm", children: ["Exportar Excel ", selectedIds.size > 0 ? `(${selectedIds.size})` : ""] }), _jsx(Button, { onClick: () => setIsPriceUpdateOpen(true), className: "bg-yellow-500 hover:bg-yellow-600 text-white whitespace-nowrap text-xs md:text-sm w-full sm:w-auto", "aria-label": "Actualizar precios masivos", size: "sm", children: "Actualizar Precios Masivos" }), _jsx(Button, { onClick: () => setIsModalOpen(true), className: "bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap w-full sm:w-auto", size: "sm", children: "Agregar Producto" })] })] }), _jsxs("div", { className: "grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2", children: [_jsx(Input, { placeholder: "Buscar productos...", value: searchQuery, onChange: (e) => setSearchQuery(e.target.value), onKeyDown: (e) => e.key === 'Enter' && handleSearch(), className: "w-full" }), _jsx(Button, { variant: "outline", onClick: handleSearch, className: "whitespace-nowrap", size: "sm", children: "Buscar" })] })] }), _jsx(CardContent, { children: isLoading ? (_jsx("p", { children: "Cargando productos..." })) : (_jsxs("div", { className: "overflow-x-auto -mx-4 md:mx-0", children: [_jsxs(Table, { children: [_jsx(TableHeader, { children: _jsxs(TableRow, { children: [_jsx(TableHead, { className: "w-10", children: _jsx(Checkbox, { checked: someVisibleSelected ? 'indeterminate' : allVisibleSelected, onCheckedChange: toggleSelectAll, "aria-label": "Seleccionar todos" }) }), _jsx(TableHead, { children: "Nombre" }), _jsx(TableHead, { className: "hidden md:table-cell", children: "SKU" }), _jsx(TableHead, { className: "hidden lg:table-cell", children: "Categor\u00EDa" }), _jsx(TableHead, { className: "hidden xl:table-cell", children: "Precio Compra" }), _jsx(TableHead, { children: "Precio Venta" }), _jsx(TableHead, { className: "hidden md:table-cell", children: "Estado" }), _jsx(TableHead, { className: "text-right", children: "Acciones" })] }) }), _jsx(TableBody, { children: products.length === 0 ? (_jsx(TableRow, { children: _jsx(TableCell, { colSpan: 8, className: "text-center", children: "No hay productos registrados" }) })) : (visibleProducts.map((product) => (_jsxs(TableRow, { children: [_jsx(TableCell, { className: "w-10", children: _jsx(Checkbox, { checked: selectedIds.has(product.id), onCheckedChange: () => toggleOne(product.id), "aria-label": `Seleccionar ${product.name}` }) }), _jsx(TableCell, { children: product.name }), _jsx(TableCell, { className: "hidden md:table-cell", children: product.sku || "-" }), _jsx(TableCell, { className: "hidden lg:table-cell", children: product.category?.name || "-" }), _jsx(TableCell, { className: "hidden xl:table-cell", children: formatCurrency(product.purchase_price ?? 0) }), _jsx(TableCell, { children: formatCurrency(product.sale_price ?? 0) }), _jsx(TableCell, { className: "hidden md:table-cell", children: _jsx("span", { className: `px-2 py-1 rounded-full text-xs capitalize ${product.status === 'active'
+    return (_jsxs(Card, { children: [_jsxs(CardHeader, { className: "space-y-3", children: [_jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", children: [_jsx(CardTitle, { className: "text-xl md:text-2xl", children: "Productos" }), _jsxs("div", { className: "flex gap-2 sm:justify-end w-full sm:w-auto", children: [_jsx(ProductImport, { onImportComplete: fetchProducts, size: "sm", className: "w-full sm:w-auto" }), _jsxs(Button, { onClick: handleExportExcel, variant: "outline", className: "whitespace-nowrap w-full sm:w-auto", size: "sm", children: ["Exportar Excel ", selectedIds.size > 0 ? `(${selectedIds.size})` : ""] }), _jsx(ProductBulkAssignLocation, { selectedIds: [...selectedIds], onDone: () => fetchProducts({ keepPage: true }) }), _jsx(Button, { onClick: () => setIsPriceUpdateOpen(true), className: "bg-yellow-500 hover:bg-yellow-600 text-white whitespace-nowrap text-xs md:text-sm w-full sm:w-auto", "aria-label": "Actualizar precios masivos", size: "sm", children: "Actualizar Precios Masivos" }), _jsx(Button, { onClick: () => setIsModalOpen(true), className: "bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap w-full sm:w-auto", size: "sm", children: "Agregar Producto" })] })] }), _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2", children: [_jsx(Input, { placeholder: "Buscar productos...", value: searchQuery, onChange: (e) => setSearchQuery(e.target.value), onKeyDown: (e) => e.key === 'Enter' && handleSearch(), className: "w-full" }), _jsxs(Select, { value: warehouseFilter || 'all', onValueChange: (v) => { setWarehouseFilter(v === 'all' ? '' : v); setPage(1); }, children: [_jsx(SelectTrigger, { className: "min-w-[150px]", children: _jsx(SelectValue, { placeholder: "Almac\u00E9n" }) }), _jsxs(SelectContent, { children: [_jsx(SelectItem, { value: "all", children: "Todos almacenes" }), warehouses.map(w => (_jsx(SelectItem, { value: w.id, children: w.name }, w.id)))] })] }), _jsxs(Select, { value: locationFilter || 'all', onValueChange: (v) => { setLocationFilter(v === 'all' ? '' : v); setPage(1); }, children: [_jsx(SelectTrigger, { className: "min-w-[150px]", children: _jsx(SelectValue, { placeholder: "Ubicaci\u00F3n" }) }), _jsxs(SelectContent, { children: [_jsx(SelectItem, { value: "all", children: "Todas ubicaciones" }), locations
+                                                .filter(l => !warehouseFilter || l.warehouse_id === warehouseFilter)
+                                                .map(l => (_jsx(SelectItem, { value: l.id, children: l.name }, l.id)))] })] })] })] }), _jsx(CardContent, { children: isLoading ? (_jsx("p", { children: "Cargando productos..." })) : (_jsxs("div", { className: "overflow-x-auto -mx-4 md:mx-0", children: [_jsxs(Table, { children: [_jsx(TableHeader, { children: _jsxs(TableRow, { children: [_jsx(TableHead, { className: "w-10", children: _jsx(Checkbox, { checked: someVisibleSelected ? 'indeterminate' : allVisibleSelected, onCheckedChange: toggleSelectAll, "aria-label": "Seleccionar todos" }) }), _jsx(TableHead, { children: "Nombre" }), _jsx(TableHead, { className: "hidden md:table-cell", children: "SKU" }), _jsx(TableHead, { className: "hidden lg:table-cell", children: "Categor\u00EDa" }), _jsx(TableHead, { className: "hidden xl:table-cell", children: "Ubicaci\u00F3n" }), _jsx(TableHead, { className: "hidden xl:table-cell", children: "Precio Compra" }), _jsx(TableHead, { children: "Precio Venta" }), _jsx(TableHead, { className: "hidden md:table-cell", children: "Estado" }), _jsx(TableHead, { className: "text-right", children: "Acciones" })] }) }), _jsx(TableBody, { children: products.length === 0 ? (_jsx(TableRow, { children: _jsx(TableCell, { colSpan: 8, className: "text-center", children: "No hay productos registrados" }) })) : (visibleProducts.map((product) => (_jsxs(TableRow, { children: [_jsx(TableCell, { className: "w-10", children: _jsx(Checkbox, { checked: selectedIds.has(product.id), onCheckedChange: () => toggleOne(product.id), "aria-label": `Seleccionar ${product.name}` }) }), _jsx(TableCell, { children: product.name }), _jsx(TableCell, { className: "hidden md:table-cell", children: product.sku || "-" }), _jsx(TableCell, { className: "hidden lg:table-cell", children: product.category?.name || "-" }), _jsx(TableCell, { className: "hidden xl:table-cell", children: product.location?.name || '-' }), _jsx(TableCell, { className: "hidden xl:table-cell", children: formatCurrency(product.purchase_price ?? 0) }), _jsx(TableCell, { children: formatCurrency(product.sale_price ?? 0) }), _jsx(TableCell, { className: "hidden md:table-cell", children: _jsx("span", { className: `px-2 py-1 rounded-full text-xs capitalize ${product.status === 'active'
                                                         ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
                                                         : product.status === 'inactive'
                                                             ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'

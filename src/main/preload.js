@@ -33,12 +33,26 @@ contextBridge.exposeInMainWorld('electron', {
         platform: process.platform
     }
 });
-// Reenviar eventos de actualización como mensajes legibles
+// Reenviar eventos de actualización hacia el renderer (mismo proceso) usando canales directos
 ipcRenderer.on('update-available', () => {
-    ipcRenderer.sendToHost('update-message', 'Actualización disponible. Se está descargando la nueva versión...');
+    window.postMessage({ type: 'update-message', payload: 'Actualización disponible. Se está descargando la nueva versión...' }, '*');
+});
+ipcRenderer.on('checking-for-update', () => {
+    window.postMessage({ type: 'update-message', payload: 'Buscando actualizaciones...' }, '*');
+});
+ipcRenderer.on('update-not-available', () => {
+    window.postMessage({ type: 'update-message', payload: 'Aplicación actualizada' }, '*');
 });
 ipcRenderer.on('update-downloaded', () => {
-    ipcRenderer.sendToHost('update-message', 'Actualización descargada. Reinicia para instalar.');
+    window.postMessage({ type: 'update-message', payload: 'Actualización descargada. Reinicia para instalar.' }, '*');
+});
+ipcRenderer.on('update-error', (_e, msg) => {
+    window.postMessage({ type: 'update-message', payload: `Error de actualización: ${msg}` }, '*');
+});
+
+// Exponer una función para solicitar búsqueda manual de actualización
+contextBridge.exposeInMainWorld('appUpdater', {
+    checkForUpdates: () => ipcRenderer.send('check-for-updates')
 });
 contextBridge.exposeInMainWorld('supabaseConfig', {
     save: (config) => ipcRenderer.invoke('save-supabase-config', config),

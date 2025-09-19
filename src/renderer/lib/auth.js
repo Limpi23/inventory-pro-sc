@@ -35,9 +35,10 @@ export const AuthProvider = ({ children }) => {
                 if (sessionData) {
                     const sessionUser = JSON.parse(sessionData);
                     const client = await supabase.getClient();
+                    // Preferir vista user_roles para obtener role_name/description junto con el usuario
                     const { data: userData, error } = await client
-                        .from('users')
-                        .select('*')
+                        .from('user_roles')
+                        .select('id, email, full_name, active, role_id, role_name, role_description, last_login, created_at')
                         .eq('id', sessionUser.id)
                         .eq('active', true)
                         .single();
@@ -51,12 +52,22 @@ export const AuthProvider = ({ children }) => {
                     const userMapped = mapUser(userData);
                     saveSession(userMapped);
                     setUser(userMapped);
+                    // Debug: log user role info
+                    try {
+                        console.log('[Auth] Usuario cargado', { id: userMapped.id, role_id: userMapped.role_id, role_name: userMapped.role_name });
+                    }
+                    catch { }
                     // Cargar permisos del usuario
                     const userPermissions = await userService.getUserPermissions(userMapped.id);
                     setPermissions(userPermissions.map(p => ({
                         resource: p.resource,
                         action: p.action
                     })));
+                    try {
+                        const hasUbicacionesRead = userPermissions.some((p) => p.resource === 'ubicaciones' && (p.action === 'read' || p.action === '*'));
+                        console.log('[Auth] Permisos cargados', { total: userPermissions.length, ubicacionesRead: hasUbicacionesRead });
+                    }
+                    catch { }
                 }
             }
             catch (error) {
@@ -132,6 +143,11 @@ export const AuthProvider = ({ children }) => {
                 resource: p.resource,
                 action: p.action
             })));
+            try {
+                const hasUbicacionesRead = userPermissions.some((p) => p.resource === 'ubicaciones' && (p.action === 'read' || p.action === '*'));
+                console.log('[Auth] Permisos post-login', { total: userPermissions.length, ubicacionesRead: hasUbicacionesRead });
+            }
+            catch { }
             // Verificar suscripción al iniciar sesión
             if (userData.tenant_id) {
                 const subscriptionInfo = await checkSubscription();

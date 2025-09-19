@@ -227,4 +227,6 @@ const PurchaseOrderItemsImport: React.FC<Props> = ({ products, onImport, classNa
   );
 };
 
+// TODO: En la recepción de compras, solicitar location_id para ubicar stock por ubicación.
+
 export default PurchaseOrderItemsImport;

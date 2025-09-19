@@ -12,6 +12,12 @@ interface Warehouse {
   name: string;
 }
 
+interface Location {
+  id: string;
+  name: string;
+  warehouse_id: string;
+}
+
 interface StockMovement {
   id: string;
   product_id: string;
@@ -46,6 +52,11 @@ const Inventory: React.FC = () => {
   // Nuevos estados para transferencias
   const [isTransfer, setIsTransfer] = useState(false);
   const [destinationWarehouseId, setDestinationWarehouseId] = useState('');
+  // Ubicaciones
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [locationId, setLocationId] = useState('');
+  const [destinationLocations, setDestinationLocations] = useState<Location[]>([]);
+  const [destinationLocationId, setDestinationLocationId] = useState('');
 
   useEffect(() => {
     async function fetchData() {
@@ -75,13 +86,14 @@ const Inventory: React.FC = () => {
         if (movementTypesError) throw movementTypesError;
   setMovementTypes((movementTypesData as unknown as any[]) || []);
 
-        // Cargar movimientos recientes
+        // Cargar movimientos recientes (incluyendo ubicación)
   const { data: movementsData, error: movementsError } = await client
           .from('stock_movements')
           .select(`
             *,
             product:products(id, name),
             warehouse:warehouses(id, name),
+            location:locations(id, name),
             movement_type:movement_types(id, code, description)
           `)
           .order('created_at', { ascending: false })
@@ -109,6 +121,53 @@ const Inventory: React.FC = () => {
     fetchData();
   }, []);
 
+  // Cargar ubicaciones cuando cambie el almacén origen
+  useEffect(() => {
+    (async () => {
+      try {
+        const client = await supabase.getClient();
+        if (warehouseId) {
+          const { data, error } = await client
+            .from('locations')
+            .select('*')
+            .eq('warehouse_id', warehouseId)
+            .order('name');
+          if (error) throw error;
+          setLocations((data as unknown as Location[]) || []);
+        } else {
+          setLocations([]);
+        }
+        // Reset selección al cambiar almacén
+        setLocationId('');
+      } catch (e) {
+        console.error('Error cargando ubicaciones:', e);
+      }
+    })();
+  }, [warehouseId]);
+
+  // Cargar ubicaciones cuando cambie el almacén destino (transferencias)
+  useEffect(() => {
+    (async () => {
+      try {
+        const client = await supabase.getClient();
+        if (destinationWarehouseId) {
+          const { data, error } = await client
+            .from('locations')
+            .select('*')
+            .eq('warehouse_id', destinationWarehouseId)
+            .order('name');
+          if (error) throw error;
+          setDestinationLocations((data as unknown as Location[]) || []);
+        } else {
+          setDestinationLocations([]);
+        }
+        setDestinationLocationId('');
+      } catch (e) {
+        console.error('Error cargando ubicaciones destino:', e);
+      }
+    })();
+  }, [destinationWarehouseId]);
+
   // Función para manejar cambios en el tipo de movimiento
   const handleMovementTypeChange = (type: 'entry' | 'exit' | 'transfer') => {
     if (type === 'entry') {
@@ -134,22 +193,29 @@ const Inventory: React.FC = () => {
       if (!productId || !warehouseId) {
         throw new Error('Selecciona un producto y un almacén');
       }
+      if (!isTransfer && !locationId) {
+        throw new Error('Selecciona una ubicación');
+      }
 
       // Validación adicional para transferencias
       if (isTransfer && (!destinationWarehouseId || destinationWarehouseId === warehouseId)) {
         throw new Error('Selecciona un almacén de destino diferente al de origen');
       }
+      if (isTransfer && !destinationLocationId) {
+        throw new Error('Selecciona una ubicación de destino');
+      }
 
       // Para salidas o transferencias, verificar stock disponible
       if (!isEntry || isTransfer) {
-  const { data: stockData } = await client
-          .from('current_stock')
+        // Validar stock por ubicación (si está seleccionada)
+        const { data: stockData } = await client
+          .from('current_stock_by_location')
           .select('current_quantity')
           .eq('product_id', productId)
           .eq('warehouse_id', warehouseId)
-          .single();
-        
-  const currentQty = Number((stockData as any)?.current_quantity ?? 0);
+          .eq('location_id', locationId)
+          .maybeSingle();
+        const currentQty = Number((stockData as any)?.current_quantity ?? 0);
         if (quantity > currentQty) {
           throw new Error(`Stock insuficiente. Solo hay ${currentQty} unidades disponibles.`);
         }
@@ -170,6 +236,7 @@ const Inventory: React.FC = () => {
           .insert({
             product_id: productId,
             warehouse_id: warehouseId,
+            location_id: locationId,
             quantity: quantity,
             movement_type_id: outMovementType.id,
             movement_date: new Date(date).toISOString(),
@@ -191,6 +258,7 @@ const Inventory: React.FC = () => {
           .insert({
             product_id: productId,
             warehouse_id: destinationWarehouseId,
+            location_id: destinationLocationId,
             quantity: quantity,
             movement_type_id: inMovementType.id,
             movement_date: new Date(date).toISOString(),
@@ -216,6 +284,7 @@ const Inventory: React.FC = () => {
           .insert({
             product_id: productId,
             warehouse_id: warehouseId,
+            location_id: locationId,
             quantity: quantity,
             movement_type_id: movementType.id,
             movement_date: new Date(date).toISOString(),
@@ -233,6 +302,7 @@ const Inventory: React.FC = () => {
           *,
           product:products(id, name),
           warehouse:warehouses(id, name),
+          location:locations(id, name),
           movement_type:movement_types(id, code, description)
         `)
         .order('created_at', { ascending: false })
@@ -250,7 +320,9 @@ const Inventory: React.FC = () => {
       setQuantity(1);
       setReference('');
       setNotes('');
-      setDestinationWarehouseId(''); // Resetear almacén destino
+  setDestinationWarehouseId(''); // Resetear almacén destino
+  setLocationId('');
+  setDestinationLocationId('');
 
       alert(isTransfer 
         ? 'Transferencia registrada correctamente' 
@@ -363,6 +435,27 @@ const Inventory: React.FC = () => {
               </div>
             </div>
 
+            {/* Ubicación para entrada/salida o ubicación origen en transferencia */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {isTransfer ? 'Ubicación Origen *' : 'Ubicación *'}
+              </label>
+              <select
+                value={locationId}
+                onChange={(e) => setLocationId(e.target.value)}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                required
+                disabled={!warehouseId}
+              >
+                <option value="">{warehouseId ? 'Selecciona una ubicación' : 'Selecciona primero un almacén'}</option>
+                {locations.map((loc) => (
+                  <option key={loc.id} value={loc.id}>
+                    {loc.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Campo adicional para almacén destino en transferencias */}
             {isTransfer && (
               <div>
@@ -383,6 +476,28 @@ const Inventory: React.FC = () => {
                         {warehouse.name}
                       </option>
                     ))}
+                </select>
+              </div>
+            )}
+
+            {isTransfer && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Ubicación Destino *
+                </label>
+                <select
+                  value={destinationLocationId}
+                  onChange={(e) => setDestinationLocationId(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  required
+                  disabled={!destinationWarehouseId}
+                >
+                  <option value="">{destinationWarehouseId ? 'Selecciona una ubicación' : 'Selecciona primero un almacén'}</option>
+                  {destinationLocations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             )}
@@ -516,9 +631,12 @@ const Inventory: React.FC = () => {
                 <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4">
                   Producto
                 </th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4">
-                  Almacén
-                </th>
+                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4">
+                    Almacén
+                  </th>
+                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4">
+                    Ubicación
+                  </th>
                 <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4">
                   Cantidad
                 </th>
@@ -528,9 +646,9 @@ const Inventory: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {stockMovements.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-4 text-center text-sm text-gray-500">
+                {stockMovements.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-4 text-center text-sm text-gray-500">
                     No hay movimientos recientes
                   </td>
                 </tr>
@@ -552,7 +670,8 @@ const Inventory: React.FC = () => {
                       </span>
                     </td>
                     <td className="py-3 px-4 text-sm">{movement.product?.name}</td>
-                    <td className="py-3 px-4 text-sm">{movement.warehouse?.name}</td>
+                      <td className="py-3 px-4 text-sm">{movement.warehouse?.name}</td>
+                      <td className="py-3 px-4 text-sm">{(movement as any).location?.name || '-'}</td>
                     <td className="py-3 px-4 text-sm text-right font-medium">{movement.quantity}</td>
                     <td className="py-3 px-4 text-sm">{movement.reference || '-'}</td>
                   </tr>

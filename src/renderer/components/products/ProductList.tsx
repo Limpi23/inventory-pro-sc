@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Product } from "../../../types";
-import { productService } from "../../lib/supabase";
+import { productService, warehousesService, locationsService } from "../../lib/supabase";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
@@ -13,6 +13,7 @@ import * as XLSX from "xlsx";
 import ProductModal from "./ProductModal";
 import ProductImport from "./ProductImport";
 import ProductPriceUpdate from './ProductPriceUpdate';
+import ProductBulkAssignLocation from './ProductBulkAssignLocation';
 import { useAuth } from "../../lib/auth";
 import { toast } from "react-hot-toast";
 
@@ -40,9 +41,23 @@ export default function ProductList() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [warehouseFilter, setWarehouseFilter] = useState<string>('');
+  const [locationFilter, setLocationFilter] = useState<string>('');
+  const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([]);
+  const [locations, setLocations] = useState<{ id: string; name: string; warehouse_id?: string }[]>([]);
 
   useEffect(() => {
     fetchProducts();
+    // Cargar listas para filtros
+    (async () => {
+      try {
+        const [whs, locs] = await Promise.all([warehousesService.getAll(), locationsService.getAll()]);
+        setWarehouses((whs as any[])?.map(w => ({ id: w.id, name: w.name })) || []);
+        setLocations((locs as any[])?.map(l => ({ id: l.id, name: l.name, warehouse_id: (l as any).warehouse_id })) || []);
+      } catch (e) {
+        console.error('Error cargando filtros almacén/ubicación', e);
+      }
+    })();
   }, []);
 
   async function fetchProducts(opts?: { keepPage?: boolean }) {
@@ -82,11 +97,22 @@ export default function ProductList() {
   }
 
   // Paginación
-  const total = products.length;
+  const filteredProducts = useMemo(() => {
+    let list = products;
+    if (warehouseFilter) {
+      list = list.filter(p => ((p as any).location?.warehouse_id === warehouseFilter) || ((p as any).warehouse_id === warehouseFilter));
+    }
+    if (locationFilter) {
+      list = list.filter(p => ((p as any).location?.id === locationFilter) || ((p as any).location_id === locationFilter));
+    }
+    return list;
+  }, [products, warehouseFilter, locationFilter]);
+
+  const total = filteredProducts.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const startIndex = (page - 1) * pageSize;
   const endIndex = Math.min(startIndex + pageSize, total);
-  const visibleProducts = useMemo(() => products.slice(startIndex, endIndex), [products, startIndex, endIndex]);
+  const visibleProducts = useMemo(() => filteredProducts.slice(startIndex, endIndex), [filteredProducts, startIndex, endIndex]);
 
   useEffect(() => {
     // Ajustar página si cambia el total y la página actual queda fuera de rango
@@ -207,6 +233,7 @@ export default function ProductList() {
             >
               Exportar Excel {selectedIds.size > 0 ? `(${selectedIds.size})` : ""}
             </Button>
+            <ProductBulkAssignLocation selectedIds={[...selectedIds]} onDone={() => fetchProducts({ keepPage: true })} />
             <Button
               onClick={() => setIsPriceUpdateOpen(true)}
               className="bg-yellow-500 hover:bg-yellow-600 text-white whitespace-nowrap text-xs md:text-sm w-full sm:w-auto"
@@ -224,17 +251,34 @@ export default function ProductList() {
             </Button>
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
-            <Input
-              placeholder="Buscar productos..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2">
+          <Input
+            placeholder="Buscar productos..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             className="w-full"
-            />
-          <Button variant="outline" onClick={handleSearch} className="whitespace-nowrap" size="sm">
-            Buscar
-          </Button>
+          />
+          <Select value={warehouseFilter || 'all'} onValueChange={(v) => { setWarehouseFilter(v === 'all' ? '' : v); setPage(1); }}>
+            <SelectTrigger className="min-w-[150px]"><SelectValue placeholder="Almacén" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos almacenes</SelectItem>
+              {warehouses.map(w => (
+                <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={locationFilter || 'all'} onValueChange={(v) => { setLocationFilter(v === 'all' ? '' : v); setPage(1); }}>
+            <SelectTrigger className="min-w-[150px]"><SelectValue placeholder="Ubicación" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas ubicaciones</SelectItem>
+              {locations
+                .filter(l => !warehouseFilter || l.warehouse_id === warehouseFilter)
+                .map(l => (
+                  <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
         </div>
       </CardHeader>
       <CardContent>

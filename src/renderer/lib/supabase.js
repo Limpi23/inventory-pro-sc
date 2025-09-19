@@ -69,7 +69,7 @@ export const productService = {
         const supabase = await getSupabaseClient();
         const { data, error } = await supabase
             .from('products')
-            .select(`*, category:categories(id, name)`)
+            .select(`*, category:categories(id, name), location:locations(id, name)`)
             .order('name');
         if (error)
             throw error;
@@ -79,7 +79,7 @@ export const productService = {
         const supabase = await getSupabaseClient();
         const { data, error } = await supabase
             .from('products')
-            .select(`*, category:categories(id, name)`)
+            .select(`*, category:categories(id, name), location:locations(id, name)`)
             .eq('id', id)
             .single();
         if (error)
@@ -90,7 +90,7 @@ export const productService = {
         const supabase = await getSupabaseClient();
         const { data, error } = await supabase
             .from('products')
-            .select(`*, category:categories(id, name)`)
+            .select(`*, category:categories(id, name), location:locations(id, name)`)
             .eq('category_id', categoryId)
             .order('name');
         if (error)
@@ -101,7 +101,7 @@ export const productService = {
         const supabase = await getSupabaseClient();
         const { data, error } = await supabase
             .from('products')
-            .select(`*, category:categories(id, name)`)
+            .select(`*, category:categories(id, name), location:locations(id, name)`)
             .or(`name.ilike.%${query}%, sku.ilike.%${query}%, barcode.ilike.%${query}%`)
             .order('name');
         if (error)
@@ -336,6 +336,62 @@ export const warehousesService = {
             throw error;
     }
 };
+// Servicio de ubicaciones
+export const locationsService = {
+    getAll: async () => {
+        const supabase = await getSupabaseClient();
+        const { data, error } = await supabase
+            .from('locations')
+            .select('*')
+            .order('name');
+        if (error)
+            throw error;
+        return data || [];
+    },
+    getById: async (id) => {
+        const supabase = await getSupabaseClient();
+        const { data, error } = await supabase
+            .from('locations')
+            .select('*')
+            .eq('id', id)
+            .single();
+        if (error)
+            throw error;
+        return data;
+    },
+    create: async (location) => {
+        const supabase = await getSupabaseClient();
+        const { data, error } = await supabase
+            .from('locations')
+            .insert([location])
+            .select()
+            .single();
+        if (error)
+            throw error;
+        return data;
+    },
+    update: async (id, updates) => {
+        const supabase = await getSupabaseClient();
+        const { data, error } = await supabase
+            .from('locations')
+            .update(updates)
+            .eq('id', id)
+            .select()
+            .single();
+        if (error)
+            throw error;
+        return data;
+    },
+    delete: async (id) => {
+        const supabase = await getSupabaseClient();
+        const { error } = await supabase
+            .from('locations')
+            .delete()
+            .eq('id', id);
+        if (error)
+            throw error;
+    }
+};
 export const stockMovementService = {
     // Obtener todos los movimientos de stock
     getAll: async () => {
@@ -370,6 +426,9 @@ export const stockMovementService = {
         }
         if (filters.warehouse_id) {
             query = query.eq('warehouse_id', filters.warehouse_id);
+        }
+        if (filters.location_id) {
+            query = query.eq('location_id', filters.location_id);
         }
         if (filters.movement_type_id) {
             query = query.eq('movement_type_id', filters.movement_type_id);
@@ -441,6 +500,17 @@ export const stockMovementService = {
             throw error;
         }
         return data?.current_quantity || 0;
+    },
+    // Obtener el stock actual por ubicación
+    getCurrentStockByLocation: async (product_id, warehouse_id) => {
+        const supabase = await getSupabaseClient();
+        let query = supabase.from('current_stock_by_location').select('*').eq('product_id', product_id);
+        if (warehouse_id)
+            query = query.eq('warehouse_id', warehouse_id);
+        const { data, error } = await query;
+        if (error)
+            throw error;
+        return data || [];
     },
     // Obtener el stock actual de todos los productos
     getAllCurrentStock: async () => {

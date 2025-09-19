@@ -63,6 +63,9 @@ const PurchaseOrderDetail: React.FC = () => {
   const [receivingError, setReceivingError] = useState<{[key: string]: string}>({});
   const [printFormat, setPrintFormat] = useState<PrintFormat>({ value: 'letter', label: 'Carta' });
   const [showPrintOptions, setShowPrintOptions] = useState<boolean>(false);
+  // Selección de ubicación para recepción
+  const [receiveLocations, setReceiveLocations] = useState<Array<{id: string; name: string}>>([]);
+  const [receiveLocationId, setReceiveLocationId] = useState<string>('');
   
   const printRef = useRef<HTMLDivElement>(null);
   
@@ -89,6 +92,35 @@ const PurchaseOrderDetail: React.FC = () => {
       setIsReceivingItems(true);
     }
   }, [id, location.pathname]);
+  
+  // Cargar ubicaciones del almacén de la orden para recepción
+  useEffect(() => {
+    (async () => {
+      try {
+        const whId = order?.warehouse_id;
+        if (!whId) {
+          setReceiveLocations([]);
+          setReceiveLocationId('');
+          return;
+        }
+        const client = await supabase.getClient();
+        const { data, error } = await client
+          .from('locations')
+          .select('id, name')
+          .eq('warehouse_id', whId)
+          .order('name');
+        if (error) throw error as any;
+        setReceiveLocations((data as any[])?.map(l => ({ id: l.id, name: l.name })) || []);
+        if (!data || !(data as any[]).find(l => l.id === receiveLocationId)) {
+          setReceiveLocationId('');
+        }
+      } catch (e) {
+        console.error('Error cargando ubicaciones para recepción:', e);
+        setReceiveLocations([]);
+        setReceiveLocationId('');
+      }
+    })();
+  }, [order?.warehouse_id, isReceivingItems]);
   
   // Efecto para mostrar la recepción cuando los datos estén cargados
   useEffect(() => {
@@ -270,6 +302,11 @@ const PurchaseOrderDetail: React.FC = () => {
       toast.error('Debe ingresar al menos una cantidad recibida');
       return;
     }
+    // Validar ubicación
+    if (!receiveLocationId) {
+      toast.error('Selecciona una ubicación de destino');
+      return;
+    }
     
     try {
       // Registrar cada ítem recibido
@@ -281,10 +318,10 @@ const PurchaseOrderDetail: React.FC = () => {
           if (!item) throw new Error(`Ítem no encontrado: ${itemId}`);
           
           return {
-            purchase_order_id: id,
+            purchase_order_id: id as string,
             purchase_order_item_id: itemId,
             product_id: item.product_id,
-            quantity: receivedQty,
+            quantity: receivedQty as number,
             warehouse_id: order?.warehouse_id,
             received_at: new Date().toISOString()
           };
@@ -294,39 +331,61 @@ const PurchaseOrderDetail: React.FC = () => {
       const { error: receiptError } = await client.from('purchase_receipts')
         .insert(receivedEntries);
       
-      if (receiptError) throw receiptError;
+      if (receiptError) throw receiptError as any;
+      
+      // Registrar movimientos de stock (IN_PURCHASE) con ubicación
+      const { data: mt, error: mtError } = await client
+        .from('movement_types')
+        .select('id, code')
+        .eq('code', 'IN_PURCHASE')
+        .single();
+      if (mtError) throw mtError as any;
+      const movementTypeId = (mt as any)?.id as string | undefined;
+      if (!movementTypeId) throw new Error('Tipo de movimiento IN_PURCHASE no disponible');
+      const movementDate = new Date().toISOString();
+      const stockMovements = Object.entries(receivedItems)
+        .filter(([_, qty]) => qty > 0)
+        .map(([itemId, receivedQty]) => {
+          const item = orderItems.find(i => i.id === itemId);
+          if (!item) return null;
+          return {
+            product_id: item.product_id,
+            warehouse_id: order?.warehouse_id,
+            location_id: receiveLocationId,
+            quantity: receivedQty as number,
+            movement_type_id: movementTypeId,
+            movement_date: movementDate,
+            reference: `Recepción orden #${id}`,
+            notes: null as string | null
+          };
+        })
+        .filter(Boolean) as any[];
+      if (stockMovements.length) {
+        const { error: smError } = await client
+          .from('stock_movements')
+          .insert(stockMovements);
+        if (smError) throw smError as any;
+      }
       
       // Actualizar cantidades recibidas en los ítems de la orden
       for (const [itemId, receivedQty] of Object.entries(receivedItems)) {
-        if (receivedQty <= 0) continue;
+        const qtyNum = receivedQty as number;
+        if (qtyNum <= 0) continue;
         
         const item = orderItems.find(i => i.id === itemId);
         if (!item) continue;
         
-        const newReceivedQty = (item.received_quantity || 0) + receivedQty;
-        
-        const { error: stockError } = await client.rpc('add_stock', {
-          p_product_id: item.product_id,
-          p_warehouse_id: order?.warehouse_id,
-          p_quantity: receivedQty,
-          p_reference: `Recepción orden #${id}`,
-          p_type: 'entrada'
-        });
-        
-        if (stockError) {
-          console.error('Error en la función add_stock:', stockError);
-          throw new Error(`Error al actualizar el inventario: ${stockError.message || 'Error desconocido'}`);
-        }
+        const newReceivedQty = (item.received_quantity || 0) + qtyNum;
         
         const { error: updateError } = await client.from('purchase_order_items')
           .update({ received_quantity: newReceivedQty })
           .eq('id', itemId);
         
-        if (updateError) throw updateError;
+        if (updateError) throw updateError as any;
       }
       
       // Determinar el nuevo estado de la orden
-      let newStatus = 'recibida_parcialmente';
+      let newStatus: string = 'recibida_parcialmente';
       const allItemsReceived = orderItems.every(item => {
         const currentReceived = (item.received_quantity || 0);
         const newReceived = currentReceived + (receivedItems[item.id] || 0);
@@ -343,9 +402,9 @@ const PurchaseOrderDetail: React.FC = () => {
           status: newStatus,
           updated_at: new Date().toISOString()
         })
-        .eq('id', id);
+        .eq('id', id as string);
       
-      if (orderUpdateError) throw orderUpdateError;
+      if (orderUpdateError) throw orderUpdateError as any;
       
       toast.success('Mercancía recibida correctamente');
       setIsReceivingItems(false);
@@ -552,85 +611,102 @@ const PurchaseOrderDetail: React.FC = () => {
           {/* Tabla de productos */}
           <div className="mt-6">
             <h3 className="text-lg font-medium mb-3 dark:text-gray-200">Productos</h3>
-            
             {isReceivingItems ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-700">
-                    <tr>
-                      <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
-                        Producto
-                      </th>
-                      <th className="text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
-                        Ordenados
-                      </th>
-                      <th className="text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
-                        Recibidos
-                      </th>
-                      <th className="text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
-                        Pendientes
-                      </th>
-                      <th className="text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
-                        Cantidad a Recibir
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {orderItems.map(item => {
-                      return (
-                        <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                          <td className="py-3 px-4 text-sm dark:text-gray-300">
-                            <div className="font-medium">{item.product.name}</div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400">SKU: {item.product.sku}</div>
-                          </td>
-                          <td className="py-3 px-4 text-sm text-center dark:text-gray-300">
-                            {item.quantity}
-                          </td>
-                          <td className="py-3 px-4 text-sm text-center dark:text-gray-300">
-                            {item.received_quantity || 0}
-                          </td>
-                          <td className="py-3 px-4 text-sm text-center dark:text-gray-300">
-                            {calculateRemainingItems(item)}
-                          </td>
-                          <td className="py-3 px-4 text-sm text-center">
-                            <div className="flex flex-col items-center">
-                              <div className="flex items-center">
-                                <button
-                                  type="button"
-                                  onClick={() => handleReceiveQuantityChange(item.id, (receivedItems[item.id] || 0) - 1, calculateRemainingItems(item))}
-                                  className="px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded-l-md hover:bg-gray-300 dark:hover:bg-gray-500"
-                                  disabled={calculateRemainingItems(item) === 0}
-                                >
-                                  <i className="fas fa-minus"></i>
-                                </button>
-                                <input
-                                  type="number"
-                                  value={receivedItems[item.id] || 0}
-                                  onChange={(e) => handleReceiveQuantityChange(item.id, parseInt(e.target.value) || 0, calculateRemainingItems(item))}
-                                  className="w-16 text-center border-t border-b border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 py-1"
-                                  min="0"
-                                  max={calculateRemainingItems(item)}
-                                  disabled={calculateRemainingItems(item) === 0}
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleReceiveQuantityChange(item.id, (receivedItems[item.id] || 0) + 1, calculateRemainingItems(item))}
-                                  className="px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded-r-md hover:bg-gray-300 dark:hover:bg-gray-500"
-                                  disabled={calculateRemainingItems(item) === 0 || (receivedItems[item.id] || 0) >= calculateRemainingItems(item)}
-                                >
-                                  <i className="fas fa-plus"></i>
-                                </button>
+              <div>
+                {/* Selector de ubicación de destino */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ubicación Destino *</label>
+                  <select
+                    value={receiveLocationId}
+                    onChange={(e) => setReceiveLocationId(e.target.value)}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    disabled={!receiveLocations.length}
+                  >
+                    <option value="">{receiveLocations.length ? 'Selecciona una ubicación' : 'No hay ubicaciones disponibles'}</option>
+                    {receiveLocations.map((loc) => (
+                      <option key={loc.id} value={loc.id}>{loc.name}</option>
+                    ))}
+                  </select>
+                </div>
+                {/* Tabla de recepción */}
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-700">
+                      <tr>
+                        <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
+                          Producto
+                        </th>
+                        <th className="text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
+                          Ordenados
+                        </th>
+                        <th className="text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
+                          Recibidos
+                        </th>
+                        <th className="text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
+                          Pendientes
+                        </th>
+                        <th className="text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
+                          Cantidad a Recibir
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                      {orderItems.map(item => {
+                        return (
+                          <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                            <td className="py-3 px-4 text-sm dark:text-gray-300">
+                              <div className="font-medium">{item.product.name}</div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400">SKU: {item.product.sku}</div>
+                            </td>
+                            <td className="py-3 px-4 text-sm text-center dark:text-gray-300">
+                              {item.quantity}
+                            </td>
+                            <td className="py-3 px-4 text-sm text-center dark:text-gray-300">
+                              {item.received_quantity || 0}
+                            </td>
+                            <td className="py-3 px-4 text-sm text-center dark:text-gray-300">
+                              {calculateRemainingItems(item)}
+                            </td>
+                            <td className="py-3 px-4 text-sm text-center">
+                              <div className="flex flex-col items-center">
+                                <div className="flex items-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReceiveQuantityChange(item.id, (receivedItems[item.id] || 0) - 1, calculateRemainingItems(item))}
+                                    className="px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded-l-md hover:bg-gray-300 dark:hover:bg-gray-500"
+                                    disabled={calculateRemainingItems(item) === 0}
+                                  >
+                                    <i className="fas fa-minus"></i>
+                                  </button>
+                                  <input
+                                    type="number"
+                                    value={receivedItems[item.id] || 0}
+                                    onChange={(e) => handleReceiveQuantityChange(item.id, parseInt(e.target.value) || 0, calculateRemainingItems(item))}
+                                    className="w-16 text-center border-t border-b border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 py-1"
+                                    min="0"
+                                    max={calculateRemainingItems(item)}
+                                    disabled={calculateRemainingItems(item) === 0}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReceiveQuantityChange(item.id, (receivedItems[item.id] || 0) + 1, calculateRemainingItems(item))}
+                                    className="px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded-r-md hover:bg-gray-300 dark:hover:bg-gray-500"
+                                    disabled={calculateRemainingItems(item) === 0 || (receivedItems[item.id] || 0) >= calculateRemainingItems(item)}
+                                  >
+                                    <i className="fas fa-plus"></i>
+                                  </button>
+                                </div>
+                                {receivingError[item.id] && (
+                                  <p className="text-xs text-red-500 mt-1">{receivingError[item.id]}</p>
+                                )}
                               </div>
-                              {receivingError[item.id] && (
-                                <p className="text-xs text-red-500 mt-1">{receivingError[item.id]}</p>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -861,4 +937,4 @@ const PurchaseOrderDetail: React.FC = () => {
   );
 };
 
-export default PurchaseOrderDetail; 
+export default PurchaseOrderDetail;
