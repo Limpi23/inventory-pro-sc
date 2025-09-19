@@ -7,6 +7,7 @@ import Categories from './views/Categories';
 import Warehouses from './views/Warehouses';
 import Suppliers from './views/Suppliers';
 import Reports from './views/Reports';
+import Locations from './views/Locations';
 
 // Existentes
 import Sales from './views/Sales';
@@ -184,6 +185,7 @@ const App = () => {
           <Route path="productos" element={<Products />} />
           <Route path="categorias" element={<Categories />} />
           <Route path="almacenes" element={<Warehouses />} />
+          <Route path="ubicaciones" element={<Locations />} />
           <Route path="proveedores" element={<Suppliers />} />
           <Route path="proveedores/:id/compras" element={<SupplierPurchases />} />
           <Route path="inventario" element={<Inventory />} />

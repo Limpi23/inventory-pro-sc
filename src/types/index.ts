@@ -19,6 +19,7 @@ export interface Product {
 	sku?: string;
 	barcode?: string;
 	category_id?: string | null;
+	location_id?: string | null;
 	min_stock: number;
 	max_stock: number | null;
 	purchase_price: number | null;
@@ -36,6 +37,7 @@ export interface ProductInput {
 	sku?: string;
 	barcode?: string;
 	category_id?: string | null;
+	location_id?: string | null;
 	min_stock: number;
 	max_stock: number | null;
 	purchase_price: number | null;
@@ -43,6 +45,23 @@ export interface ProductInput {
 	tax_rate: number | null;
 	status: ProductStatus;
 	image_url?: string;
+}
+
+export interface Location {
+	id: string;
+	name: string;
+	description?: string;
+	warehouse_id?: string | null;
+	active?: boolean;
+	created_at?: string;
+	updated_at?: string;
+}
+
+export interface LocationInput {
+	name: string;
+	description?: string;
+	warehouse_id?: string | null;
+	active?: boolean;
 }
 export interface Warehouse {
 	id: string;

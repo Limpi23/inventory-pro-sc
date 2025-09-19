@@ -75,6 +75,7 @@ export interface Product {
   sku?: string;
   barcode?: string;
   category_id?: string;
+  location_id?: string;
   min_stock?: number;
   max_stock?: number;
   purchase_price?: number;
@@ -107,6 +108,16 @@ export interface Warehouse {
   name: string;
   location?: string;
   description?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Location {
+  id: string;
+  name: string;
+  description?: string;
+  warehouse_id?: string;
+  active?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -215,7 +226,7 @@ export const productService = {
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase
       .from('products')
-	.select(`*, category:categories(id, name)`)
+	.select(`*, category:categories(id, name), location:locations(id, name)`) 
 	.order('name');
     if (error) throw error;
     return data || [];
@@ -225,7 +236,7 @@ export const productService = {
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase
       .from('products')
-      .select(`*, category:categories(id, name)`)
+      .select(`*, category:categories(id, name), location:locations(id, name)`) 
       .eq('id', id)
       .single();
     if (error) throw error;
@@ -236,7 +247,7 @@ export const productService = {
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase
       .from('products')
-      .select(`*, category:categories(id, name)`)
+      .select(`*, category:categories(id, name), location:locations(id, name)`) 
       .eq('category_id', categoryId)
       .order('name');
     if (error) throw error;
@@ -247,7 +258,7 @@ export const productService = {
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase
       .from('products')
-      .select(`*, category:categories(id, name)`)
+      .select(`*, category:categories(id, name), location:locations(id, name)`) 
       .or(`name.ilike.%${query}%, sku.ilike.%${query}%, barcode.ilike.%${query}%`)
       .order('name');
     if (error) throw error;
@@ -461,6 +472,58 @@ export const warehousesService = {
     const supabase = await getSupabaseClient();
     const { error } = await supabase
       .from('warehouses')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  }
+};
+
+// Servicio de ubicaciones
+export const locationsService = {
+  getAll: async (): Promise<Location[]> => {
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase
+      .from('locations')
+      .select('*')
+      .order('name');
+    if (error) throw error;
+    return data || [];
+  },
+  getById: async (id: string): Promise<Location | null> => {
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase
+      .from('locations')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error) throw error;
+    return data;
+  },
+  create: async (location: Omit<Location, 'id' | 'created_at' | 'updated_at'>): Promise<Location> => {
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase
+      .from('locations')
+      .insert([location])
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+  update: async (id: string, updates: Partial<Location>): Promise<Location> => {
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase
+      .from('locations')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+  delete: async (id: string): Promise<void> => {
+    const supabase = await getSupabaseClient();
+    const { error } = await supabase
+      .from('locations')
       .delete()
       .eq('id', id);
     if (error) throw error;

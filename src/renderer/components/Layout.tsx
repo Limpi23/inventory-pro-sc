@@ -58,6 +58,12 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenConfig }) => {
       requiredPermission: { resource: 'almacenes', action: 'read' }
     },
     { 
+      name: 'Ubicaciones', 
+      path: '/ubicaciones', 
+      icon: 'fas fa-map-marker-alt',
+      requiredPermission: { resource: 'ubicaciones', action: 'read' }
+    },
+    { 
       name: 'Proveedores', 
       path: '/proveedores', 
       icon: 'fas fa-truck',

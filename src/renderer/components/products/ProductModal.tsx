@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Product, ProductInput, ProductStatus, Category } from "../../../types";
-import { productService, categoriesService } from "../../lib/supabase";
+import { Product, ProductInput, ProductStatus, Category, Location } from "../../../types";
+import { productService, categoriesService, locationsService } from "../../lib/supabase";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -20,6 +20,7 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
     sku: "",
     barcode: "",
     category_id: "",
+    location_id: "",
     min_stock: 0,
     max_stock: null,
     purchase_price: 0,
@@ -29,21 +30,26 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
     image_url: "",
   });
   const [categories, setCategories] = useState<Category[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  // Cargar categorías
+  // Cargar categorías y ubicaciones
   useEffect(() => {
-    async function loadCategories() {
+    async function loadData() {
       try {
-  const data = await categoriesService.getAll();
-        setCategories(data || []);
+        const [cats, locs] = await Promise.all([
+          categoriesService.getAll(),
+          locationsService.getAll()
+        ]);
+        setCategories(cats || []);
+        setLocations(locs || []);
       } catch (error) {
-        console.error("Error al cargar categorías:", error);
+        console.error("Error al cargar datos auxiliares:", error);
       }
     }
     
-    loadCategories();
+    loadData();
   }, []);
 
   // Actualizar el formulario cuando se edita un producto existente
@@ -55,6 +61,7 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
         sku: product.sku || "",
         barcode: product.barcode || "",
         category_id: product.category_id || "",
+        location_id: (product as any).location_id || "",
         min_stock: product.min_stock,
         max_stock: product.max_stock,
         purchase_price: product.purchase_price,
@@ -71,6 +78,7 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
         sku: "",
         barcode: "",
         category_id: "",
+        location_id: "",
         min_stock: 0,
         max_stock: null,
         purchase_price: 0,
@@ -172,6 +180,27 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
                   {categories.map((category) => (
                     <SelectItem key={category.id} value={category.id}>
                       {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Ubicación */}
+            <div className="grid gap-2">
+              <Label htmlFor="location_id">Ubicación</Label>
+              <Select
+                value={formData.location_id?.toString() || "null"}
+                onValueChange={(value) => handleSelectChange("location_id", value === "null" ? "" : value)}
+              >
+                <SelectTrigger id="location_id">
+                  <SelectValue placeholder="Seleccionar ubicación" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="null">Sin ubicación</SelectItem>
+                  {locations.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      {loc.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -16,7 +16,7 @@ import ProductPriceUpdate from './ProductPriceUpdate';
 import { useAuth } from "../../lib/auth";
 import { toast } from "react-hot-toast";
 
-type UIProduct = Product & { category?: { id: string; name: string } | null };
+type UIProduct = Product & { category?: { id: string; name: string } | null; location?: { id: string; name: string } | null };
 
 export default function ProductList() {
   const { user, hasPermission } = useAuth();
@@ -255,6 +255,7 @@ export default function ProductList() {
                   <TableHead>Nombre</TableHead>
                   <TableHead className="hidden md:table-cell">SKU</TableHead>
                   <TableHead className="hidden lg:table-cell">Categoría</TableHead>
+                  <TableHead className="hidden xl:table-cell">Ubicación</TableHead>
                   <TableHead className="hidden xl:table-cell">Precio Compra</TableHead>
                   <TableHead>Precio Venta</TableHead>
                   <TableHead className="hidden md:table-cell">Estado</TableHead>
@@ -281,6 +282,7 @@ export default function ProductList() {
                       <TableCell>{product.name}</TableCell>
                       <TableCell className="hidden md:table-cell">{product.sku || "-"}</TableCell>
                       <TableCell className="hidden lg:table-cell">{product.category?.name || "-"}</TableCell>
+                      <TableCell className="hidden xl:table-cell">{product.location?.name || '-'}</TableCell>
                       <TableCell className="hidden xl:table-cell">{formatCurrency(product.purchase_price ?? 0)}</TableCell>
                       <TableCell>{formatCurrency(product.sale_price ?? 0)}</TableCell>
                       <TableCell className="hidden md:table-cell">
