@@ -140,6 +140,19 @@ export const productService = {
         if (error)
             throw error;
     },
+    deleteMany: async (ids) => {
+        if (!ids.length)
+            return 0;
+        const supabase = await getSupabaseClient();
+        const { data, error } = await supabase
+            .from('products')
+            .delete()
+            .in('id', ids)
+            .select('id');
+        if (error)
+            throw error;
+        return data?.length || 0;
+    },
     createBatch: async (products) => {
         if (!products.length)
             return [];
@@ -545,6 +558,41 @@ export const stockMovementService = {
         if (error)
             throw error;
         return data || [];
+    }
+};
+// Servicio de logs de eventos
+export const eventLogService = {
+    create: async (log) => {
+        const client = await getSupabaseClient();
+        const { data, error } = await client
+            .from('app_events')
+            .insert([{ ...log }])
+            .select()
+            .single();
+        if (error)
+            throw error;
+        return data;
+    },
+    list: async (opts) => {
+        const client = await getSupabaseClient();
+        let q = client.from('app_events').select('*');
+        if (opts?.action)
+            q = q.eq('action', opts.action);
+        if (opts?.entity)
+            q = q.eq('entity', opts.entity);
+        if (opts?.tenant_id)
+            q = q.eq('tenant_id', opts.tenant_id);
+        if (opts?.from)
+            q = q.gte('created_at', opts.from);
+        if (opts?.to)
+            q = q.lte('created_at', opts.to);
+        if (opts?.search) {
+            q = q.or(`actor_email.ilike.%${opts.search}%,action.ilike.%${opts.search}%,entity.ilike.%${opts.search}%,entity_id.ilike.%${opts.search}%`);
+        }
+        const { data, error } = await q.order('created_at', { ascending: false }).limit(opts?.limit ?? 500);
+        if (error)
+            throw error;
+        return (data || []);
     }
 };
 // ...otros servicios 

@@ -53,6 +53,8 @@ export default function LocationList() {
             return;
         try {
             await locationsService.delete(id);
+            // Log de evento (eliminación individual)
+            window.logger?.log({ action: 'location.delete', entity: 'location', entityId: id });
             fetchLocations({ keepPage: true });
         }
         catch (e) {
@@ -109,6 +111,8 @@ export default function LocationList() {
             const ids = Array.from(selectedIds);
             // Borrado en paralelo simple; si prefieres, se puede implementar en el servicio con .in('id', ...)
             await Promise.all(ids.map(id => locationsService.delete(id)));
+            // Log masivo
+            window.logger?.log({ action: 'location.bulk_delete', entity: 'location', details: { ids } });
             setSelectedIds(new Set());
             await fetchLocations({ keepPage: true });
         }
