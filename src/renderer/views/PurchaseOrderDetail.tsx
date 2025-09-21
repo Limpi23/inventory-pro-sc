@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { supabase, logAppEvent } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { useReactToPrint } from 'react-to-print';
 import PrintableOrder from '../components/PrintableOrder';
@@ -235,6 +235,8 @@ const PurchaseOrderDetail: React.FC = () => {
       if (error) throw error;
       
       toast.success('Orden cancelada correctamente');
+      // Log de cancelación
+      await logAppEvent('purchase_order.cancel', 'purchase_order', id as string, null);
       fetchOrderDetails();
     } catch (err: any) {
       console.error('Error al cancelar la orden:', err);
@@ -414,6 +416,8 @@ const PurchaseOrderDetail: React.FC = () => {
       
       // Mostrar opciones de impresión
       handleShowPrintOptions();
+      // Log de recepción
+      await logAppEvent('purchase_order.receive', 'purchase_order', id as string, { received_count: Object.values(receivedItems).filter(q => (q as number) > 0).length, total_received: Object.values(receivedItems).reduce((a, b) => a + (b as number), 0), location_id: receiveLocationId, new_status: newStatus });
     } catch (err: any) {
       console.error('Error al registrar recepción:', err);
       toast.error('Error al registrar recepción: ' + err.message);

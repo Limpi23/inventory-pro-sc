@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, logAppEvent } from '../lib/supabase';
 import PurchaseOrderItemsImport, { ImportOrderItem } from '../components/purchase/PurchaseOrderItemsImport';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 
@@ -384,6 +384,8 @@ const PurchaseOrderForm: React.FC = () => {
           .insert(items);
         
         if (insertError) throw insertError;
+        // Log de actualización de orden
+        await logAppEvent('purchase_order.update', 'purchase_order', id as string, { status, total, items_count: items.length });
         
         navigate(`/ordenes-compra/${id}`);
       } else {
@@ -419,6 +421,8 @@ const PurchaseOrderForm: React.FC = () => {
             .insert(items);
           
           if (itemsError) throw itemsError;
+          // Log de creación de orden
+          await logAppEvent('purchase_order.create', 'purchase_order', newOrderId as string, { status, total, items_count: items.length, supplier_id: formData.supplier_id, warehouse_id: formData.warehouse_id });
           
           navigate(`/ordenes-compra/${newOrderId}`);
         }

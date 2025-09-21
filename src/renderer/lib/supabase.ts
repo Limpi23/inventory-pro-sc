@@ -251,6 +251,25 @@ export interface AppEventLog {
   details?: any; // JSONB
 }
 
+// Helper centralizado para registrar eventos de aplicación sin romper el flujo si falla
+export const logAppEvent = async (
+  action: string,
+  entity?: string | null,
+  entity_id?: string | null,
+  details?: any
+) => {
+  try {
+    const client = await getSupabaseClient();
+    const { data: udata } = await (client as any).auth.getUser();
+    const user = (udata as any)?.user;
+    const actor_id = user?.id ?? null;
+    const actor_email = user?.email ?? null;
+    await eventLogService.create({ action, entity: entity ?? null, entity_id: entity_id ?? null, details, actor_id, actor_email });
+  } catch (e) {
+    // No-op: nunca bloqueamos la UI por un fallo de logging
+    try { console.debug('[logAppEvent] fallo al registrar', action, e); } catch {}
+  }
+};
 // Servicios para interactuar con Supabase
 export const productService = {
   getAll: async (): Promise<Product[]> => {
@@ -331,6 +350,8 @@ export const productService = {
       .single();
     
     if (error) throw error;
+    // Log de creación
+    await logAppEvent('product.create', 'product', (data as any)?.id ?? null, { name: (data as any)?.name, sku: (data as any)?.sku });
     return data;
   },
   
@@ -344,6 +365,7 @@ export const productService = {
       .single();
     
     if (error) throw error;
+    await logAppEvent('product.update', 'product', id, { updates });
     return data;
   },
   
@@ -355,6 +377,7 @@ export const productService = {
       .eq('id', id);
     
     if (error) throw error;
+    await logAppEvent('product.delete', 'product', id, null);
   },
   deleteMany: async (ids: string[]): Promise<number> => {
     if (!ids.length) return 0;
@@ -365,7 +388,9 @@ export const productService = {
       .in('id', ids)
       .select('id');
     if (error) throw error;
-    return data?.length || 0;
+    const count = data?.length || 0;
+    await logAppEvent('product.delete_many', 'product', null, { count, ids });
+    return count;
   },
 
   createBatch: async (products: Omit<Product, 'id' | 'created_at' | 'updated_at'>[]): Promise<Product[]> => {
@@ -391,6 +416,7 @@ export const productService = {
     if (errors.length) {
       console.warn(`Insertados ${results.length} con ${errors.length} errores`);
     }
+    await logAppEvent('product.create_batch', 'product', null, { count: results.length, errors: errors.length });
     return results;
   }
 };
@@ -445,6 +471,7 @@ export const categoriesService = {
       .select()
       .single();
     if (error) throw error;
+    await logAppEvent('category.create', 'category', (data as any)?.id ?? null, { name: (data as any)?.name });
     return data;
   },
   update: async (id: string, updates: Partial<Category>): Promise<Category> => {
@@ -456,6 +483,7 @@ export const categoriesService = {
       .select()
       .single();
     if (error) throw error;
+    await logAppEvent('category.update', 'category', id, { updates });
     return data;
   },
   delete: async (id: string): Promise<void> => {
@@ -465,6 +493,7 @@ export const categoriesService = {
       .delete()
       .eq('id', id);
     if (error) throw error;
+    await logAppEvent('category.delete', 'category', id, null);
   },
   exportToCSV: async (): Promise<string> => {
     const categories = await (await categoriesService.getAll());
@@ -474,6 +503,7 @@ export const categoriesService = {
       const description = c.description ? (c.description.includes(',') ? `"${c.description}"` : c.description) : '';
       csv += `${name},${description}\n`;
     });
+    await logAppEvent('category.export', 'category', null, { format: 'csv' });
     return csv;
   },
   importFromCSV: async (fileContent: string): Promise<{ success: number; errors: number; messages: string[] }> => {
@@ -511,7 +541,9 @@ export const categoriesService = {
         if (e.code === '23505') errors.push('Algunas categorías ya existían'); else errors.push(e.message || 'Error al importar lote');
       }
     }
-    return { success: successCount, errors: dataLines.length - successCount, messages: errors };
+    const result = { success: successCount, errors: dataLines.length - successCount, messages: errors };
+    await logAppEvent('category.import', 'category', null, { ...result });
+    return result;
   }
 };
 
@@ -544,6 +576,7 @@ export const warehousesService = {
       .select()
       .single();
     if (error) throw error;
+    await logAppEvent('warehouse.create', 'warehouse', (data as any)?.id ?? null, { name: (data as any)?.name });
     return data;
   },
   update: async (id: string, updates: Partial<Warehouse>): Promise<Warehouse> => {
@@ -555,6 +588,7 @@ export const warehousesService = {
       .select()
       .single();
     if (error) throw error;
+    await logAppEvent('warehouse.update', 'warehouse', id, { updates });
     return data;
   },
   delete: async (id: string): Promise<void> => {
@@ -564,6 +598,7 @@ export const warehousesService = {
       .delete()
       .eq('id', id);
     if (error) throw error;
+    await logAppEvent('warehouse.delete', 'warehouse', id, null);
   }
 };
 
@@ -596,6 +631,7 @@ export const locationsService = {
       .select()
       .single();
     if (error) throw error;
+    await logAppEvent('location.create', 'location', (data as any)?.id ?? null, { name: (data as any)?.name, warehouse_id: (data as any)?.warehouse_id });
     return data;
   },
   update: async (id: string, updates: Partial<Location>): Promise<Location> => {
@@ -607,6 +643,7 @@ export const locationsService = {
       .select()
       .single();
     if (error) throw error;
+    await logAppEvent('location.update', 'location', id, { updates });
     return data;
   },
   delete: async (id: string): Promise<void> => {
@@ -616,6 +653,7 @@ export const locationsService = {
       .delete()
       .eq('id', id);
     if (error) throw error;
+    await logAppEvent('location.delete', 'location', id, null);
   }
 };
 
