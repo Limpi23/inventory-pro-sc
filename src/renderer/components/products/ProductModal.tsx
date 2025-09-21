@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Product, ProductInput, ProductStatus, Category, Location } from "../../../types";
+import { Product, ProductInput, ProductStatus, Category, Location, TrackingMethod } from "../../../types";
 import { productService, categoriesService, locationsService } from "../../lib/supabase";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import { Button } from "../ui/button";
@@ -21,6 +21,7 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
     barcode: "",
     category_id: "",
     location_id: "",
+  tracking_method: 'standard',
     min_stock: 0,
     max_stock: null,
     purchase_price: 0,
@@ -62,6 +63,7 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
         barcode: product.barcode || "",
         category_id: product.category_id || "",
         location_id: (product as any).location_id || "",
+        tracking_method: (product as any).tracking_method || 'standard',
         min_stock: product.min_stock,
         max_stock: product.max_stock,
         purchase_price: product.purchase_price,
@@ -79,6 +81,7 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
         barcode: "",
         category_id: "",
         location_id: "",
+        tracking_method: 'standard',
         min_stock: 0,
         max_stock: null,
         purchase_price: 0,
@@ -206,6 +209,23 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Método de seguimiento */}
+            <div className="grid gap-2">
+              <Label htmlFor="tracking_method">Método de seguimiento</Label>
+              <Select
+                value={(formData.tracking_method as TrackingMethod) || 'standard'}
+                onValueChange={(value) => handleSelectChange('tracking_method', value as TrackingMethod)}
+              >
+                <SelectTrigger id="tracking_method">
+                  <SelectValue placeholder="Seleccionar método" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="standard">Por cantidad</SelectItem>
+                  <SelectItem value="serialized">Serializado (por unidad)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             
             {/* SKU */}
             <div className="grid gap-2">
@@ -257,31 +277,35 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
               />
             </div>
             
-            {/* Stock mínimo */}
-            <div className="grid gap-2">
-              <Label htmlFor="min_stock">Stock mínimo</Label>
-              <Input
-                id="min_stock"
-                name="min_stock"
-                type="number"
-                value={formData.min_stock !== null ? formData.min_stock : ""}
-                onChange={handleChange}
-                placeholder="0"
-              />
-            </div>
+            {/* Stock mínimo (solo relevante para cantidad) */}
+            {formData.tracking_method !== 'serialized' && (
+              <div className="grid gap-2">
+                <Label htmlFor="min_stock">Stock mínimo</Label>
+                <Input
+                  id="min_stock"
+                  name="min_stock"
+                  type="number"
+                  value={formData.min_stock !== null ? formData.min_stock : ""}
+                  onChange={handleChange}
+                  placeholder="0"
+                />
+              </div>
+            )}
             
-            {/* Stock máximo */}
-            <div className="grid gap-2">
-              <Label htmlFor="max_stock">Stock máximo</Label>
-              <Input
-                id="max_stock"
-                name="max_stock"
-                type="number"
-                value={formData.max_stock !== null ? formData.max_stock : ""}
-                onChange={handleChange}
-                placeholder="Stock máximo (opcional)"
-              />
-            </div>
+            {/* Stock máximo (solo relevante para cantidad) */}
+            {formData.tracking_method !== 'serialized' && (
+              <div className="grid gap-2">
+                <Label htmlFor="max_stock">Stock máximo</Label>
+                <Input
+                  id="max_stock"
+                  name="max_stock"
+                  type="number"
+                  value={formData.max_stock !== null ? formData.max_stock : ""}
+                  onChange={handleChange}
+                  placeholder="Stock máximo (opcional)"
+                />
+              </div>
+            )}
             
             {/* Tasa de impuesto */}
             <div className="grid gap-2">

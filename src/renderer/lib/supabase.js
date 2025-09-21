@@ -170,6 +170,29 @@ export const productService = {
         return results;
     }
 };
+// Servicio básico de seriales
+export const serialsService = {
+    listInStockByProduct: async (productId, warehouseId) => {
+        const supabase = await getSupabaseClient();
+        let query = supabase
+            .from('current_serials_in_stock')
+            .select('*')
+            .eq('product_id', productId);
+        if (warehouseId)
+            query = query.eq('warehouse_id', warehouseId);
+        const { data, error } = await query;
+        if (error)
+            throw error;
+        return data;
+    },
+    createMany: async (serials) => {
+        const supabase = await getSupabaseClient();
+        const { data, error } = await supabase.from('product_serials').insert(serials).select();
+        if (error)
+            throw error;
+        return data;
+    }
+};
 // Servicio de categorías
 export const categoriesService = {
     getAll: async () => {

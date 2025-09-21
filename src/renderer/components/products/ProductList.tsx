@@ -444,4 +444,4 @@ export default function ProductList() {
       />
     </Card>
   );
-} 
+}

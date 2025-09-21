@@ -469,17 +469,19 @@ const InvoiceForm: React.FC = () => {
           
           // Si la factura se emite, registrar los movimientos de inventario
           if (status === 'emitida') {
+            // Nota: Para productos serializados, en próximas iteraciones se deben insertar N movimientos por serial con quantity=1 y serial_id.
+            // Por ahora mantenemos el comportamiento existente para productos por cantidad.
             const stockMovements = invoiceItems.map(item => ({
               product_id: item.product_id,
               warehouse_id: formData.warehouse_id,
               quantity: item.quantity,
-              movement_type_id: 2, // Salida por venta (asumimos que es el ID para OUT_SALE)
+              movement_type_id: 2, // OUT_SALE
               reference: `Factura ${invoiceData.invoice_number}`,
               related_id: invoiceData.id,
               movement_date: new Date().toISOString(),
               notes: `Venta a cliente, factura #${invoiceData.invoice_number}`
             }));
-            
+
             const { error: movementError } = await supabase
               .from('stock_movements')
               .insert(stockMovements);

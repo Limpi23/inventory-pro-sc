@@ -11,6 +11,7 @@ export interface CategoryInput {
 }
 
 export type ProductStatus = 'active' | 'inactive' | 'discontinued';
+export type TrackingMethod = 'standard' | 'serialized';
 
 export interface Product {
 	id: string;
@@ -20,6 +21,7 @@ export interface Product {
 	barcode?: string;
 	category_id?: string | null;
 	location_id?: string | null;
+	tracking_method?: TrackingMethod; // cantidad vs serializado
 	min_stock: number;
 	max_stock: number | null;
 	purchase_price: number | null;
@@ -38,6 +40,7 @@ export interface ProductInput {
 	barcode?: string;
 	category_id?: string | null;
 	location_id?: string | null;
+	tracking_method?: TrackingMethod; // cantidad vs serializado
 	min_stock: number;
 	max_stock: number | null;
 	purchase_price: number | null;

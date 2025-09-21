@@ -43,38 +43,15 @@ app.whenReady().then(() => {
     createWindow();
     // Configurar actualizaciones automáticas solo en producción
     if (process.env.NODE_ENV !== 'development') {
-        // Asegurar feed de GitHub para auto-updater (owner/repo)
-        try {
-            autoUpdater.setFeedURL({
-                provider: 'github',
-                owner: 'Limpi23',
-                repo: 'inventory-pro-sc'
-            });
-        } catch (_) { /* noop */ }
         autoUpdater.checkForUpdatesAndNotify();
         autoUpdater.on('update-available', () => {
             if (mainWindow) {
                 mainWindow.webContents.send('update-available');
             }
         });
-        autoUpdater.on('checking-for-update', () => {
-            if (mainWindow) {
-                mainWindow.webContents.send('checking-for-update');
-            }
-        });
-        autoUpdater.on('update-not-available', () => {
-            if (mainWindow) {
-                mainWindow.webContents.send('update-not-available');
-            }
-        });
         autoUpdater.on('update-downloaded', () => {
             if (mainWindow) {
                 mainWindow.webContents.send('update-downloaded');
-            }
-        });
-        autoUpdater.on('error', (err) => {
-            if (mainWindow) {
-                mainWindow.webContents.send('update-error', err?.message || 'Error al buscar/descargar actualización');
             }
         });
     }
@@ -88,19 +65,6 @@ app.whenReady().then(() => {
 // Permitir que el renderer solicite la instalación de la actualización
 ipcMain.on('install-update', () => {
     autoUpdater.quitAndInstall();
-});
-
-// Permitir que el renderer dispare manualmente la búsqueda de actualizaciones
-ipcMain.on('check-for-updates', () => {
-    if (process.env.NODE_ENV === 'development') {
-        // En desarrollo no hace nada para evitar ruido
-        return;
-    }
-    try {
-        autoUpdater.checkForUpdatesAndNotify();
-    } catch (e) {
-        if (mainWindow) mainWindow.webContents.send('update-error', e?.message || 'No se pudo iniciar la búsqueda de actualizaciones');
-    }
 });
 // Salir cuando todas las ventanas estén cerradas, excepto en macOS
 app.on('window-all-closed', () => {

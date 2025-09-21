@@ -163,6 +163,44 @@ export interface InventoryItem {
   current_quantity: number;
 }
 
+export type TrackingMethod = 'standard' | 'serialized';
+
+export interface ProductSerial {
+  id: string;
+  product_id: string;
+  serial_code: string; // VIN u otro identificador principal
+  vin?: string | null;
+  engine_number?: string | null;
+  year?: number | null;
+  color?: string | null;
+  attributes?: Record<string, any> | null;
+  status: 'in_stock' | 'reserved' | 'sold' | 'returned' | 'maintenance' | 'lost' | 'scrapped' | 'in_transit';
+  warehouse_id?: string | null;
+  location_id?: string | null;
+  acquired_at?: string | null;
+  sold_at?: string | null;
+  purchase_receipt_id?: string | null;
+  invoice_item_id?: string | null;
+  created_at?: string;
+  updated_at?: string | null;
+}
+
+// Extender InventoryItem opcionalmente si se requiere por ubicación (no romper API existente)
+export interface InventorySerialItem {
+  serial_id: string;
+  product_id: string;
+  product_name: string;
+  sku?: string;
+  serial_code: string;
+  vin?: string | null;
+  engine_number?: string | null;
+  warehouse_id?: string | null;
+  warehouse_name?: string | null;
+  location_id?: string | null;
+  location_name?: string | null;
+  acquired_at?: string | null;
+}
+
 export interface StockMovement {
   id: string;
   product_id: string;
@@ -170,6 +208,9 @@ export interface StockMovement {
   quantity: number;
   movement_type_id: number;
   movement_date: string;
+  // nuevos campos
+  serial_id?: string | null;
+  location_id?: string | null;
   product?: { id?: string; name?: string; sku?: string };
   warehouse?: { id?: string; name?: string };
   movement_type?: { id?: number; code?: string; description?: string };

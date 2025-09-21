@@ -76,6 +76,7 @@ export interface Product {
   barcode?: string;
   category_id?: string;
   location_id?: string;
+  tracking_method?: 'standard' | 'serialized';
   min_stock?: number;
   max_stock?: number;
   purchase_price?: number;
@@ -85,6 +86,22 @@ export interface Product {
   image_url?: string;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface ProductSerial {
+  id: string;
+  product_id: string;
+  serial_code: string;
+  vin?: string | null;
+  engine_number?: string | null;
+  year?: number | null;
+  color?: string | null;
+  attributes?: any;
+  status: 'in_stock' | 'reserved' | 'sold' | 'returned' | 'maintenance' | 'lost' | 'scrapped' | 'in_transit';
+  warehouse_id?: string | null;
+  location_id?: string | null;
+  acquired_at?: string | null;
+  sold_at?: string | null;
 }
 
 export interface Category {
@@ -226,8 +243,8 @@ export const productService = {
   getAll: async (): Promise<Product[]> => {
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase
-      .from('products')
-	.select(`*, category:categories(id, name), location:locations(id, name)`) 
+  .from('products')
+  .select(`*, category:categories(id, name), location:locations(id, name)`) 
 	.order('name');
     if (error) throw error;
     return data || [];
@@ -236,8 +253,8 @@ export const productService = {
   getById: async (id: string): Promise<Product | null> => {
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase
-      .from('products')
-      .select(`*, category:categories(id, name), location:locations(id, name)`) 
+  .from('products')
+  .select(`*, category:categories(id, name), location:locations(id, name)`) 
       .eq('id', id)
       .single();
     if (error) throw error;
@@ -258,8 +275,8 @@ export const productService = {
   search: async (query: string): Promise<Product[]> => {
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase
-      .from('products')
-      .select(`*, category:categories(id, name), location:locations(id, name)`) 
+  .from('products')
+  .select(`*, category:categories(id, name), location:locations(id, name)`) 
       .or(`name.ilike.%${query}%, sku.ilike.%${query}%, barcode.ilike.%${query}%`)
       .order('name');
     if (error) throw error;
@@ -269,7 +286,7 @@ export const productService = {
   create: async (product: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Promise<Product> => {
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase
-      .from('products')
+  .from('products')
       .insert([product])
       .select()
       .single();
@@ -281,7 +298,7 @@ export const productService = {
   update: async (id: string, updates: Partial<Product>): Promise<Product> => {
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase
-      .from('products')
+  .from('products')
       .update(updates)
       .eq('id', id)
       .select()
@@ -325,6 +342,27 @@ export const productService = {
       console.warn(`Insertados ${results.length} con ${errors.length} errores`);
     }
     return results;
+  }
+};
+
+// Servicio básico de seriales
+export const serialsService = {
+  listInStockByProduct: async (productId: string, warehouseId?: string) => {
+    const supabase = await getSupabaseClient();
+    let query = supabase
+      .from('current_serials_in_stock')
+      .select('*')
+      .eq('product_id', productId);
+    if (warehouseId) query = query.eq('warehouse_id', warehouseId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return data as any[];
+  },
+  createMany: async (serials: Partial<ProductSerial>[]) => {
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase.from('product_serials').insert(serials).select();
+    if (error) throw error;
+    return data as ProductSerial[];
   }
 };
 
