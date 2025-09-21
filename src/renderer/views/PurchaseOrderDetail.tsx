@@ -870,8 +870,13 @@ const PurchaseOrderDetail: React.FC = () => {
       {/* Modal para opciones de impresión */}
       {showPrintOptions && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">Opciones de Impresión</h3>
+          <div className="bg-white rounded-lg p-6 w-full max-w-4xl shadow-lg">
+            <div className="flex items-start justify-between mb-4">
+              <h3 className="text-lg font-semibold">Opciones de Impresión</h3>
+              <button onClick={handleClosePrintOptions} className="text-gray-500 hover:text-gray-700">
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
             
             <div className="mb-4">
               <p className="text-sm text-gray-600 mb-2">Seleccione el formato de impresión:</p>
@@ -900,11 +905,31 @@ const PurchaseOrderDetail: React.FC = () => {
                 </button>
               </div>
             </div>
-            
+
+            {/* Vista previa dentro de la app */}
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">Vista previa (en la aplicación)</p>
+              <div className="border rounded-md bg-gray-50 p-3 h-[500px] overflow-auto">
+                <div className="bg-white mx-auto">
+                  <PrintableOrder 
+                    order={order} 
+                    orderItems={orderItems} 
+                    format={printFormat.value}
+                    formatCurrency={formatCurrency}
+                    formatDate={formatDate}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Nota: Windows puede mostrar “Esta aplicación no admite la vista previa de impresión”.
+                Usa esta vista previa integrada para revisar el documento antes de imprimir.
+              </p>
+            </div>
+
             <div className="flex justify-end gap-3">
               <button
                 onClick={handleClosePrintOptions}
-                className="px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400"
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
               >
                 Cancelar
               </button>

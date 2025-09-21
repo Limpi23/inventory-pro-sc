@@ -202,24 +202,62 @@ export default function ProductList() {
             minimumFractionDigits: 0
         }).format(value);
     };
-    // Exportar a Excel (seleccionados o todos si no hay selección)
-    const handleExportExcel = () => {
-        const items = selectedIds.size > 0
-            ? products.filter(p => selectedIds.has(p.id))
-            : products;
-        const rows = items.map(p => ({
-            ID: p.id,
-            Nombre: p.name,
-            SKU: p.sku || "",
-            Categoria: p.category?.name || "",
-            "Precio Compra": p.purchase_price ?? 0,
-            "Precio Venta": p.sale_price ?? 0,
-            Estado: p.status,
-        }));
-        const ws = XLSX.utils.json_to_sheet(rows);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Productos");
-        XLSX.writeFile(wb, `productos_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    // Exportar a Excel (seleccionados o todos si no hay selección) con soporte >1000 y columnas compatibles con importación
+    const handleExportExcel = async () => {
+        try {
+            let items = [];
+            if (selectedIds.size > 0) {
+                items = products.filter(p => selectedIds.has(p.id));
+            }
+            else {
+                // Traer todos en lotes para superar el límite de 1000
+                const all = await productService.getAllAll?.(1000) ?? await productService.getAll();
+                items = all;
+            }
+            // Aplicar filtros de UI cuando no hay selección
+            if (selectedIds.size === 0) {
+                if (warehouseFilter) {
+                    items = items.filter(p => (p.location?.warehouse_id === warehouseFilter) || (p.warehouse_id === warehouseFilter));
+                }
+                if (locationFilter) {
+                    items = items.filter(p => (p.location?.id === locationFilter) || (p.location_id === locationFilter));
+                }
+                if (searchQuery.trim()) {
+                    const q = searchQuery.toLowerCase();
+                    items = items.filter(p => (p.name || '').toLowerCase().includes(q) ||
+                        (p.sku || '').toLowerCase().includes(q) ||
+                        (p.barcode || '').toLowerCase().includes(q));
+                }
+            }
+            const rows = items.map(p => ({
+                // Columnas compatibles con importación CSV
+                name: p.name,
+                description: p.description || "",
+                sku: p.sku || "",
+                barcode: p.barcode || "",
+                category_id: p.category?.id || p.category_id || "",
+                location_id: p.location?.id || p.location_id || "",
+                location: p.location?.name || "",
+                min_stock: p.min_stock ?? 0,
+                max_stock: p.max_stock ?? "",
+                purchase_price: p.purchase_price ?? 0,
+                sale_price: p.sale_price ?? 0,
+                tax_rate: p.tax_rate ?? 0,
+                status: p.status || 'active',
+                // Extras informativos (opcionales)
+                category_name: p.category?.name || "",
+                warehouse_id: p.location?.warehouse_id || p.warehouse_id || "",
+                id: p.id,
+            }));
+            const ws = XLSX.utils.json_to_sheet(rows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Productos");
+            XLSX.writeFile(wb, `productos_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        }
+        catch (e) {
+            console.error('Error exportando productos', e);
+            toast?.error?.('No se pudo exportar productos');
+        }
     };
     return (_jsxs(Card, { children: [_jsxs(CardHeader, { className: "space-y-3", children: [_jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", children: [_jsx(CardTitle, { className: "text-xl md:text-2xl", children: "Productos" }), _jsxs("div", { className: "flex gap-2 sm:justify-end w-full sm:w-auto", children: [_jsx(ProductImport, { onImportComplete: fetchProducts, size: "sm", className: "w-full sm:w-auto" }), _jsxs(Button, { onClick: handleExportExcel, variant: "outline", className: "whitespace-nowrap w-full sm:w-auto", size: "sm", children: ["Exportar Excel ", selectedIds.size > 0 ? `(${selectedIds.size})` : ""] }), _jsx(ProductBulkAssignLocation, { selectedIds: [...selectedIds], onDone: () => fetchProducts({ keepPage: true }) }), _jsx(Button, { onClick: () => setIsPriceUpdateOpen(true), className: "bg-yellow-500 hover:bg-yellow-600 text-white whitespace-nowrap text-xs md:text-sm w-full sm:w-auto", "aria-label": "Actualizar precios masivos", size: "sm", children: "Actualizar Precios Masivos" }), _jsx(Button, { onClick: () => setIsModalOpen(true), className: "bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap w-full sm:w-auto", size: "sm", children: "Agregar Producto" })] })] }), _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2", children: [_jsx(Input, { placeholder: "Buscar productos...", value: searchQuery, onChange: (e) => setSearchQuery(e.target.value), onKeyDown: (e) => e.key === 'Enter' && handleSearch(), className: "w-full" }), _jsxs(Select, { value: warehouseFilter || 'all', onValueChange: (v) => { setWarehouseFilter(v === 'all' ? '' : v); setPage(1); }, children: [_jsx(SelectTrigger, { className: "min-w-[150px]", children: _jsx(SelectValue, { placeholder: "Almac\u00E9n" }) }), _jsxs(SelectContent, { children: [_jsx(SelectItem, { value: "all", children: "Todos almacenes" }), warehouses.map(w => (_jsx(SelectItem, { value: w.id, children: w.name }, w.id)))] })] }), _jsxs(Select, { value: locationFilter || 'all', onValueChange: (v) => { setLocationFilter(v === 'all' ? '' : v); setPage(1); }, children: [_jsx(SelectTrigger, { className: "min-w-[150px]", children: _jsx(SelectValue, { placeholder: "Ubicaci\u00F3n" }) }), _jsxs(SelectContent, { children: [_jsx(SelectItem, { value: "all", children: "Todas ubicaciones" }), locations
                                                 .filter(l => !warehouseFilter || l.warehouse_id === warehouseFilter)

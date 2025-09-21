@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Supplier } from '../lib/supabase';
 
@@ -295,12 +296,12 @@ const Suppliers: React.FC = () => {
                     return (
                       <tr key={supplier.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                         <td className="py-3 px-4 text-sm font-medium dark:text-gray-300">
-                          <a 
-                            href={`/proveedores/${supplier.id}`} 
+                          <Link
+                            to={`/proveedores/${supplier.id}`}
                             className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline"
                           >
                             {supplier.name}
-                          </a>
+                          </Link>
                         </td>
                         <td className="py-3 px-4 text-sm dark:text-gray-300">
                           {contactInfo.contact_person || '-'}
@@ -326,13 +327,13 @@ const Suppliers: React.FC = () => {
                             >
                               <i className="fas fa-edit"></i>
                             </button>
-                            <a 
-                              href={`/proveedores/${supplier.id}/compras`}
+                            <Link 
+                              to={`/proveedores/${supplier.id}/compras`}
                               className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 focus:outline-none rounded-md p-1"
                               title="Ver historial de compras"
                             >
                               <i className="fas fa-shopping-cart"></i>
-                            </a>
+                            </Link>
                             <button
                               onClick={() => handleDelete(supplier.id)}
                               className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 focus:outline-none rounded-md p-1"

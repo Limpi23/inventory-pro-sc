@@ -208,26 +208,65 @@ export default function ProductList() {
     }).format(value);
   };
 
-  // Exportar a Excel (seleccionados o todos si no hay selección)
-  const handleExportExcel = () => {
-    const items = selectedIds.size > 0
-      ? products.filter(p => selectedIds.has(p.id))
-      : products;
+  // Exportar a Excel (seleccionados o todos si no hay selección) con soporte >1000 y columnas compatibles con importación
+  const handleExportExcel = async () => {
+    try {
+      let items: UIProduct[] = [];
+      if (selectedIds.size > 0) {
+        items = products.filter(p => selectedIds.has(p.id));
+      } else {
+        // Traer todos en lotes para superar el límite de 1000
+        const all = await (productService as any).getAllAll?.(1000) ?? await productService.getAll();
+        items = all as UIProduct[];
+      }
 
-    const rows = items.map(p => ({
-      ID: p.id,
-      Nombre: p.name,
-      SKU: p.sku || "",
-      Categoria: p.category?.name || "",
-      "Precio Compra": p.purchase_price ?? 0,
-      "Precio Venta": p.sale_price ?? 0,
-      Estado: p.status,
-    }));
+      // Aplicar filtros de UI cuando no hay selección
+      if (selectedIds.size === 0) {
+        if (warehouseFilter) {
+          items = items.filter(p => ((p as any).location?.warehouse_id === warehouseFilter) || ((p as any).warehouse_id === warehouseFilter));
+        }
+        if (locationFilter) {
+          items = items.filter(p => ((p as any).location?.id === locationFilter) || ((p as any).location_id === locationFilter));
+        }
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase();
+          items = items.filter(p =>
+            (p.name || '').toLowerCase().includes(q) ||
+            (p.sku || '').toLowerCase().includes(q) ||
+            (p.barcode || '').toLowerCase().includes(q)
+          );
+        }
+      }
 
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Productos");
-    XLSX.writeFile(wb, `productos_${new Date().toISOString().slice(0,10)}.xlsx`);
+      const rows = items.map(p => ({
+        // Columnas compatibles con importación CSV
+        name: p.name,
+        description: (p as any).description || "",
+        sku: p.sku || "",
+        barcode: (p as any).barcode || "",
+        category_id: (p as any).category?.id || (p as any).category_id || "",
+        location_id: (p as any).location?.id || (p as any).location_id || "",
+        location: (p as any).location?.name || "",
+        min_stock: (p as any).min_stock ?? 0,
+        max_stock: (p as any).max_stock ?? "",
+        purchase_price: p.purchase_price ?? 0,
+        sale_price: p.sale_price ?? 0,
+        tax_rate: (p as any).tax_rate ?? 0,
+        status: p.status || 'active',
+        // Extras informativos (opcionales)
+        category_name: (p as any).category?.name || "",
+        warehouse_id: (p as any).location?.warehouse_id || (p as any).warehouse_id || "",
+        id: p.id,
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Productos");
+      XLSX.writeFile(wb, `productos_${new Date().toISOString().slice(0,10)}.xlsx`);
+    } catch (e) {
+      console.error('Error exportando productos', e);
+      (toast as any)?.error?.('No se pudo exportar productos');
+    }
   };
 
   return (

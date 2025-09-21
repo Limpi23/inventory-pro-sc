@@ -37,6 +37,10 @@ const InventoryGeneral: React.FC = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [exportFormat, setExportFormat] = useState<'csv' | 'physical'>('csv');
   const [showExportOptions, setShowExportOptions] = useState(false);
+  // Fila expandida para ver existencias por ubicación
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [locationsLoading, setLocationsLoading] = useState(false);
+  const [locationsByRow, setLocationsByRow] = useState<Record<string, { location_id: string | null; location_name: string; current_quantity: number }[]>>({});
   
   // Paginación
   const [currentPage, setCurrentPage] = useState(1);
@@ -109,6 +113,67 @@ const InventoryGeneral: React.FC = () => {
       setError(err.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Cargar existencias por ubicación para una fila (producto + almacén)
+  const loadLocationsForRow = async (productId: string, warehouseId: string, cacheKey: string) => {
+    try {
+      setLocationsLoading(true);
+      const client = await supabase.getClient();
+      const { data, error } = await client
+        .from('current_stock_by_location')
+        .select('*')
+        .eq('product_id', productId)
+        .eq('warehouse_id', warehouseId);
+      if (error) throw error;
+
+      const rows = (data as any[]) || [];
+      // Resolver nombres de ubicaciones
+      const ids = Array.from(new Set(rows.map(r => r.location_id).filter((v: string | null): v is string => !!v)));
+      let namesMap: Record<string, string> = {};
+      if (ids.length > 0) {
+        const { data: locs, error: locErr } = await client
+          .from('locations')
+          .select('id, name')
+          .in('id', ids);
+        if (locErr) throw locErr;
+        namesMap = (locs || []).reduce((acc: Record<string, string>, l: any) => { acc[l.id] = l.name; return acc; }, {});
+      }
+
+      const mapped = rows
+        .map(r => ({
+          location_id: r.location_id ?? null,
+          location_name: r.location_id ? (namesMap[r.location_id] || r.location_id) : 'Sin ubicación',
+          current_quantity: Number(r.current_quantity ?? 0)
+        }))
+        // Orden: primero con nombre (no nulos), luego sin ubicación
+        .sort((a, b) => {
+          if (a.location_id && b.location_id) return a.location_name.localeCompare(b.location_name);
+          if (a.location_id && !b.location_id) return -1;
+          if (!a.location_id && b.location_id) return 1;
+          return 0;
+        });
+
+      setLocationsByRow(prev => ({ ...prev, [cacheKey]: mapped }));
+    } catch (e: any) {
+      console.error('Error cargando existencias por ubicación:', e);
+      setError(e.message || 'No se pudieron cargar las ubicaciones');
+    } finally {
+      setLocationsLoading(false);
+    }
+  };
+
+  const toggleLocations = (item: InventoryItem) => {
+    const key = `${item.product_id}|${item.warehouse_id}`;
+    if (expandedKey === key) {
+      setExpandedKey(null);
+      return;
+    }
+    setExpandedKey(key);
+    // Cargar si no está en caché
+    if (!locationsByRow[key]) {
+      loadLocationsForRow(item.product_id, item.warehouse_id, key);
     }
   };
 
@@ -364,54 +429,106 @@ const InventoryGeneral: React.FC = () => {
                     </td>
                   </tr>
                 ) : (
-                  currentItems.map((item) => (
-                    <tr key={`${item.product_id}-${item.warehouse_id}`} className="hover:bg-gray-50 transition-colors">
-                      <td className="py-3 px-4 text-sm">
-                        <a 
-                          href="#" 
-                          className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setSelectedProduct(item.product_id);
-                            setCurrentPage(1);
-                          }}
-                        >
-                          {item.product_name}
-                        </a>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-500">{item.sku || '-'}</td>
-                      <td className="py-3 px-4 text-sm">
-                        <a 
-                          href="#" 
-                          className="text-blue-600 hover:text-blue-800 hover:underline"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setSelectedWarehouse(item.warehouse_id);
-                            setCurrentPage(1);
-                          }}
-                        >
-                          {item.warehouse_name}
-                        </a>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-right font-medium">
-                        <span className={`
-                          ${item.current_quantity > 0 ? 'text-green-600' : 'text-red-600'}
-                          ${item.current_quantity === 0 ? 'text-yellow-600' : ''}
-                        `}>
-                          {item.current_quantity}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-center">
-                        <button
-                          onClick={() => fetchProductHistory(item.product_id)}
-                          className="text-blue-600 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 rounded-md px-2 py-1"
-                        >
-                          <i className="fas fa-history mr-1"></i>
-                          Ver Historial
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  currentItems.map((item) => {
+                    const rowKey = `${item.product_id}|${item.warehouse_id}`;
+                    const isExpanded = expandedKey === rowKey;
+                    const rows = locationsByRow[rowKey] || [];
+                    return (
+                      <React.Fragment key={`row-${rowKey}`}>
+                        <tr key={`${item.product_id}-${item.warehouse_id}`} className="hover:bg-gray-50 transition-colors">
+                          <td className="py-3 px-4 text-sm">
+                            <a 
+                              href="#" 
+                              className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setSelectedProduct(item.product_id);
+                                setCurrentPage(1);
+                              }}
+                            >
+                              {item.product_name}
+                            </a>
+                          </td>
+                          <td className="py-3 px-4 text-sm text-gray-500">{item.sku || '-'}</td>
+                          <td className="py-3 px-4 text-sm">
+                            <a 
+                              href="#" 
+                              className="text-blue-600 hover:text-blue-800 hover:underline"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setSelectedWarehouse(item.warehouse_id);
+                                setCurrentPage(1);
+                              }}
+                            >
+                              {item.warehouse_name}
+                            </a>
+                          </td>
+                          <td className="py-3 px-4 text-sm text-right font-medium">
+                            <span className={`
+                              ${item.current_quantity > 0 ? 'text-green-600' : 'text-red-600'}
+                              ${item.current_quantity === 0 ? 'text-yellow-600' : ''}
+                           `}>
+                              {item.current_quantity}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-sm text-center">
+                            <div className="inline-flex items-center gap-2">
+                              <button
+                                onClick={() => toggleLocations(item)}
+                                className="text-indigo-600 hover:text-indigo-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 rounded-md px-2 py-1"
+                                aria-expanded={isExpanded}
+                                aria-controls={`loc-${rowKey}`}
+                                title={isExpanded ? 'Ocultar ubicaciones' : 'Ver ubicaciones'}
+                              >
+                                <i className={`fas ${isExpanded ? 'fa-chevron-up' : 'fa-map-marker-alt'} mr-1`}></i>
+                                {isExpanded ? 'Ocultar ubicaciones' : 'Ver ubicaciones'}
+                              </button>
+                              <button
+                                onClick={() => fetchProductHistory(item.product_id)}
+                                className="text-blue-600 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 rounded-md px-2 py-1"
+                              >
+                                <i className="fas fa-history mr-1"></i>
+                                Ver Historial
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan={5} className="bg-gray-50 px-4 py-3" id={`loc-${rowKey}`}>
+                              {locationsLoading && rows.length === 0 ? (
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <i className="fas fa-spinner animate-spin"></i>
+                                  Cargando ubicaciones...
+                                </div>
+                              ) : rows.length === 0 ? (
+                                <div className="text-sm text-gray-600">No hay existencias distribuidas por ubicación.</div>
+                              ) : (
+                                <div className="overflow-x-auto">
+                                  <table className="min-w-[400px] text-sm">
+                                    <thead>
+                                      <tr className="text-left text-gray-500">
+                                        <th className="py-2 pr-4">Ubicación</th>
+                                        <th className="py-2 text-right">Cantidad</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {rows.map(r => (
+                                        <tr key={r.location_id ?? 'null'} className="border-t border-gray-200">
+                                          <td className="py-2 pr-4">{r.location_name}</td>
+                                          <td className="py-2 text-right font-medium">{r.current_quantity}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })
                 )}
               </tbody>
             </table>

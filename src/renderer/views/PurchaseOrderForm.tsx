@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import PurchaseOrderItemsImport, { ImportOrderItem } from '../components/purchase/PurchaseOrderItemsImport';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
@@ -67,6 +67,7 @@ const PurchaseOrderForm: React.FC = () => {
   });
   
   const [productSearchTerm, setProductSearchTerm] = useState('');
+  const productSearchInputRef = useRef<HTMLInputElement | null>(null);
   
   useEffect(() => {
     fetchSuppliers();
@@ -82,6 +83,17 @@ const PurchaseOrderForm: React.FC = () => {
       }));
     }
   }, [id]);
+
+  // Asegurar enfoque en la caja de búsqueda al abrir una orden nueva o editable
+  useEffect(() => {
+    if (!isLoading && (!isEditing || formData.status === 'borrador')) {
+      // Usar setTimeout para esperar a que el input esté en el DOM tras render
+      const t = setTimeout(() => {
+        productSearchInputRef.current?.focus();
+      }, 0);
+      return () => clearTimeout(t);
+    }
+  }, [isLoading, isEditing, formData.status]);
   
   useEffect(() => {
     // Filtrar productos basados en el término de búsqueda
@@ -538,11 +550,25 @@ const PurchaseOrderForm: React.FC = () => {
                   </label>
                   <div className="relative">
                     <input
+                      ref={productSearchInputRef}
                       type="text"
                       id="product_search"
                       placeholder="Buscar por nombre o SKU..."
                       value={productSearchTerm}
                       onChange={(e) => setProductSearchTerm(e.target.value)}
+                      onKeyDownCapture={(e) => {
+                        // Evitar que atajos/handlers globales bloqueen la escritura en este campo
+                        e.stopPropagation();
+                      }}
+                      onKeyDown={(e) => {
+                        // Bloquear burbujeo hacia handlers globales
+                        e.stopPropagation();
+                      }}
+                      onBeforeInput={(e) => {
+                        // Aislar del documento para que no se intercepten teclas
+                        e.stopPropagation();
+                      }}
+                      autoComplete="off"
                       className="w-full pl-4 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                       disabled={isEditing && formData.status !== 'borrador'}
                     />

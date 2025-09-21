@@ -108,12 +108,12 @@ export default function LocationImport({ onImportComplete, className, size = 'de
                         if (match)
                             warehouse_id = match;
                     }
-                    const active = String(r.active || 'true').toLowerCase();
+                    // Requisito: importar SIEMPRE como activas
                     const loc = {
                         name,
                         description: r.description ? String(r.description) : undefined,
                         warehouse_id,
-                        active: active === 'true' || active === '1' || active === 'yes' || active === 'si',
+                        active: true,
                     };
                     valid.push(loc);
                 }

@@ -1,5 +1,5 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import Papa from 'papaparse';
 import { useReactToPrint } from 'react-to-print';
@@ -15,6 +15,10 @@ const InventoryGeneral = () => {
     const [isExporting, setIsExporting] = useState(false);
     const [exportFormat, setExportFormat] = useState('csv');
     const [showExportOptions, setShowExportOptions] = useState(false);
+    // Fila expandida para ver existencias por ubicación
+    const [expandedKey, setExpandedKey] = useState(null);
+    const [locationsLoading, setLocationsLoading] = useState(false);
+    const [locationsByRow, setLocationsByRow] = useState({});
     // Paginación
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(10);
@@ -81,6 +85,69 @@ const InventoryGeneral = () => {
         }
         finally {
             setIsLoading(false);
+        }
+    };
+    // Cargar existencias por ubicación para una fila (producto + almacén)
+    const loadLocationsForRow = async (productId, warehouseId, cacheKey) => {
+        try {
+            setLocationsLoading(true);
+            const client = await supabase.getClient();
+            const { data, error } = await client
+                .from('current_stock_by_location')
+                .select('*')
+                .eq('product_id', productId)
+                .eq('warehouse_id', warehouseId);
+            if (error)
+                throw error;
+            const rows = data || [];
+            // Resolver nombres de ubicaciones
+            const ids = Array.from(new Set(rows.map(r => r.location_id).filter((v) => !!v)));
+            let namesMap = {};
+            if (ids.length > 0) {
+                const { data: locs, error: locErr } = await client
+                    .from('locations')
+                    .select('id, name')
+                    .in('id', ids);
+                if (locErr)
+                    throw locErr;
+                namesMap = (locs || []).reduce((acc, l) => { acc[l.id] = l.name; return acc; }, {});
+            }
+            const mapped = rows
+                .map(r => ({
+                location_id: r.location_id ?? null,
+                location_name: r.location_id ? (namesMap[r.location_id] || r.location_id) : 'Sin ubicación',
+                current_quantity: Number(r.current_quantity ?? 0)
+            }))
+                // Orden: primero con nombre (no nulos), luego sin ubicación
+                .sort((a, b) => {
+                if (a.location_id && b.location_id)
+                    return a.location_name.localeCompare(b.location_name);
+                if (a.location_id && !b.location_id)
+                    return -1;
+                if (!a.location_id && b.location_id)
+                    return 1;
+                return 0;
+            });
+            setLocationsByRow(prev => ({ ...prev, [cacheKey]: mapped }));
+        }
+        catch (e) {
+            console.error('Error cargando existencias por ubicación:', e);
+            setError(e.message || 'No se pudieron cargar las ubicaciones');
+        }
+        finally {
+            setLocationsLoading(false);
+        }
+    };
+    const toggleLocations = (item) => {
+        const key = `${item.product_id}|${item.warehouse_id}`;
+        if (expandedKey === key) {
+            setExpandedKey(null);
+            return;
+        }
+        setExpandedKey(key);
+        // Cargar si no está en caché
+        if (!locationsByRow[key]) {
+            loadLocationsForRow(item.product_id, item.warehouse_id, key);
         }
     };
     const clearFilters = () => {
@@ -207,18 +274,23 @@ const InventoryGeneral = () => {
                                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`, children: "Historial de Movimientos" })] }), _jsxs("div", { className: "relative flex-grow", children: [_jsx("div", { className: "absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none", children: _jsx("i", { className: "fas fa-search text-gray-400" }) }), _jsx("input", { type: "text", placeholder: "Buscar por nombre o SKU...", value: searchTerm, onChange: (e) => {
                                             setSearchTerm(e.target.value);
                                             setCurrentPage(1); // Reset a la primera página cuando se busca
-                                        }, className: "w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" })] }), (selectedProduct || selectedWarehouse || searchTerm) && (_jsxs("button", { onClick: clearFilters, className: "px-4 py-2 rounded-md text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors whitespace-nowrap", children: [_jsx("i", { className: "fas fa-times mr-2" }), "Limpiar Filtros"] }))] }), isLoading ? (_jsx("div", { className: "flex justify-center items-center py-20", children: _jsx("div", { className: "animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500" }) })) : activeTab === 'current' ? (_jsxs("div", { className: "overflow-x-auto", children: [_jsxs("table", { className: "min-w-full divide-y divide-gray-200", children: [_jsx("thead", { className: "bg-gray-50", children: _jsxs("tr", { children: [_jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Producto" }), _jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "SKU" }), _jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Almac\u00E9n" }), _jsx("th", { className: "text-right text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Cantidad" }), _jsx("th", { className: "text-center text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Acciones" })] }) }), _jsx("tbody", { className: "bg-white divide-y divide-gray-200", children: currentItems.length === 0 ? (_jsx("tr", { children: _jsx("td", { colSpan: 5, className: "py-6 text-center text-sm text-gray-500", children: _jsxs("div", { className: "flex flex-col items-center", children: [_jsx("i", { className: "fas fa-box-open text-gray-300 text-4xl mb-2" }), _jsx("p", { children: "No hay datos de inventario disponibles" }), searchTerm && (_jsxs("p", { className: "text-xs mt-1", children: ["No se encontraron resultados para \"", searchTerm, "\""] }))] }) }) })) : (currentItems.map((item) => (_jsxs("tr", { className: "hover:bg-gray-50 transition-colors", children: [_jsx("td", { className: "py-3 px-4 text-sm", children: _jsx("a", { href: "#", className: "text-blue-600 hover:text-blue-800 hover:underline font-medium", onClick: (e) => {
-                                                            e.preventDefault();
-                                                            setSelectedProduct(item.product_id);
-                                                            setCurrentPage(1);
-                                                        }, children: item.product_name }) }), _jsx("td", { className: "py-3 px-4 text-sm text-gray-500", children: item.sku || '-' }), _jsx("td", { className: "py-3 px-4 text-sm", children: _jsx("a", { href: "#", className: "text-blue-600 hover:text-blue-800 hover:underline", onClick: (e) => {
-                                                            e.preventDefault();
-                                                            setSelectedWarehouse(item.warehouse_id);
-                                                            setCurrentPage(1);
-                                                        }, children: item.warehouse_name }) }), _jsx("td", { className: "py-3 px-4 text-sm text-right font-medium", children: _jsx("span", { className: `
-                          ${item.current_quantity > 0 ? 'text-green-600' : 'text-red-600'}
-                          ${item.current_quantity === 0 ? 'text-yellow-600' : ''}
-                        `, children: item.current_quantity }) }), _jsx("td", { className: "py-3 px-4 text-sm text-center", children: _jsxs("button", { onClick: () => fetchProductHistory(item.product_id), className: "text-blue-600 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 rounded-md px-2 py-1", children: [_jsx("i", { className: "fas fa-history mr-1" }), "Ver Historial"] }) })] }, `${item.product_id}-${item.warehouse_id}`)))) })] }), filteredInventory.length > itemsPerPage && (_jsxs("div", { className: "mt-4 flex items-center justify-between", children: [_jsxs("div", { className: "text-sm text-gray-500", children: ["Mostrando ", indexOfFirstItem + 1, "-", Math.min(indexOfLastItem, filteredInventory.length), " de ", filteredInventory.length, " items"] }), _jsxs("div", { className: "flex space-x-1", children: [_jsx("button", { onClick: () => paginate(currentPage - 1), disabled: currentPage === 1, className: `px-3 py-1 rounded-md text-sm font-medium ${currentPage === 1
+                                        }, className: "w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" })] }), (selectedProduct || selectedWarehouse || searchTerm) && (_jsxs("button", { onClick: clearFilters, className: "px-4 py-2 rounded-md text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors whitespace-nowrap", children: [_jsx("i", { className: "fas fa-times mr-2" }), "Limpiar Filtros"] }))] }), isLoading ? (_jsx("div", { className: "flex justify-center items-center py-20", children: _jsx("div", { className: "animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500" }) })) : activeTab === 'current' ? (_jsxs("div", { className: "overflow-x-auto", children: [_jsxs("table", { className: "min-w-full divide-y divide-gray-200", children: [_jsx("thead", { className: "bg-gray-50", children: _jsxs("tr", { children: [_jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Producto" }), _jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "SKU" }), _jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Almac\u00E9n" }), _jsx("th", { className: "text-right text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Cantidad" }), _jsx("th", { className: "text-center text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Acciones" })] }) }), _jsx("tbody", { className: "bg-white divide-y divide-gray-200", children: currentItems.length === 0 ? (_jsx("tr", { children: _jsx("td", { colSpan: 5, className: "py-6 text-center text-sm text-gray-500", children: _jsxs("div", { className: "flex flex-col items-center", children: [_jsx("i", { className: "fas fa-box-open text-gray-300 text-4xl mb-2" }), _jsx("p", { children: "No hay datos de inventario disponibles" }), searchTerm && (_jsxs("p", { className: "text-xs mt-1", children: ["No se encontraron resultados para \"", searchTerm, "\""] }))] }) }) })) : (currentItems.map((item) => {
+                                            const rowKey = `${item.product_id}|${item.warehouse_id}`;
+                                            const isExpanded = expandedKey === rowKey;
+                                            const rows = locationsByRow[rowKey] || [];
+                                            return (_jsxs(React.Fragment, { children: [_jsxs("tr", { className: "hover:bg-gray-50 transition-colors", children: [_jsx("td", { className: "py-3 px-4 text-sm", children: _jsx("a", { href: "#", className: "text-blue-600 hover:text-blue-800 hover:underline font-medium", onClick: (e) => {
+                                                                        e.preventDefault();
+                                                                        setSelectedProduct(item.product_id);
+                                                                        setCurrentPage(1);
+                                                                    }, children: item.product_name }) }), _jsx("td", { className: "py-3 px-4 text-sm text-gray-500", children: item.sku || '-' }), _jsx("td", { className: "py-3 px-4 text-sm", children: _jsx("a", { href: "#", className: "text-blue-600 hover:text-blue-800 hover:underline", onClick: (e) => {
+                                                                        e.preventDefault();
+                                                                        setSelectedWarehouse(item.warehouse_id);
+                                                                        setCurrentPage(1);
+                                                                    }, children: item.warehouse_name }) }), _jsx("td", { className: "py-3 px-4 text-sm text-right font-medium", children: _jsx("span", { className: `
+                              ${item.current_quantity > 0 ? 'text-green-600' : 'text-red-600'}
+                              ${item.current_quantity === 0 ? 'text-yellow-600' : ''}
+                           `, children: item.current_quantity }) }), _jsx("td", { className: "py-3 px-4 text-sm text-center", children: _jsxs("div", { className: "inline-flex items-center gap-2", children: [_jsxs("button", { onClick: () => toggleLocations(item), className: "text-indigo-600 hover:text-indigo-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 rounded-md px-2 py-1", "aria-expanded": isExpanded, "aria-controls": `loc-${rowKey}`, title: isExpanded ? 'Ocultar ubicaciones' : 'Ver ubicaciones', children: [_jsx("i", { className: `fas ${isExpanded ? 'fa-chevron-up' : 'fa-map-marker-alt'} mr-1` }), isExpanded ? 'Ocultar ubicaciones' : 'Ver ubicaciones'] }), _jsxs("button", { onClick: () => fetchProductHistory(item.product_id), className: "text-blue-600 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 rounded-md px-2 py-1", children: [_jsx("i", { className: "fas fa-history mr-1" }), "Ver Historial"] })] }) })] }, `${item.product_id}-${item.warehouse_id}`), isExpanded && (_jsx("tr", { children: _jsx("td", { colSpan: 5, className: "bg-gray-50 px-4 py-3", id: `loc-${rowKey}`, children: locationsLoading && rows.length === 0 ? (_jsxs("div", { className: "flex items-center gap-2 text-sm text-gray-600", children: [_jsx("i", { className: "fas fa-spinner animate-spin" }), "Cargando ubicaciones..."] })) : rows.length === 0 ? (_jsx("div", { className: "text-sm text-gray-600", children: "No hay existencias distribuidas por ubicaci\u00F3n." })) : (_jsx("div", { className: "overflow-x-auto", children: _jsxs("table", { className: "min-w-[400px] text-sm", children: [_jsx("thead", { children: _jsxs("tr", { className: "text-left text-gray-500", children: [_jsx("th", { className: "py-2 pr-4", children: "Ubicaci\u00F3n" }), _jsx("th", { className: "py-2 text-right", children: "Cantidad" })] }) }), _jsx("tbody", { children: rows.map(r => (_jsxs("tr", { className: "border-t border-gray-200", children: [_jsx("td", { className: "py-2 pr-4", children: r.location_name }), _jsx("td", { className: "py-2 text-right font-medium", children: r.current_quantity })] }, r.location_id ?? 'null'))) })] }) })) }) }))] }, `row-${rowKey}`));
+                                        })) })] }), filteredInventory.length > itemsPerPage && (_jsxs("div", { className: "mt-4 flex items-center justify-between", children: [_jsxs("div", { className: "text-sm text-gray-500", children: ["Mostrando ", indexOfFirstItem + 1, "-", Math.min(indexOfLastItem, filteredInventory.length), " de ", filteredInventory.length, " items"] }), _jsxs("div", { className: "flex space-x-1", children: [_jsx("button", { onClick: () => paginate(currentPage - 1), disabled: currentPage === 1, className: `px-3 py-1 rounded-md text-sm font-medium ${currentPage === 1
                                                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                                                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`, children: _jsx("i", { className: "fas fa-chevron-left" }) }), Array.from({ length: Math.min(5, totalPages) }).map((_, i) => {
                                                 // Si hay más de 5 páginas, mostrar racionalmente las páginas cercanas a la actual

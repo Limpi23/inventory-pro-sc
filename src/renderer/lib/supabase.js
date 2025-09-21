@@ -69,17 +69,46 @@ export const productService = {
         const supabase = await getSupabaseClient();
         const { data, error } = await supabase
             .from('products')
-            .select(`*, category:categories(id, name), location:locations(id, name)`)
+            .select(`*, category:categories(id, name), location:locations(id, name, warehouse_id)`)
             .order('name');
         if (error)
             throw error;
         return data || [];
     },
+    // Paginado para superar el límite de 1000 filas del API
+    getRange: async (from, to) => {
+        const supabase = await getSupabaseClient();
+        const { data, error } = await supabase
+            .from('products')
+            .select(`*, category:categories(id, name), location:locations(id, name, warehouse_id)`)
+            .order('name')
+            .range(from, to);
+        if (error)
+            throw error;
+        return data || [];
+    },
+    // Trae todos los productos en lotes (por defecto 1000)
+    getAllAll: async (batchSize = 1000) => {
+        const results = [];
+        let offset = 0;
+        while (true) {
+            const page = await productService.getRange(offset, offset + batchSize - 1);
+            if (!page.length)
+                break;
+            results.push(...page);
+            if (page.length < batchSize)
+                break;
+            offset += batchSize;
+            // Evitar bloqueos largos en UI
+            await new Promise((r) => setTimeout(r, 0));
+        }
+        return results;
+    },
     getById: async (id) => {
         const supabase = await getSupabaseClient();
         const { data, error } = await supabase
             .from('products')
-            .select(`*, category:categories(id, name), location:locations(id, name)`)
+            .select(`*, category:categories(id, name), location:locations(id, name, warehouse_id)`)
             .eq('id', id)
             .single();
         if (error)
@@ -90,7 +119,7 @@ export const productService = {
         const supabase = await getSupabaseClient();
         const { data, error } = await supabase
             .from('products')
-            .select(`*, category:categories(id, name), location:locations(id, name)`)
+            .select(`*, category:categories(id, name), location:locations(id, name, warehouse_id)`)
             .eq('category_id', categoryId)
             .order('name');
         if (error)
@@ -101,7 +130,7 @@ export const productService = {
         const supabase = await getSupabaseClient();
         const { data, error } = await supabase
             .from('products')
-            .select(`*, category:categories(id, name), location:locations(id, name)`)
+            .select(`*, category:categories(id, name), location:locations(id, name, warehouse_id)`)
             .or(`name.ilike.%${query}%, sku.ilike.%${query}%, barcode.ilike.%${query}%`)
             .order('name');
         if (error)

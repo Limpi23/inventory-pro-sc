@@ -44,7 +44,6 @@ const PurchaseOrderForm = () => {
             }));
         }
     }, [id]);
-    useEffect(() => {
         // Filtrar productos basados en el término de búsqueda
         if (productSearchTerm) {
             const filtered = products.filter(product => product.name.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
