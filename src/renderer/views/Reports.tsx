@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import Papa from 'papaparse';
+import { useCurrency } from '../hooks/useCurrency';
 
 interface ReportFilter {
   startDate: string;
@@ -34,6 +35,7 @@ interface Warehouse {
 }
 
 const Reports: React.FC = () => {
+  const currency = useCurrency();
   const [activeReport, setActiveReport] = useState<'sales' | 'purchases'>('sales');
   const [filters, setFilters] = useState<ReportFilter>({
     startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().split('T')[0],
@@ -263,7 +265,7 @@ const Reports: React.FC = () => {
         
         dataRows = data.map(item => [
           (item as SalesData).invoice_number,
-          (item as SalesData).invoice_date,
+          new Date((item as SalesData).invoice_date).toLocaleDateString(currency.settings.locale),
           (item as SalesData).customer_name,
           (item as SalesData).status,
           (item as SalesData).warehouse_name,
@@ -281,7 +283,7 @@ const Reports: React.FC = () => {
         
         dataRows = data.map(item => [
           (item as PurchaseData).id,
-          (item as PurchaseData).order_date,
+          new Date((item as PurchaseData).order_date).toLocaleDateString(currency.settings.locale),
           (item as PurchaseData).supplier_name,
           (item as PurchaseData).status,
           (item as PurchaseData).warehouse_name,
@@ -293,10 +295,10 @@ const Reports: React.FC = () => {
       dataRows.push([]);
       dataRows.push(['Resumen', '', '', '', '', '']);
       dataRows.push(['Total registros', stats.count.toString(), '', '', '', '']);
-      dataRows.push(['Total monto', stats.totalAmount.toString(), '', '', '', '']);
-      dataRows.push(['Promedio', stats.avgAmount.toString(), '', '', '', '']);
-      dataRows.push(['Mínimo', stats.minAmount.toString(), '', '', '', '']);
-      dataRows.push(['Máximo', stats.maxAmount.toString(), '', '', '', '']);
+  dataRows.push(['Total monto', stats.totalAmount.toString(), '', '', '', '']);
+  dataRows.push(['Promedio', stats.avgAmount.toString(), '', '', '', '']);
+  dataRows.push(['Mínimo', stats.minAmount.toString(), '', '', '', '']);
+  dataRows.push(['Máximo', stats.maxAmount.toString(), '', '', '', '']);
       
       // Usar PapaParse para crear el CSV correctamente con manejo de comillas y caracteres especiales
       const csv = Papa.unparse({
@@ -332,13 +334,7 @@ const Reports: React.FC = () => {
   };
 
   // Formatear moneda
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 2
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number) => currency.format(amount);
 
   return (
     <div className="space-y-6">
@@ -560,7 +556,7 @@ const Reports: React.FC = () => {
                         {invoice.invoice_number}
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-900 dark:text-gray-300">
-                        {new Date(invoice.invoice_date).toLocaleDateString()}
+                        {new Date(invoice.invoice_date).toLocaleDateString(currency.settings.locale)}
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-900 dark:text-gray-300">
                         {invoice.customer_name}
@@ -598,7 +594,7 @@ const Reports: React.FC = () => {
                         #{order.id.substring(0, 8)}...
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-900 dark:text-gray-300">
-                        {new Date(order.order_date).toLocaleDateString()}
+                        {new Date(order.order_date).toLocaleDateString(currency.settings.locale)}
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-900 dark:text-gray-300">
                         {order.supplier_name}

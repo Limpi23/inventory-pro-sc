@@ -6,8 +6,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { Link } from 'react-router-dom';
+import { useCurrency } from '../hooks/useCurrency';
 const Dashboard = () => {
     const [loading, setLoading] = useState(true);
+    const currency = useCurrency();
     const [stats, setStats] = useState([
         { title: 'Total Productos', value: '0', icon: 'fas fa-box', color: 'bg-primary' },
         { title: 'Ventas del Mes', value: '$0', icon: 'fas fa-shopping-cart', color: 'bg-secondary' },
@@ -289,16 +291,10 @@ const Dashboard = () => {
             setLoading(false);
         }
     };
-    const formatCurrency = (amount) => {
-        return new Intl.NumberFormat('es-CO', {
-            style: 'currency',
-            currency: 'COP',
-            minimumFractionDigits: 0
-        }).format(amount);
-    };
+    const formatCurrency = (amount) => currency.format(amount);
     const formatDate = (dateString) => {
         const date = new Date(dateString);
-        return new Intl.DateTimeFormat('es-CO', {
+        return new Intl.DateTimeFormat(currency.settings.locale, {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',

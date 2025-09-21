@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase, logAppEvent } from '../lib/supabase';
 import PurchaseOrderItemsImport, { ImportOrderItem } from '../components/purchase/PurchaseOrderItemsImport';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
+import { useCurrency } from '../hooks/useCurrency';
 
 interface Supplier {
   id: string;
@@ -435,14 +436,8 @@ const PurchaseOrderForm: React.FC = () => {
     }
   };
   
-  // Formatear moneda
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 2
-    }).format(amount);
-  };
+  // Moneda y formato centralizado
+  const { format: formatCurrency } = useCurrency();
   
   return (
     <div className="space-y-6">

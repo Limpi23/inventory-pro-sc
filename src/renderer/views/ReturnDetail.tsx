@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { Return, ReturnItem } from '../../types';
+import { useCurrency } from '../hooks/useCurrency';
 
 const ReturnDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -10,6 +11,7 @@ const ReturnDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [returnData, setReturnData] = useState<Return | null>(null);
   const [returnItems, setReturnItems] = useState<ReturnItem[]>([]);
+  const currency = useCurrency();
 
   useEffect(() => {
     if (id) {
@@ -95,23 +97,14 @@ const ReturnDetail: React.FC = () => {
     }
   };
 
-  // Formatear moneda
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0
-    }).format(amount);
-  };
-
-  // Formatear fecha
+  // Formatear fecha usando la configuración de locale
   const formatDate = (dateString: string) => {
-    const options: Intl.DateTimeFormatOptions = { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
+    const options: Intl.DateTimeFormatOptions = {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
     };
-    return new Date(dateString).toLocaleDateString('es-CO', options);
+    return new Date(dateString).toLocaleDateString(currency.settings.locale, options);
   };
 
   // Renderizar el badge de estado
@@ -188,7 +181,7 @@ const ReturnDetail: React.FC = () => {
                   <p className="mb-3">{formatDate(returnData.return_date)}</p>
                   
                   <p className="text-sm text-gray-600 mb-1">Total Devuelto</p>
-                  <p className="mb-3 font-medium">{formatCurrency(returnData.total_amount)}</p>
+                  <p className="mb-3 font-medium">{currency.format(returnData.total_amount)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Factura Relacionada</p>
@@ -253,13 +246,13 @@ const ReturnDetail: React.FC = () => {
                             <div className="text-xs text-gray-500">SKU: {item.product?.sku}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            {formatCurrency(item.unit_price ?? 0)}
+                            {currency.format(item.unit_price ?? 0)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             {item.quantity}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap font-medium">
-                            {formatCurrency(item.total_price ?? 0)}
+                            {currency.format(item.total_price ?? 0)}
                           </td>
                           <td className="px-6 py-4">
                             {item.reason || <span className="text-gray-400">Sin especificar</span>}
@@ -270,7 +263,7 @@ const ReturnDetail: React.FC = () => {
                     <tfoot className="bg-gray-50">
                       <tr>
                         <td colSpan={3} className="px-6 py-4 text-right font-medium">Total:</td>
-                        <td className="px-6 py-4 font-bold">{formatCurrency(returnData.total_amount)}</td>
+                        <td className="px-6 py-4 font-bold">{currency.format(returnData.total_amount)}</td>
                         <td></td>
                       </tr>
                     </tfoot>

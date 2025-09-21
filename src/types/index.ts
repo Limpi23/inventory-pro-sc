@@ -79,7 +79,7 @@ export interface WarehouseInput {
 	location?: string;
 	description?: string;
 }
-export interface CompanySettings { name: string; taxId: string; address: string; phone: string; email?: string; website?: string; logoUrl?: string; footerText: string; }
+export interface CompanySettings { name: string; taxId: string; address: string; phone: string; email?: string; website?: string; logoUrl?: string; footerText: string; currencyCode?: string; currencyLocale?: string; }
 export interface PurchaseOrder { id: string; supplier_id: string; order_date: string; status: string; }
 export interface OrderItem { id: string; order_id: string; product_id: string; quantity: number; price: number; subtotal: number; }
 export interface Role { id: number; name: string; }

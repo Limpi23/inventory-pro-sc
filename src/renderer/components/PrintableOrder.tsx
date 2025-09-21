@@ -31,6 +31,7 @@ interface OrderItemExtended extends OrderItemBase {
   product?: { name?: string; sku?: string };
 }
 import useCompanySettings from '../hooks/useCompanySettings';
+import { useCurrency } from '../hooks/useCurrency';
 
 interface PrintableOrderProps {
   order: PurchaseOrderWithRelations;
@@ -48,6 +49,7 @@ const PrintableOrder: React.FC<PrintableOrderProps> = ({
   formatDate 
 }) => {
   const { settings } = useCompanySettings();
+  const { settings: currencySettings } = useCurrency();
   
   // Calcular totales
   const totalReceived = orderItems.reduce((sum, item) => sum + (item.received_quantity || 0), 0);
@@ -191,7 +193,9 @@ const PrintableOrder: React.FC<PrintableOrderProps> = ({
         <div className="text-center text-sm text-gray-500 mt-8">
           <p>Este documento es un comprobante de recepción de mercancía</p>
           <p>{settings.footerText}</p>
-          <p>Generado el {new Date().toLocaleDateString('es-CO')} a las {new Date().toLocaleTimeString('es-CO')}</p>
+          <p>
+            Generado el {new Date().toLocaleDateString(currencySettings.locale)} a las {new Date().toLocaleTimeString(currencySettings.locale)}
+          </p>
         </div>
       </div>
     );
@@ -273,7 +277,7 @@ const PrintableOrder: React.FC<PrintableOrderProps> = ({
 
       <div className="text-center text-xs mt-4 border-t border-gray-200 pt-2">
         <p>{settings.footerText}</p>
-        <p>{new Date().toLocaleDateString('es-CO')} {new Date().toLocaleTimeString('es-CO')}</p>
+        <p>{new Date().toLocaleDateString(currencySettings.locale)} {new Date().toLocaleTimeString(currencySettings.locale)}</p>
       </div>
     </div>
   );

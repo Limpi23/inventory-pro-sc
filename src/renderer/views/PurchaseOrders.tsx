@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Link } from 'react-router-dom';
+import { useCurrency } from '../hooks/useCurrency';
 
 interface PurchaseOrder {
   id: string;
@@ -23,6 +24,7 @@ const PurchaseOrders: React.FC = () => {
     start: new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString().split('T')[0], // Últimos 3 meses
     end: new Date().toISOString().split('T')[0] // Hoy
   });
+  const currency = useCurrency();
   
   // Paginación
   const [currentPage, setCurrentPage] = useState(1);
@@ -123,13 +125,7 @@ const PurchaseOrders: React.FC = () => {
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
 
   // Formatear moneda
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 2
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number) => currency.format(amount);
 
   // Formatear estado con colores
   const getStatusBadge = (status: string) => {

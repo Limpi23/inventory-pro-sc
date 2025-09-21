@@ -3,7 +3,9 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import { useCurrency } from '../hooks/useCurrency';
 const InvoiceForm = () => {
+    const currency = useCurrency();
     const { id } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
@@ -418,13 +420,7 @@ const InvoiceForm = () => {
             setIsSaving(false);
         }
     };
-    const formatCurrency = (amount) => {
-        return new Intl.NumberFormat('es-CO', {
-            style: 'currency',
-            currency: 'COP',
-            minimumFractionDigits: 0
-        }).format(amount);
-    };
+    const formatCurrency = (amount) => currency.format(amount);
     if (isLoading) {
         return (_jsx("div", { className: "flex justify-center items-center py-20", children: _jsx("div", { className: "animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500" }) }));
     }

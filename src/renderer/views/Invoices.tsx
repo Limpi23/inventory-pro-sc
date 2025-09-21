@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { Invoice } from '../../types';
 import { toast } from 'react-hot-toast';
 import useCompanySettings from '../hooks/useCompanySettings';
+import { useCurrency } from '../hooks/useCurrency';
 
 const Invoices: React.FC = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -19,6 +20,7 @@ const Invoices: React.FC = () => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [drawerLoading, setDrawerLoading] = useState(false);
   const { settings } = useCompanySettings();
+  const currency = useCurrency();
 
   useEffect(() => {
     fetchInvoices();
@@ -194,23 +196,11 @@ const Invoices: React.FC = () => {
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
-  // Formatear moneda
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0
-    }).format(amount);
-  };
-
-  // Formatear fecha
+  // Formateo centralizado
+  const formatCurrency = (amount: number) => currency.format(amount);
   const formatDate = (dateString: string) => {
-    const options: Intl.DateTimeFormatOptions = { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    };
-    return new Date(dateString).toLocaleDateString('es-CO', options);
+    const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' };
+    return new Date(dateString).toLocaleDateString(currency.settings.locale, options);
   };
 
   // Renderizar el badge de estado

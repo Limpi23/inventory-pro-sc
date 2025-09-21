@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { useCurrency } from '../hooks/useCurrency';
 
 interface PurchaseOrder {
   id: string;
@@ -28,6 +29,7 @@ const PurchaseOrderList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const ordersPerPage = 10;
+  const currency = useCurrency();
 
   useEffect(() => {
     fetchOrders();
@@ -156,13 +158,7 @@ const PurchaseOrderList: React.FC = () => {
   };
 
   // Formatear moneda
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 2
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number) => currency.format(amount);
   
   // Formatear fecha
   const formatDate = (dateString: string) => {
@@ -171,7 +167,7 @@ const PurchaseOrderList: React.FC = () => {
       month: 'long', 
       day: 'numeric' 
     };
-    return new Date(dateString).toLocaleDateString('es-CO', options);
+    return new Date(dateString).toLocaleDateString(currency.settings.locale, options);
   };
   
   // Renderizar el badge de estado

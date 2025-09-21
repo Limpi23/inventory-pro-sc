@@ -11,6 +11,8 @@ import { CompanySettings } from '../../types';
 import { useTheme } from '../hooks/useTheme';
 import { Sun, Moon } from 'lucide-react';
 import { eventLogService, AppEventLog } from '../lib/supabase';
+import { useCurrency } from '../hooks/useCurrency';
+import { DEFAULT_CURRENCY_SETTINGS } from '../lib/currency';
 
 const DEFAULT_SETTINGS: CompanySettings = {
   name: 'Inventario Pro - SC',
@@ -32,6 +34,7 @@ const Settings: React.FC = () => {
   const [events, setEvents] = useState<AppEventLog[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const win: any = typeof window !== 'undefined' ? (window as any) : {};
+  const currency = useCurrency();
 
   // Cargar configuración guardada al iniciar
   useEffect(() => {
@@ -104,7 +107,84 @@ const Settings: React.FC = () => {
           <TabsTrigger value="appearance">Apariencia</TabsTrigger>
       <TabsTrigger value="connection">Conexión</TabsTrigger>
       <TabsTrigger value="events">Eventos</TabsTrigger>
+      <TabsTrigger value="currency">Moneda</TabsTrigger>
         </TabsList>
+        <TabsContent value="currency">
+          <Card>
+            <CardHeader>
+              <CardTitle>Moneda y Tipo de Cambio</CardTitle>
+              <CardDescription>
+                Define cómo mostrar los precios (Bs.) y el tipo de cambio desde USD.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label>Moneda base (almacenamiento)</Label>
+                  <Input disabled value={currency.settings.baseCurrency} />
+                  <p className="text-xs text-muted-foreground">Los precios se guardan en {currency.settings.baseCurrency} por defecto.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Moneda de visualización</Label>
+                  <select
+                    className="w-full border rounded-md px-3 py-2"
+                    value={currency.settings.displayCurrency}
+                    onChange={(e) => currency.set({ displayCurrency: e.target.value as any })}
+                  >
+                    <option value="BOB">Bolivianos (Bs.)</option>
+                    <option value="VES">Bolívares (Bs.)</option>
+                    <option value="USD">Dólares (USD)</option>
+                    <option value="COP">Pesos (COP)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Tipo de cambio (1 {currency.settings.baseCurrency} → {currency.settings.displayCurrency})</Label>
+                  <Input
+                    type="number"
+                    step="0.0001"
+                    min="0"
+                    value={currency.settings.exchangeRate}
+                    onChange={(e) => currency.set({ exchangeRate: Number(e.target.value) || 0 })}
+                  />
+                  <p className="text-xs text-muted-foreground">Última actualización: {new Date(currency.settings.lastUpdated || '').toLocaleString('es-BO')}</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Formato regional</Label>
+                  <select
+                    className="w-full border rounded-md px-3 py-2"
+                    value={currency.settings.locale}
+                    onChange={(e) => currency.set({ locale: e.target.value })}
+                  >
+                    <option value="es-BO">es-BO (Bolivia)</option>
+                    <option value="es-VE">es-VE (Venezuela)</option>
+                    <option value="es-CO">es-CO (Colombia)</option>
+                    <option value="es-CL">es-CL (Chile)</option>
+                    <option value="es-PE">es-PE (Perú)</option>
+                    <option value="es-AR">es-AR (Argentina)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="mt-6 flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => currency.reset()}
+                >Restablecer</Button>
+                <Button
+                  onClick={() => toast.success('Preferencias de moneda guardadas')}
+                >Guardar</Button>
+              </div>
+
+              <div className="mt-6 p-3 border rounded-md text-sm">
+                <p className="mb-1 font-medium">Vista previa</p>
+                <p>100 en base → {currency.format(100)} mostrados</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
         
         <TabsContent value="company">
           <Card>
@@ -216,7 +296,7 @@ const Settings: React.FC = () => {
                     <tbody>
                       {events.map(ev => (
                         <tr key={ev.id || ev.created_at + String(ev.entity_id)} className="border-b">
-                          <td className="py-2 px-3 whitespace-nowrap">{new Date(ev.created_at || '').toLocaleString('es-CO')}</td>
+                          <td className="py-2 px-3 whitespace-nowrap">{new Date(ev.created_at || '').toLocaleString(currency.settings.locale)}</td>
                           <td className="py-2 px-3">{ev.actor_email || '-'}</td>
                           <td className="py-2 px-3">{ev.action}</td>
                           <td className="py-2 px-3">{ev.entity || '-'}</td>

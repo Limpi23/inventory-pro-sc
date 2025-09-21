@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { Link } from 'react-router-dom';
+import { useCurrency } from '../hooks/useCurrency';
 
 interface StockMovement {
   id: string;
@@ -52,6 +53,7 @@ interface StatCard {
 
 const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
+  const currency = useCurrency();
   const [stats, setStats] = useState<StatCard[]>([
     { title: 'Total Productos', value: '0', icon: 'fas fa-box', color: 'bg-primary' },
     { title: 'Ventas del Mes', value: '$0', icon: 'fas fa-shopping-cart', color: 'bg-secondary' },
@@ -120,7 +122,7 @@ const Dashboard: React.FC = () => {
       // Update stats
       const updatedStats = [
         { title: 'Total Productos', value: productsCount?.toString() || '0', icon: 'fas fa-box', color: 'bg-primary' },
-        { title: 'Ventas del Mes', value: formatCurrency(monthlyTotal), icon: 'fas fa-shopping-cart', color: 'bg-secondary' },
+  { title: 'Ventas del Mes', value: formatCurrency(monthlyTotal), icon: 'fas fa-shopping-cart', color: 'bg-secondary' },
         { title: 'Productos Agotados', value: uniqueLowStockProducts.length.toString(), icon: 'fas fa-exclamation-triangle', color: 'bg-orange-500' },
         { title: 'Movimientos Hoy', value: movementsCount?.toString() || '0', icon: 'fas fa-exchange-alt', color: 'bg-blue-500' },
       ];
@@ -376,17 +378,11 @@ const Dashboard: React.FC = () => {
     }
   };
   
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number): string => currency.format(amount);
   
   const formatDate = (dateString: string): string => {
     const date = new Date(dateString);
-    return new Intl.DateTimeFormat('es-CO', {
+    return new Intl.DateTimeFormat(currency.settings.locale, {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',

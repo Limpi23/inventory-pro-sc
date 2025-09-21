@@ -4,6 +4,7 @@ import { supabase, logAppEvent } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { useReactToPrint } from 'react-to-print';
 import PrintableOrder from '../components/PrintableOrder';
+import { useCurrency } from '../hooks/useCurrency';
 
 interface PurchaseOrder {
   id: string;
@@ -437,14 +438,8 @@ const PurchaseOrderDetail: React.FC = () => {
     return (receivedItems / totalItems) * 100;
   };
   
-  // Formatear moneda
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 2
-    }).format(amount);
-  };
+  // Moneda y formato centralizado (muestra en Bs u otra moneda configurada)
+  const { format: formatCurrency, settings: currencySettings } = useCurrency();
   
   // Formatear fecha
   const formatDate = (dateString: string) => {
@@ -453,7 +448,7 @@ const PurchaseOrderDetail: React.FC = () => {
       month: 'long', 
       day: 'numeric' 
     };
-    return new Date(dateString).toLocaleDateString('es-CO', options);
+    return new Date(dateString).toLocaleDateString(currencySettings.locale || 'es-BO', options);
   };
   
   // Renderizar el badge de estado

@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { useReactToPrint } from 'react-to-print';
 import useCompanySettings from '../hooks/useCompanySettings';
+import { useCurrency } from '../hooks/useCurrency';
 
 interface Invoice {
   id: string;
@@ -60,6 +61,7 @@ const InvoiceDetail: React.FC = () => {
   const [printFormat, setPrintFormat] = useState<'letter' | 'roll'>('letter');
   const [showPrintDialog, setShowPrintDialog] = useState(false);
   const { settings } = useCompanySettings();
+  const currency = useCurrency();
   
   const letterPrintRef = useRef<HTMLDivElement>(null);
   const rollPrintRef = useRef<HTMLDivElement>(null);
@@ -173,20 +175,13 @@ const InvoiceDetail: React.FC = () => {
   
   const formatDate = (dateString?: string) => {
     if (!dateString) return '';
-    return new Date(dateString).toLocaleDateString('es-CO', {
+    return new Date(dateString).toLocaleDateString(currency.settings.locale, {
       year: 'numeric',
       month: 'long',
       day: 'numeric'
     });
   };
-  
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0
-    }).format(amount);
-  };
+
   
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
@@ -392,7 +387,7 @@ const InvoiceDetail: React.FC = () => {
                       <div className="text-sm text-gray-500">SKU: {item.product.sku}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">{item.quantity}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">{formatCurrency(item.unit_price)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">{currency.format(item.unit_price)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {item.discount_percent !== undefined && item.discount_percent > 0 && (
                         <div className="text-xs">Desc: {item.discount_percent}%</div>
@@ -400,9 +395,9 @@ const InvoiceDetail: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>{item.tax_rate}%</div>
-                      <div className="text-sm text-gray-500">{formatCurrency(item.tax_amount)}</div>
+                      <div className="text-sm text-gray-500">{currency.format(item.tax_amount)}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap font-medium">{formatCurrency(item.total_price)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap font-medium">{currency.format(item.total_price)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -414,19 +409,19 @@ const InvoiceDetail: React.FC = () => {
           <div className="w-full md:w-1/3 space-y-2">
             <div className="flex justify-between">
               <span>Subtotal:</span>
-              <span>{formatCurrency(invoice.subtotal)}</span>
+              <span>{currency.format(invoice.subtotal)}</span>
             </div>
             <div className="flex justify-between">
               <span>Descuentos:</span>
-              <span>{formatCurrency(invoice.discount_amount)}</span>
+              <span>{currency.format(invoice.discount_amount)}</span>
             </div>
             <div className="flex justify-between">
               <span>IVA:</span>
-              <span>{formatCurrency(invoice.tax_amount)}</span>
+              <span>{currency.format(invoice.tax_amount)}</span>
             </div>
             <div className="flex justify-between font-bold text-lg">
               <span>Total:</span>
-              <span>{formatCurrency(invoice.total_amount)}</span>
+              <span>{currency.format(invoice.total_amount)}</span>
             </div>
           </div>
         </div>
@@ -553,14 +548,14 @@ const InvoiceDetail: React.FC = () => {
                       <div className="text-xs">SKU: {item.product.sku}</div>
                     </td>
                     <td className="border p-2 text-right">{item.quantity}</td>
-                    <td className="border p-2 text-right">{formatCurrency(item.unit_price)}</td>
+                    <td className="border p-2 text-right">{currency.format(item.unit_price)}</td>
                     <td className="border p-2 text-right">
                       {item.discount_percent !== undefined && item.discount_percent > 0 && (
                         <div className="text-xs">Desc: {item.discount_percent}%</div>
                       )}
                     </td>
-                    <td className="border p-2 text-right">{formatCurrency(item.tax_amount)}</td>
-                    <td className="border p-2 text-right font-medium">{formatCurrency(item.total_price)}</td>
+                    <td className="border p-2 text-right">{currency.format(item.tax_amount)}</td>
+                    <td className="border p-2 text-right font-medium">{currency.format(item.total_price)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -571,19 +566,19 @@ const InvoiceDetail: React.FC = () => {
             <div className="w-1/3">
               <div className="flex justify-between py-1">
                 <span>Subtotal:</span>
-                <span>{formatCurrency(invoice.subtotal)}</span>
+                <span>{currency.format(invoice.subtotal)}</span>
               </div>
               <div className="flex justify-between py-1">
                 <span>Descuentos:</span>
-                <span>{formatCurrency(invoice.discount_amount)}</span>
+                <span>{currency.format(invoice.discount_amount)}</span>
               </div>
               <div className="flex justify-between py-1">
                 <span>IVA:</span>
-                <span>{formatCurrency(invoice.tax_amount)}</span>
+                <span>{currency.format(invoice.tax_amount)}</span>
               </div>
               <div className="flex justify-between py-1 font-bold border-t pt-2">
                 <span>Total:</span>
-                <span>{formatCurrency(invoice.total_amount)}</span>
+                <span>{currency.format(invoice.total_amount)}</span>
               </div>
             </div>
           </div>
@@ -599,7 +594,7 @@ const InvoiceDetail: React.FC = () => {
             <p>Gracias por su compra</p>
             <p>Este documento tiene validez como comprobante fiscal de acuerdo a las normas vigentes.</p>
             <p>{settings.footerText}</p>
-            <p>{new Date().toLocaleDateString('es-CO')}</p>
+            <p>{new Date().toLocaleDateString(currency.settings.locale)}</p>
           </div>
         </div>
         
@@ -640,13 +635,13 @@ const InvoiceDetail: React.FC = () => {
                   <tr key={item.id} className="border-b">
                     <td className="py-1">
                       <div>{item.product.name}</div>
-                      <div className="text-xs">{formatCurrency(item.unit_price)} x {item.quantity}</div>
+                      <div className="text-xs">{currency.format(item.unit_price)} x {item.quantity}</div>
                       {item.discount_percent !== undefined && item.discount_percent > 0 && (
                         <div className="text-xs">Desc: {item.discount_percent}%</div>
                       )}
                     </td>
                     <td className="py-1 text-right">{item.quantity}</td>
-                    <td className="py-1 text-right">{formatCurrency(item.total_price)}</td>
+                    <td className="py-1 text-right">{currency.format(item.total_price)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -656,19 +651,19 @@ const InvoiceDetail: React.FC = () => {
           <div className="mb-4">
             <div className="flex justify-between py-1">
               <span>Subtotal:</span>
-              <span>{formatCurrency(invoice.subtotal)}</span>
+              <span>{currency.format(invoice.subtotal)}</span>
             </div>
             <div className="flex justify-between py-1">
               <span>Descuentos:</span>
-              <span>{formatCurrency(invoice.discount_amount)}</span>
+              <span>{currency.format(invoice.discount_amount)}</span>
             </div>
             <div className="flex justify-between py-1">
               <span>IVA:</span>
-              <span>{formatCurrency(invoice.tax_amount)}</span>
+              <span>{currency.format(invoice.tax_amount)}</span>
             </div>
             <div className="flex justify-between py-1 font-bold border-t border-b">
               <span>TOTAL:</span>
-              <span>{formatCurrency(invoice.total_amount)}</span>
+              <span>{currency.format(invoice.total_amount)}</span>
             </div>
             <div className="pt-1">
               <p>Método de pago: {invoice.payment_method ? `${invoice.payment_method.charAt(0).toUpperCase()}${invoice.payment_method.slice(1)}` : 'No especificado'}</p>
@@ -684,7 +679,7 @@ const InvoiceDetail: React.FC = () => {
           <div className="text-center text-xs mb-4">
             <p>*** Gracias por su compra ***</p>
             <p>{settings.footerText}</p>
-            <p>{new Date().toLocaleDateString('es-CO')}</p>
+            <p>{new Date().toLocaleDateString(currency.settings.locale)}</p>
           </div>
           
           <div className="text-center">

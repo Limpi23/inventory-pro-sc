@@ -3,9 +3,11 @@ import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { ReturnInput, ReturnItemInput, Invoice, InvoiceItem } from '../../types';
 import { toast } from 'react-hot-toast';
+import { useCurrency } from '../hooks/useCurrency';
 
 const ReturnForm: React.FC = () => {
   const navigate = useNavigate();
+  const currency = useCurrency();
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -209,23 +211,14 @@ const ReturnForm: React.FC = () => {
     }
   };
 
-  // Formatear moneda
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0
-    }).format(amount);
-  };
-
-  // Formatear fecha
+  // Formatear fecha con la configuración de moneda/locale
   const formatDate = (dateString: string) => {
-    const options: Intl.DateTimeFormatOptions = { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
+    const options: Intl.DateTimeFormatOptions = {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
     };
-    return new Date(dateString).toLocaleDateString('es-CO', options);
+    return new Date(dateString).toLocaleDateString(currency.settings.locale, options);
   };
 
   // Calcular el subtotal de la devolución
@@ -304,7 +297,7 @@ const ReturnForm: React.FC = () => {
                                   {formatDate(invoice.invoice_date)}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap font-medium">
-                                  {formatCurrency(invoice.total_amount)}
+                                  {currency.format(invoice.total_amount)}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                   <button
@@ -341,7 +334,7 @@ const ReturnForm: React.FC = () => {
                       <h3 className="font-medium">Factura seleccionada: {selectedInvoice.invoice_number}</h3>
                       <p className="text-sm text-gray-600">Cliente: {selectedInvoice.customer?.name}</p>
                       <p className="text-sm text-gray-600">Fecha: {formatDate(selectedInvoice.invoice_date)}</p>
-                      <p className="text-sm text-gray-600">Total: {formatCurrency(selectedInvoice.total_amount)}</p>
+                      <p className="text-sm text-gray-600">Total: {currency.format(selectedInvoice.total_amount)}</p>
                     </div>
                     <button
                       type="button"
@@ -413,7 +406,7 @@ const ReturnForm: React.FC = () => {
                                   <div className="text-xs text-gray-500">{item.product?.sku}</div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                  {formatCurrency(item.unit_price ?? 0)}
+                                  {currency.format(item.unit_price ?? 0)}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                   {item.quantity}
@@ -455,7 +448,7 @@ const ReturnForm: React.FC = () => {
                     <div className="flex justify-between items-center">
                       <div>
                         <p>Cantidad de productos: {returnItems.length}</p>
-                        <p>Total a devolver: {formatCurrency(getReturnSubtotal())}</p>
+                        <p>Total a devolver: {currency.format(getReturnSubtotal())}</p>
                       </div>
                     </div>
                   </div>

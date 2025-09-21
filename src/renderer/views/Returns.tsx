@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Return } from '../../types';
 import { toast } from 'react-hot-toast';
+import { useCurrency } from '../hooks/useCurrency';
 
 const Returns: React.FC = () => {
   const [returns, setReturns] = useState<Return[]>([]);
@@ -11,6 +12,7 @@ const Returns: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [returnsPerPage] = useState(10);
+  const currency = useCurrency();
 
   useEffect(() => {
     fetchReturns();
@@ -81,23 +83,14 @@ const Returns: React.FC = () => {
     }
   };
 
-  // Formatear moneda
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0
-    }).format(amount);
-  };
-
-  // Formatear fecha
+  // Formatear fecha con la configuración de moneda/locale
   const formatDate = (dateString: string) => {
-    const options: Intl.DateTimeFormatOptions = { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
+    const options: Intl.DateTimeFormatOptions = {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
     };
-    return new Date(dateString).toLocaleDateString('es-CO', options);
+    return new Date(dateString).toLocaleDateString(currency.settings.locale, options);
   };
 
   // Renderizar el badge de estado
@@ -211,7 +204,7 @@ const Returns: React.FC = () => {
                         <div className="text-sm text-gray-900 max-w-xs truncate">{ret.reason}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
-                        {formatCurrency(ret.total_amount)}
+                        {currency.format(ret.total_amount)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {renderStatusBadge(ret.status)}

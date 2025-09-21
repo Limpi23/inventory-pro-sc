@@ -2,6 +2,7 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { useCurrency } from '../hooks/useCurrency';
 const PurchaseOrderList = () => {
     const [orders, setOrders] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -11,6 +12,7 @@ const PurchaseOrderList = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const ordersPerPage = 10;
+    const currency = useCurrency();
     useEffect(() => {
         fetchOrders();
     }, [currentPage, searchTerm, statusFilter]);
@@ -120,13 +122,7 @@ const PurchaseOrderList = () => {
         fetchOrders();
     };
     // Formatear moneda
-    const formatCurrency = (amount) => {
-        return new Intl.NumberFormat('es-CO', {
-            style: 'currency',
-            currency: 'COP',
-            minimumFractionDigits: 2
-        }).format(amount);
-    };
+    const formatCurrency = (amount) => currency.format(amount);
     // Formatear fecha
     const formatDate = (dateString) => {
         const options = {
@@ -134,7 +130,7 @@ const PurchaseOrderList = () => {
             month: 'long',
             day: 'numeric'
         };
-        return new Date(dateString).toLocaleDateString('es-CO', options);
+        return new Date(dateString).toLocaleDateString(currency.settings.locale, options);
     };
     // Renderizar el badge de estado
     const renderStatusBadge = (status) => {

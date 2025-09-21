@@ -1,8 +1,9 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
-import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { useState, useEffect, useRef } from 'react';
+import { supabase, logAppEvent } from '../lib/supabase';
 import PurchaseOrderItemsImport from '../components/purchase/PurchaseOrderItemsImport';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
+import { useCurrency } from '../hooks/useCurrency';
 const PurchaseOrderForm = () => {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -30,6 +31,7 @@ const PurchaseOrderForm = () => {
         unit_price: 0
     });
     const [productSearchTerm, setProductSearchTerm] = useState('');
+    const productSearchInputRef = useRef(null);
     useEffect(() => {
         fetchSuppliers();
         fetchWarehouses();
@@ -44,6 +46,17 @@ const PurchaseOrderForm = () => {
             }));
         }
     }, [id]);
+    // Asegurar enfoque en la caja de búsqueda al abrir una orden nueva o editable
+    useEffect(() => {
+        if (!isLoading && (!isEditing || formData.status === 'borrador')) {
+            // Usar setTimeout para esperar a que el input esté en el DOM tras render
+            const t = setTimeout(() => {
+                productSearchInputRef.current?.focus();
+            }, 0);
+            return () => clearTimeout(t);
+        }
+    }, [isLoading, isEditing, formData.status]);
+    useEffect(() => {
         // Filtrar productos basados en el término de búsqueda
         if (productSearchTerm) {
             const filtered = products.filter(product => product.name.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
@@ -303,6 +316,8 @@ const PurchaseOrderForm = () => {
                     .insert(items);
                 if (insertError)
                     throw insertError;
+                // Log de actualización de orden
+                await logAppEvent('purchase_order.update', 'purchase_order', id, { status, total, items_count: items.length });
                 navigate(`/ordenes-compra/${id}`);
             }
             else {
@@ -335,6 +350,8 @@ const PurchaseOrderForm = () => {
                         .insert(items);
                     if (itemsError)
                         throw itemsError;
+                    // Log de creación de orden
+                    await logAppEvent('purchase_order.create', 'purchase_order', newOrderId, { status, total, items_count: items.length, supplier_id: formData.supplier_id, warehouse_id: formData.warehouse_id });
                     navigate(`/ordenes-compra/${newOrderId}`);
                 }
             }
@@ -347,15 +364,18 @@ const PurchaseOrderForm = () => {
             setIsSaving(false);
         }
     };
-    // Formatear moneda
-    const formatCurrency = (amount) => {
-        return new Intl.NumberFormat('es-CO', {
-            style: 'currency',
-            currency: 'COP',
-            minimumFractionDigits: 2
-        }).format(amount);
-    };
-    return (_jsxs("div", { className: "space-y-6", children: [_jsx("div", { className: "flex flex-col md:flex-row md:items-center md:justify-between", children: _jsxs("div", { children: [_jsxs(Link, { to: "/ordenes-compra", className: "inline-flex items-center text-blue-600 hover:text-blue-800 mb-2", children: [_jsx("i", { className: "fas fa-arrow-left mr-2" }), "Volver a \u00D3rdenes de Compra"] }), _jsx("h1", { className: "text-2xl font-semibold", children: isEditing ? 'Editar Orden de Compra' : 'Nueva Orden de Compra' })] }) }), error && (_jsx("div", { className: "bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded-md", children: _jsx("p", { children: error }) })), isLoading ? (_jsx("div", { className: "flex justify-center items-center py-20", children: _jsx("div", { className: "animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500" }) })) : (_jsx("div", { className: "bg-white p-6 rounded-lg shadow-md", children: _jsxs("form", { onSubmit: (e) => handleSubmit(e, true), children: [_jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6", children: [_jsxs("div", { children: [_jsx("label", { htmlFor: "supplier_id", className: "block text-sm font-medium text-gray-700 mb-1", children: "Proveedor *" }), _jsxs("select", { id: "supplier_id", name: "supplier_id", value: formData.supplier_id, onChange: handleInputChange, required: true, className: "w-full py-2 px-3 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500", disabled: isEditing && formData.status !== 'borrador', children: [_jsx("option", { value: "", children: "Seleccionar proveedor" }), suppliers.map(supplier => (_jsx("option", { value: supplier.id, children: supplier.name }, supplier.id)))] })] }), _jsxs("div", { children: [_jsx("label", { htmlFor: "warehouse_id", className: "block text-sm font-medium text-gray-700 mb-1", children: "Almac\u00E9n de destino *" }), _jsxs("select", { id: "warehouse_id", name: "warehouse_id", value: formData.warehouse_id, onChange: handleInputChange, required: true, className: "w-full py-2 px-3 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500", disabled: isEditing && formData.status !== 'borrador', children: [_jsx("option", { value: "", children: "Seleccionar almac\u00E9n" }), warehouses.map(warehouse => (_jsx("option", { value: warehouse.id, children: warehouse.name }, warehouse.id)))] })] }), _jsxs("div", { children: [_jsx("label", { htmlFor: "order_date", className: "block text-sm font-medium text-gray-700 mb-1", children: "Fecha de orden *" }), _jsx("input", { type: "date", id: "order_date", value: orderDate, onChange: (e) => setOrderDate(e.target.value), required: true, className: "w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500", disabled: isEditing && formData.status !== 'borrador' })] })] }), _jsxs("div", { className: "mb-6 border p-4 rounded-md bg-gray-50", children: [_jsxs("div", { className: "flex items-center justify-between mb-4", children: [_jsx("h2", { className: "text-lg font-medium", children: "Agregar Productos" }), _jsx(PurchaseOrderItemsImport, { products: products, onImport: addImportedItems, size: "sm", disabled: isEditing && formData.status !== 'borrador' })] }), _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-4 gap-4", children: [_jsxs("div", { className: "md:col-span-2", children: [_jsx("label", { htmlFor: "product_search", className: "block text-sm font-medium text-gray-700 mb-1", children: "Buscar Producto" }), _jsxs("div", { className: "relative", children: [_jsx("input", { type: "text", id: "product_search", placeholder: "Buscar por nombre o SKU...", value: productSearchTerm, onChange: (e) => setProductSearchTerm(e.target.value), className: "w-full pl-4 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500", disabled: isEditing && formData.status !== 'borrador' }), productSearchTerm && filteredProducts.length > 0 && (_jsx("div", { className: "absolute z-10 w-full mt-1 bg-white shadow-lg rounded-md border border-gray-200 max-h-60 overflow-y-auto", children: filteredProducts.map(product => (_jsxs("div", { className: "px-4 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0", onClick: () => {
+    // Moneda y formato centralizado
+    const { format: formatCurrency } = useCurrency();
+    return (_jsxs("div", { className: "space-y-6", children: [_jsx("div", { className: "flex flex-col md:flex-row md:items-center md:justify-between", children: _jsxs("div", { children: [_jsxs(Link, { to: "/ordenes-compra", className: "inline-flex items-center text-blue-600 hover:text-blue-800 mb-2", children: [_jsx("i", { className: "fas fa-arrow-left mr-2" }), "Volver a \u00D3rdenes de Compra"] }), _jsx("h1", { className: "text-2xl font-semibold", children: isEditing ? 'Editar Orden de Compra' : 'Nueva Orden de Compra' })] }) }), error && (_jsx("div", { className: "bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded-md", children: _jsx("p", { children: error }) })), isLoading ? (_jsx("div", { className: "flex justify-center items-center py-20", children: _jsx("div", { className: "animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500" }) })) : (_jsx("div", { className: "bg-white p-6 rounded-lg shadow-md", children: _jsxs("form", { onSubmit: (e) => handleSubmit(e, true), children: [_jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6", children: [_jsxs("div", { children: [_jsx("label", { htmlFor: "supplier_id", className: "block text-sm font-medium text-gray-700 mb-1", children: "Proveedor *" }), _jsxs("select", { id: "supplier_id", name: "supplier_id", value: formData.supplier_id, onChange: handleInputChange, required: true, className: "w-full py-2 px-3 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500", disabled: isEditing && formData.status !== 'borrador', children: [_jsx("option", { value: "", children: "Seleccionar proveedor" }), suppliers.map(supplier => (_jsx("option", { value: supplier.id, children: supplier.name }, supplier.id)))] })] }), _jsxs("div", { children: [_jsx("label", { htmlFor: "warehouse_id", className: "block text-sm font-medium text-gray-700 mb-1", children: "Almac\u00E9n de destino *" }), _jsxs("select", { id: "warehouse_id", name: "warehouse_id", value: formData.warehouse_id, onChange: handleInputChange, required: true, className: "w-full py-2 px-3 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500", disabled: isEditing && formData.status !== 'borrador', children: [_jsx("option", { value: "", children: "Seleccionar almac\u00E9n" }), warehouses.map(warehouse => (_jsx("option", { value: warehouse.id, children: warehouse.name }, warehouse.id)))] })] }), _jsxs("div", { children: [_jsx("label", { htmlFor: "order_date", className: "block text-sm font-medium text-gray-700 mb-1", children: "Fecha de orden *" }), _jsx("input", { type: "date", id: "order_date", value: orderDate, onChange: (e) => setOrderDate(e.target.value), required: true, className: "w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500", disabled: isEditing && formData.status !== 'borrador' })] })] }), _jsxs("div", { className: "mb-6 border p-4 rounded-md bg-gray-50", children: [_jsxs("div", { className: "flex items-center justify-between mb-4", children: [_jsx("h2", { className: "text-lg font-medium", children: "Agregar Productos" }), _jsx(PurchaseOrderItemsImport, { products: products, onImport: addImportedItems, size: "sm", disabled: isEditing && formData.status !== 'borrador' })] }), _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-4 gap-4", children: [_jsxs("div", { className: "md:col-span-2", children: [_jsx("label", { htmlFor: "product_search", className: "block text-sm font-medium text-gray-700 mb-1", children: "Buscar Producto" }), _jsxs("div", { className: "relative", children: [_jsx("input", { ref: productSearchInputRef, type: "text", id: "product_search", placeholder: "Buscar por nombre o SKU...", value: productSearchTerm, onChange: (e) => setProductSearchTerm(e.target.value), onKeyDownCapture: (e) => {
+                                                                // Evitar que atajos/handlers globales bloqueen la escritura en este campo
+                                                                e.stopPropagation();
+                                                            }, onKeyDown: (e) => {
+                                                                // Bloquear burbujeo hacia handlers globales
+                                                                e.stopPropagation();
+                                                            }, onBeforeInput: (e) => {
+                                                                // Aislar del documento para que no se intercepten teclas
+                                                                e.stopPropagation();
+                                                            }, autoComplete: "off", className: "w-full pl-4 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500", disabled: isEditing && formData.status !== 'borrador' }), productSearchTerm && filteredProducts.length > 0 && (_jsx("div", { className: "absolute z-10 w-full mt-1 bg-white shadow-lg rounded-md border border-gray-200 max-h-60 overflow-y-auto", children: filteredProducts.map(product => (_jsxs("div", { className: "px-4 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0", onClick: () => {
                                                                     setCurrentItem(prev => ({
                                                                         ...prev,
                                                                         product_id: product.id,

@@ -2,6 +2,7 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Link } from 'react-router-dom';
+import { useCurrency } from '../hooks/useCurrency';
 const PurchaseOrders = () => {
     const [orders, setOrders] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -12,6 +13,7 @@ const PurchaseOrders = () => {
         start: new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString().split('T')[0], // Últimos 3 meses
         end: new Date().toISOString().split('T')[0] // Hoy
     });
+    const currency = useCurrency();
     // Paginación
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(10);
@@ -95,13 +97,7 @@ const PurchaseOrders = () => {
     // Cambiar de página
     const paginate = (pageNumber) => setCurrentPage(pageNumber);
     // Formatear moneda
-    const formatCurrency = (amount) => {
-        return new Intl.NumberFormat('es-CO', {
-            style: 'currency',
-            currency: 'COP',
-            minimumFractionDigits: 2
-        }).format(amount);
-    };
+    const formatCurrency = (amount) => currency.format(amount);
     // Formatear estado con colores
     const getStatusBadge = (status) => {
         let colorClass = '';

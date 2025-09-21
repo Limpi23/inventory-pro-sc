@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import { useCurrency } from '../hooks/useCurrency';
 
 interface Customer {
   id: string;
@@ -37,6 +38,7 @@ interface InvoiceItem {
 }
 
 const InvoiceForm: React.FC = () => {
+  const currency = useCurrency();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -506,13 +508,7 @@ const InvoiceForm: React.FC = () => {
     }
   };
   
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number) => currency.format(amount);
   
   if (isLoading) {
     return (

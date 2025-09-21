@@ -51,6 +51,8 @@ export default defineConfig(({ mode }) => {
     },
     esbuild: {
       logOverride: { 'this-is-undefined-in-esm': 'silent' },
+      // Ensure we do not transform stray JS sources under src; TS/TSX are canonical
+      // We keep default loaders; explicit exclusion handled in optimizeDeps
     },
     optimizeDeps: {
       esbuildOptions: {
@@ -65,7 +67,11 @@ export default defineConfig(({ mode }) => {
             jsx: 'react',
           }
         }
-      }
+      },
+      exclude: [
+        // Exclude any JS files in src; TS is the source of truth
+        'src/**/**/*.js'
+      ]
     },
     base: './',
     server: {

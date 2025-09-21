@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useParams, Link } from 'react-router-dom';
+import { useCurrency } from '../hooks/useCurrency';
 
 interface PurchaseOrder {
   id: string;
@@ -38,6 +39,7 @@ interface ContactInfo {
 
 const SupplierPurchases: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const currency = useCurrency();
   const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [purchases, setPurchases] = useState<PurchaseOrderDetail[]>([]);
   const [selectedPurchase, setSelectedPurchase] = useState<string | null>(null);
@@ -178,14 +180,8 @@ const SupplierPurchases: React.FC = () => {
   // Cambiar de página
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
 
-  // Formatear moneda
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 2
-    }).format(amount);
-  };
+  // Formatear moneda centralizado
+  const formatCurrency = (amount: number) => currency.format(amount);
 
   // Formatear estado con colores
   const getStatusBadge = (status: string) => {
@@ -331,7 +327,7 @@ const SupplierPurchases: React.FC = () => {
                           >
                             <td className="py-3 px-4 text-sm">
                               <div className="font-medium">
-                                {new Date(purchase.order_date).toLocaleDateString()}
+                                {new Date(purchase.order_date).toLocaleDateString(currency.settings.locale)}
                               </div>
                               <div className="text-xs text-gray-500">
                                 {purchase.warehouse_name}
