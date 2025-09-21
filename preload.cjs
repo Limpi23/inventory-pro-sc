@@ -29,3 +29,15 @@ ipcRenderer.on('update-message', (_e, msg) => {
 
 // Diagnóstico para verificar carga correcta
 console.log('[preload.cjs] cargado correctamente');
+
+// Logger expuesto a renderer
+contextBridge.exposeInMainWorld('logger', {
+  log: async (event) => {
+    try {
+      return await ipcRenderer.invoke('log-event', event);
+    } catch (e) {
+      console.warn('No se pudo registrar evento', e);
+      return { error: e && e.message ? e.message : String(e) };
+    }
+  }
+});

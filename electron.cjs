@@ -2,16 +2,20 @@
 // Cambiaremos los require por import.
 // ... el resto del código se migrará en el siguiente paso ... 
 
-const { app, BrowserWindow, session, ipcMain, dialog, Menu } = require('electron');
+const { app, BrowserWindow, session, ipcMain, dialog, Menu, shell } = require('electron');
 const path = require('path');
 const url = require('url');
 const { autoUpdater } = require('electron-updater');
 const os = require('os');
-const { Registry } = require('winreg'); // Para Windows solamente
+// El paquete 'winreg' exporta la clase por defecto, no como named export
+const Registry = require('winreg'); // Para Windows solamente
 const fs = require('fs');
 const Store = require('electron-store');
 
 let mainWindow;
+
+// Mitigar crashes del proceso GPU en algunos drivers de Windows
+try { app.disableHardwareAcceleration(); } catch (_) {}
 
 if (process.env.NODE_ENV === 'development') {
   process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
@@ -133,6 +137,25 @@ function createWindow() {
   // Configurar menú de la aplicación (solo una vez)
   setupApplicationMenu();
 }
+
+// IPC: Logging de eventos a archivo JSONL en userData/logs
+ipcMain.handle('log-event', (_event, payload) => {
+  try {
+    const logDir = require('path').join(app.getPath('userData'), 'logs');
+    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+    const logFile = require('path').join(logDir, 'events.jsonl');
+    const entry = {
+      ts: new Date().toISOString(),
+      appVersion: app.getVersion(),
+      ...payload
+    };
+    fs.appendFileSync(logFile, JSON.stringify(entry) + '\n', 'utf8');
+    return true;
+  } catch (e) {
+    console.error('Error escribiendo log de evento:', e);
+    return { error: e && e.message ? e.message : String(e) };
+  }
+});
 
 function sendDatabaseConfigToRenderer() {
   if (!mainWindow) return;
@@ -335,6 +358,19 @@ function setupApplicationMenu() {
         {
           label: 'Probar conexión Supabase',
           click: () => { testSupabaseConnection(true); }
+        },
+        {
+          label: 'Abrir carpeta de logs',
+          click: () => {
+            try {
+              const logDir = require('path').join(app.getPath('userData'), 'logs');
+              // Abre la carpeta de logs (crea si no existe para que abra algo)
+              if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+              shell.openPath(logDir);
+            } catch (e) {
+              console.warn('No se pudo abrir carpeta de logs', e);
+            }
+          }
         },
         {
           label: 'Buscar actualizaciones',

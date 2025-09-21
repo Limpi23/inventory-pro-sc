@@ -9,7 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Switch } from '../components/ui/switch';
 import { CompanySettings } from '../../types';
 import { useTheme } from '../hooks/useTheme';
-import { Sun, Moon, Database } from 'lucide-react';
+import { Sun, Moon } from 'lucide-react';
+import { eventLogService, AppEventLog } from '../lib/supabase';
 
 const DEFAULT_SETTINGS: CompanySettings = {
   name: 'Inventario Pro - SC',
@@ -28,6 +29,8 @@ const Settings: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
   const [supabaseConfig, setSupabaseConfig] = useState<any>(null);
   const [loadingConfig, setLoadingConfig] = useState(false);
+  const [events, setEvents] = useState<AppEventLog[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(false);
   const win: any = typeof window !== 'undefined' ? (window as any) : {};
 
   // Cargar configuración guardada al iniciar
@@ -47,6 +50,21 @@ const Settings: React.FC = () => {
         setSupabaseConfig(cfg || null);
       }).finally(() => setLoadingConfig(false));
     }
+  }, []);
+
+  useEffect(() => {
+    // cargar últimos eventos al abrir ajustes
+    (async () => {
+      try {
+        setLoadingEvents(true);
+        const logs = await eventLogService.list({ limit: 200 });
+        setEvents(logs);
+      } catch (e) {
+        console.warn('No se pudieron cargar eventos', e);
+      } finally {
+        setLoadingEvents(false);
+      }
+    })();
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -85,6 +103,7 @@ const Settings: React.FC = () => {
           <TabsTrigger value="document">Documentos</TabsTrigger>
           <TabsTrigger value="appearance">Apariencia</TabsTrigger>
       <TabsTrigger value="connection">Conexión</TabsTrigger>
+      <TabsTrigger value="events">Eventos</TabsTrigger>
         </TabsList>
         
         <TabsContent value="company">
@@ -164,6 +183,51 @@ const Settings: React.FC = () => {
                   />
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="events">
+          <Card>
+            <CardHeader>
+              <CardTitle>Eventos de la aplicación</CardTitle>
+              <CardDescription>Registros de acciones realizadas por los usuarios (auditoría).</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2 mb-3">
+                <Button variant="outline" onClick={async () => { setLoadingEvents(true); try { setEvents(await eventLogService.list({ limit: 200 })); } finally { setLoadingEvents(false); } }}>Refrescar</Button>
+              </div>
+              {loadingEvents ? (
+                <p>Cargando eventos...</p>
+              ) : events.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Aún no hay eventos.</p>
+              ) : (
+                <div className="overflow-x-auto -mx-4 md:mx-0">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left border-b">
+                        <th className="py-2 px-3">Fecha</th>
+                        <th className="py-2 px-3">Usuario</th>
+                        <th className="py-2 px-3">Acción</th>
+                        <th className="py-2 px-3">Entidad</th>
+                        <th className="py-2 px-3">ID</th>
+                        <th className="py-2 px-3">Detalles</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {events.map(ev => (
+                        <tr key={ev.id || ev.created_at + String(ev.entity_id)} className="border-b">
+                          <td className="py-2 px-3 whitespace-nowrap">{new Date(ev.created_at || '').toLocaleString('es-CO')}</td>
+                          <td className="py-2 px-3">{ev.actor_email || '-'}</td>
+                          <td className="py-2 px-3">{ev.action}</td>
+                          <td className="py-2 px-3">{ev.entity || '-'}</td>
+                          <td className="py-2 px-3">{ev.entity_id || '-'}</td>
+                          <td className="py-2 px-3 max-w-[360px] truncate" title={JSON.stringify(ev.details)}>{ev.details ? JSON.stringify(ev.details) : '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

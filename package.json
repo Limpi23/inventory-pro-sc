@@ -5,11 +5,12 @@
   "type": "module",
   "main": "electron.cjs",
   "scripts": {
-    "dev": "vite --port 8080",
-    "build:preload": "tsc src/main/preload.ts --outDir dist --esModuleInterop --module commonjs",
+  "dev": "cross-env NODE_ENV=development concurrently -k \"vite --port 8080\" \"wait-on http://localhost:8080 && nodemon\"",
+  "build:preload": "tsc src/main/preload.ts --outDir dist --esModuleInterop --module commonjs",
     "clean:out": "powershell -NoLogo -NoProfile -Command \"if (Test-Path out) { Write-Host 'Eliminando carpeta out...'; Remove-Item -Recurse -Force out; Start-Sleep -Milliseconds 300 }\"",
     "kill:app": "powershell -NoLogo -NoProfile -Command \"Get-Process -Name 'Inventario Pro' -ErrorAction SilentlyContinue | Stop-Process -Force\"",
-    "dev:electron": "npm run build:preload && cross-env NODE_ENV=development concurrently -k \"vite --port 8080\" \"wait-on http://localhost:8080 && electron .\"",
+  "dev:electron": "cross-env NODE_ENV=development concurrently -k \"vite --port 8080\" \"wait-on http://localhost:8080 && nodemon\"",
+    "dev:main": "cross-env NODE_ENV=development nodemon",
     "build": "tsc --skipLibCheck --noEmit false && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
@@ -64,7 +65,8 @@
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
     "node-pg-migrate": "^7.9.1",
-    "postcss": "^8.5.3",
+  "postcss": "^8.5.3",
+  "nodemon": "^3.1.4",
     "supabase": "^2.22.6",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.2.2",
@@ -111,5 +113,19 @@
     "winreg": "^1.2.4",
     "xlsx": "^0.18.5",
     "zod": "^3.24.3"
+  }
+  ,
+  "nodemonConfig": {
+    "watch": [
+      "electron.cjs",
+      "preload.cjs",
+      "src/main"
+    ],
+    "ext": "js,cjs,mjs,ts",
+    "delay": "200",
+    "exec": "electron .",
+    "env": {
+      "NODE_ENV": "development"
+    }
   }
 }

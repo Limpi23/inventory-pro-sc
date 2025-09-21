@@ -12,7 +12,17 @@ interface ImportMeta {
 declare global {
   interface Window {
     appVersion?: { get: () => Promise<string> };
+    logger?: {
+      log: (event: {
+        action: string;
+        actor?: string;
+        entity?: string;
+        entityId?: string;
+        details?: any;
+      }) => Promise<unknown>;
+    };
   }
 }
 
+export {};
 export {};

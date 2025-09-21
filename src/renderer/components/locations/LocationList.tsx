@@ -21,6 +21,8 @@ export default function LocationList() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  // Alcance de selección: página actual o todos los resultados filtrados (por defecto: todos)
+  const [selectScope, setSelectScope] = useState<'page' | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
@@ -51,6 +53,8 @@ export default function LocationList() {
     if (!confirm('¿Eliminar ubicación?')) return;
     try {
       await locationsService.delete(id);
+      // Log de evento (eliminación individual)
+      window.logger?.log({ action: 'location.delete', entity: 'location', entityId: id });
       fetchLocations({ keepPage: true });
     } catch (e) {
       console.error('Error eliminando ubicación', e);
@@ -79,20 +83,43 @@ export default function LocationList() {
   useEffect(() => { if (page > totalPages) setPage(totalPages); }, [totalPages, page]);
 
   // Selección
-  const allVisibleSelected = useMemo(() => visible.length > 0 && visible.every(l => selectedIds.has(l.id)), [visible, selectedIds]);
-  const someVisibleSelected = useMemo(() => visible.some(l => selectedIds.has(l.id)) && !allVisibleSelected, [visible, selectedIds, allVisibleSelected]);
+  const scopeItems = selectScope === 'page' ? visible : filtered;
+  const allScopeSelected = useMemo(() => scopeItems.length > 0 && scopeItems.every(l => selectedIds.has(l.id)), [scopeItems, selectedIds]);
+  const someScopeSelected = useMemo(() => scopeItems.some(l => selectedIds.has(l.id)) && !allScopeSelected, [scopeItems, selectedIds, allScopeSelected]);
   const toggleSelectAll = () => {
-    if (allVisibleSelected) {
+    if (allScopeSelected) {
       const next = new Set(selectedIds);
-      visible.forEach(l => next.delete(l.id));
+      scopeItems.forEach(l => next.delete(l.id));
       setSelectedIds(next);
     } else {
       const next = new Set(selectedIds);
-      visible.forEach(l => next.add(l.id));
+      scopeItems.forEach(l => next.add(l.id));
       setSelectedIds(next);
     }
   };
   const toggleOne = (id: string) => setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+
+  // Acciones masivas
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    const count = selectedIds.size;
+    if (!confirm(`¿Eliminar ${count} ubicaci${count === 1 ? 'ón' : 'ones'} seleccionada${count === 1 ? '' : 's'}?`)) return;
+    try {
+      setLoading(true);
+      const ids = Array.from(selectedIds);
+      // Borrado en paralelo simple; si prefieres, se puede implementar en el servicio con .in('id', ...)
+      await Promise.all(ids.map(id => locationsService.delete(id)));
+      // Log masivo
+      window.logger?.log({ action: 'location.bulk_delete', entity: 'location', details: { ids } });
+      setSelectedIds(new Set());
+      await fetchLocations({ keepPage: true });
+    } catch (e) {
+      console.error('Error eliminando ubicaciones seleccionadas', e);
+      alert('Ocurrió un error al eliminar una o más ubicaciones.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Exportar a Excel
   const handleExportExcel = () => {
@@ -125,7 +152,7 @@ export default function LocationList() {
             </Button>
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2">
           <Input
             placeholder="Buscar ubicaciones..."
             value={searchQuery}
@@ -135,6 +162,18 @@ export default function LocationList() {
           <Button variant="outline" onClick={() => setPage(1)} className="whitespace-nowrap" size="sm">
             Buscar
           </Button>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground hidden md:inline">Selección</span>
+            <Select value={selectScope} onValueChange={(val) => setSelectScope(val as 'page' | 'all')}>
+              <SelectTrigger className="w-[140px]" aria-label="Alcance de selección">
+                <SelectValue placeholder="Página" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="page">Esta página</SelectItem>
+                <SelectItem value="all">Todos (filtrados)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -142,11 +181,26 @@ export default function LocationList() {
           <p>Cargando ubicaciones...</p>
         ) : (
           <div className="overflow-x-auto -mx-4 md:mx-0">
+            {selectedIds.size > 0 && (
+              <div className="flex items-center justify-between p-3 mb-2 rounded-md bg-blue-50 text-blue-900 border border-blue-200">
+                <div className="text-sm">
+                  Seleccionados {selectedIds.size} de {selectScope === 'page' ? visible.length : filtered.length}{selectScope === 'page' ? ' en esta página' : ' en total'}.
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setSelectedIds(new Set())}>Limpiar selección</Button>
+                  <Button variant="destructive" size="sm" onClick={handleBulkDelete} disabled={loading}>Eliminar seleccionados</Button>
+                </div>
+              </div>
+            )}
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-10">
-                    <Checkbox checked={someVisibleSelected ? 'indeterminate' : allVisibleSelected} onCheckedChange={toggleSelectAll} aria-label="Seleccionar todos" />
+                    <Checkbox
+                      checked={someScopeSelected ? 'indeterminate' : allScopeSelected}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label={selectScope === 'page' ? 'Seleccionar todos en esta página' : 'Seleccionar todos (filtrados)'}
+                    />
                   </TableHead>
                   <TableHead>Nombre</TableHead>
                   <TableHead className="hidden lg:table-cell">Descripción</TableHead>

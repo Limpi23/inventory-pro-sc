@@ -238,6 +238,19 @@ export interface PurchaseReceipt {
   created_by?: string;
 }
 
+// Auditoría de eventos de aplicación
+export interface AppEventLog {
+  id?: string;
+  created_at?: string;
+  tenant_id?: string | null;
+  actor_id?: string | null;
+  actor_email?: string | null;
+  action: string; // p.ej. "product.delete"
+  entity?: string | null; // p.ej. "product"
+  entity_id?: string | null;
+  details?: any; // JSONB
+}
+
 // Servicios para interactuar con Supabase
 export const productService = {
   getAll: async (): Promise<Product[]> => {
@@ -316,6 +329,17 @@ export const productService = {
       .eq('id', id);
     
     if (error) throw error;
+  },
+  deleteMany: async (ids: string[]): Promise<number> => {
+    if (!ids.length) return 0;
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase
+      .from('products')
+      .delete()
+      .in('id', ids)
+      .select('id');
+    if (error) throw error;
+    return data?.length || 0;
   },
 
   createBatch: async (products: Omit<Product, 'id' | 'created_at' | 'updated_at'>[]): Promise<Product[]> => {
@@ -717,6 +741,37 @@ export const stockMovementService = {
     
     if (error) throw error;
     return data || [];
+  }
+};
+
+// Servicio de logs de eventos
+export const eventLogService = {
+  create: async (log: AppEventLog) => {
+    const client = await getSupabaseClient();
+    const { data, error } = await client
+      .from('app_events')
+      .insert([{ ...log }])
+      .select()
+      .single();
+    if (error) throw error;
+    return data as AppEventLog;
+  },
+  list: async (opts?: { limit?: number; search?: string; action?: string; entity?: string; from?: string; to?: string; tenant_id?: string }) => {
+    const client = await getSupabaseClient();
+    let q = client.from('app_events').select('*');
+    if (opts?.action) q = q.eq('action', opts.action);
+    if (opts?.entity) q = q.eq('entity', opts.entity);
+    if (opts?.tenant_id) q = q.eq('tenant_id', opts.tenant_id);
+    if (opts?.from) q = q.gte('created_at', opts.from);
+    if (opts?.to) q = q.lte('created_at', opts.to);
+    if (opts?.search) {
+      q = q.or(
+        `actor_email.ilike.%${opts.search}%,action.ilike.%${opts.search}%,entity.ilike.%${opts.search}%,entity_id.ilike.%${opts.search}%`
+      );
+    }
+    const { data, error } = await q.order('created_at', { ascending: false }).limit(opts?.limit ?? 500);
+    if (error) throw error;
+    return (data || []) as AppEventLog[];
   }
 };
 

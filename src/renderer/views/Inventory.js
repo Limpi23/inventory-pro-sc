@@ -88,10 +88,12 @@ const Inventory = () => {
             try {
                 const client = await supabase.getClient();
                 if (warehouseId) {
+                    // Mostrar ubicaciones del almacén seleccionado y también las no asignadas (warehouse_id NULL)
                     const { data, error } = await client
                         .from('locations')
                         .select('*')
-                        .eq('warehouse_id', warehouseId)
+                        .or(`warehouse_id.eq.${warehouseId},warehouse_id.is.null`)
+                        .eq('active', true)
                         .order('name');
                     if (error)
                         throw error;
@@ -114,10 +116,12 @@ const Inventory = () => {
             try {
                 const client = await supabase.getClient();
                 if (destinationWarehouseId) {
+                    // Para transferencias, incluir ubicaciones del almacén destino y también las no asignadas
                     const { data, error } = await client
                         .from('locations')
                         .select('*')
-                        .eq('warehouse_id', destinationWarehouseId)
+                        .or(`warehouse_id.eq.${destinationWarehouseId},warehouse_id.is.null`)
+                        .eq('active', true)
                         .order('name');
                     if (error)
                         throw error;
