@@ -575,6 +575,25 @@ export const stockMovementService = {
             throw error;
         return data;
     },
+    // Crear movimientos en lote (para importaciones)
+    createBatch: async (movements) => {
+        if (!movements.length)
+            return 0;
+        const supa = await getSupabaseClient();
+        const batchSize = 100;
+        let created = 0;
+        for (let i = 0; i < movements.length; i += batchSize) {
+            const batch = movements.slice(i, i + batchSize);
+            const { data, error } = await supa.from('stock_movements').insert(batch).select('id');
+            if (error)
+                throw error;
+            created += data?.length || 0;
+            // Ceder control al event loop para no bloquear UI en lotes grandes
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((r) => setTimeout(r, 0));
+        }
+        return created;
+    },
     // Obtener los tipos de movimiento disponibles
     getMovementTypes: async () => {
         const supabase = await getSupabaseClient();
@@ -585,6 +604,25 @@ export const stockMovementService = {
         if (error)
             throw error;
         return data || [];
+    },
+    // Helper: obtener movement_type_id para entradas iniciales
+    getInboundInitialTypeId: async () => {
+        const types = await stockMovementService.getMovementTypes();
+        // Preferencias por c3digo
+        const preferred = ['IN_INITIAL', 'IN_OPENING', 'IN_ADJUSTMENT', 'IN_PURCHASE'];
+        for (const code of preferred) {
+            const t = types.find((mt) => (mt.code || '').toUpperCase() === code);
+            if (t)
+                return t.id;
+        }
+        // Si no hay coincidencia exacta, tomar el primer tipo de entrada (c3digo que empiece con IN_)
+        const anyInbound = types.find((mt) => (mt.code || '').toUpperCase().startsWith('IN_'));
+        if (anyInbound)
+            return anyInbound.id;
+        // Fallback extremo: primer tipo
+        if (types.length)
+            return types[0].id;
+        throw new Error('No hay tipos de movimiento configurados');
     },
     // Obtener el stock actual de un producto en un almacén específico
     getCurrentStock: async (product_id, warehouse_id) => {

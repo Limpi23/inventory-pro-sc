@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import InventoryInitialImport from '../components/inventory/InventoryInitialImport';
 import { supabase } from '../lib/supabase';
 import Papa from 'papaparse';
 import { useReactToPrint } from 'react-to-print';
@@ -312,6 +313,17 @@ const InventoryGeneral: React.FC = () => {
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-semibold">Inventario General</h1>
         <div className="flex space-x-3">
+          <InventoryInitialImport
+            trigger={<button className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 flex items-center">
+              <i className="fas fa-file-import mr-2"></i>
+              Importar Inventario Inicial
+            </button>}
+            onImported={() => {
+              // Refrescar inventario tras importaci3n
+              fetchInventory();
+              setActiveTab('current');
+            }}
+          />
           <button
             onClick={openExportOptions}
             className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 flex items-center"

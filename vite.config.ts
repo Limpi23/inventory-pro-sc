@@ -68,10 +68,9 @@ export default defineConfig(({ mode }) => {
           }
         }
       },
-      exclude: [
-        // Exclude any JS files in src; TS is the source of truth
-        'src/**/**/*.js'
-      ]
+      // Do not use file globs here; this array is for dependency names.
+      // Leaving empty to let Vite handle pre-bundling correctly.
+      exclude: []
     },
     base: './',
     server: {
