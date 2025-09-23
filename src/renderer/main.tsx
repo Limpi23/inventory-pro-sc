@@ -9,9 +9,7 @@ import { AuthProvider } from './lib/auth';
 const UsingHash = window.location.protocol === 'file:';
 const Router: React.FC<{ children: React.ReactNode }> = ({ children }) => UsingHash ? <HashRouter>{children}</HashRouter> : <BrowserRouter>{children}</BrowserRouter>;
 
-if (UsingHash) {
-  console.log('[bootstrap] Ejecutando en modo producción file:// usando HashRouter');
-}
+// (debug removed)
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

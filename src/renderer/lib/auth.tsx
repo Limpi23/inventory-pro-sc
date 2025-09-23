@@ -69,7 +69,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setUser(userMapped);
           // Debug: log user role info
           try {
-            console.log('[Auth] Usuario cargado', { id: userMapped.id, role_id: userMapped.role_id, role_name: userMapped.role_name });
+            
           } catch {}
           // Cargar permisos del usuario
           const userPermissions = await userService.getUserPermissions(userMapped.id);
@@ -79,7 +79,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           })));
           try {
             const hasUbicacionesRead = userPermissions.some((p: any) => p.resource === 'ubicaciones' && (p.action === 'read' || p.action === '*'));
-            console.log('[Auth] Permisos cargados', { total: userPermissions.length, ubicacionesRead: hasUbicacionesRead });
+            
           } catch {}
         }
       } catch (error) {
@@ -133,7 +133,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           .update({ last_login: new Date().toISOString() })
           .eq('id', userData.id);
       } catch (e) {
-        console.warn('No se pudo actualizar el último acceso:', e);
+        
       }
       // Establecer usuario en el estado
       setUser(userData);
@@ -160,7 +160,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       })));
       try {
         const hasUbicacionesRead = userPermissions.some((p: any) => p.resource === 'ubicaciones' && (p.action === 'read' || p.action === '*'));
-        console.log('[Auth] Permisos post-login', { total: userPermissions.length, ubicacionesRead: hasUbicacionesRead });
+        
       } catch {}
       // Verificar suscripción al iniciar sesión
       if (userData.tenant_id) {
@@ -170,7 +170,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       toast.success('Sesión iniciada correctamente');
       return true;
     } catch (error: any) {
-      console.error('Error en inicio de sesión:', error);
+      
       toast.error(error.message || 'Error al iniciar sesión');
       return false;
     } finally {
@@ -194,7 +194,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const subscriptionInfo = await subscriptionService.getCurrentSubscription(currentUser.tenant_id);
       return subscriptionInfo;
     } catch (error) {
-      console.error('Error al verificar suscripción:', error);
+      
       return {
         isActive: false,
         endDate: null,

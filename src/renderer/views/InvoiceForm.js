@@ -75,7 +75,6 @@ const InvoiceForm = () => {
             setCustomers(data || []);
         }
         catch (err) {
-            console.error('Error cargando clientes:', err);
             setError(err.message);
         }
     };
@@ -90,7 +89,6 @@ const InvoiceForm = () => {
             setWarehouses(data || []);
         }
         catch (err) {
-            console.error('Error cargando almacenes:', err);
             setError(err.message);
         }
     };
@@ -105,7 +103,6 @@ const InvoiceForm = () => {
             setProducts(data || []);
         }
         catch (err) {
-            console.error('Error cargando productos:', err);
             setError(err.message);
         }
         finally {
@@ -173,7 +170,6 @@ const InvoiceForm = () => {
             }
         }
         catch (err) {
-            console.error('Error cargando detalles de la factura:', err);
             setError(err.message);
         }
         finally {
@@ -402,7 +398,6 @@ const InvoiceForm = () => {
                             .from('stock_movements')
                             .insert(stockMovements);
                         if (movementError) {
-                            console.error('Error registrando movimientos de inventario:', movementError);
                             // No interrumpimos el proceso por errores en los movimientos
                         }
                     }
@@ -413,7 +408,6 @@ const InvoiceForm = () => {
             navigate('/ventas/facturas');
         }
         catch (err) {
-            console.error('Error guardando factura:', err);
             toast.error(`Error: ${err.message}`);
         }
         finally {

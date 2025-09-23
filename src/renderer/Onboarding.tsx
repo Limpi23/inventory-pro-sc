@@ -30,11 +30,11 @@ const Onboarding: React.FC<OnboardingProps> = ({ onFinish }) => {
           setLoading(false);
         }
       }).catch((e: any) => {
-        console.warn('[Onboarding] Error obteniendo config', e);
+        
         setLoading(false);
       });
     } else {
-      console.warn('[Onboarding] supabaseConfig API no disponible');
+      
       setLoading(false);
     }
   }, [onFinish]);

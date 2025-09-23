@@ -32,7 +32,7 @@ const Returns: React.FC = () => {
       if (error) throw error;
   setReturns((data as any[]) || []);
     } catch (error: any) {
-      console.error('Error al cargar devoluciones:', error.message);
+      
       toast.error(`Error al cargar devoluciones: ${error.message}`);
     } finally {
       setLoading(false);
@@ -78,7 +78,7 @@ const Returns: React.FC = () => {
       toast.success(`Estado de devolución actualizado a ${newStatus}`);
       fetchReturns();
     } catch (error: any) {
-      console.error('Error al actualizar estado de devolución:', error.message);
+      
       toast.error(`Error al actualizar estado: ${error.message}`);
     }
   };

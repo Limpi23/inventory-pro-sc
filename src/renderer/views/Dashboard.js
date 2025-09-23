@@ -148,9 +148,8 @@ const Dashboard = () => {
                     .rpc('get_top_selling_products', { limit_count: 5 })
                     .select('*');
                 if (topProductsError) {
-                    console.error('Error fetching top products via RPC:', topProductsError);
                     // Fallback - consultar movimientos y productos directamente
-                    console.log("Usando método alternativo para obtener productos más vendidos");
+                    // debug silenciado
                     // Obtener todos los productos primero
                     const { data: products, error: productsError } = await client
                         .from('products')
@@ -211,7 +210,6 @@ const Dashboard = () => {
                 }
             }
             catch (error) {
-                console.error("Error al obtener los productos más vendidos:", error);
                 setTopProducts([]);
             }
             // Fetch low stock products detail
@@ -279,12 +277,10 @@ const Dashboard = () => {
                 }
             }
             catch (error) {
-                console.error("Error al obtener productos con bajo stock:", error);
                 setLowStockProducts([]);
             }
         }
         catch (error) {
-            console.error('Error fetching dashboard data:', error);
             toast.error('Error al cargar los datos del dashboard');
         }
         finally {

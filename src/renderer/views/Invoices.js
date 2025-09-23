@@ -90,7 +90,6 @@ const Invoices = () => {
             setInvoices(updatedInvoices);
         }
         catch (error) {
-            console.error('Error al cargar facturas:', error.message);
             toast.error(`Error al cargar facturas: ${error.message}`);
         }
         finally {

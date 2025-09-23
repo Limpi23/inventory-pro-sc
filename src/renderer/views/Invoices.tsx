@@ -103,7 +103,7 @@ const Invoices: React.FC = () => {
       
       setInvoices(updatedInvoices);
     } catch (error: any) {
-      console.error('Error al cargar facturas:', error.message);
+      
       toast.error(`Error al cargar facturas: ${error.message}`);
     } finally {
       setLoading(false);

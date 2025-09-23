@@ -8,7 +8,5 @@ import { AuthProvider } from './lib/auth';
 // En producción (protocolo file://) usamos HashRouter para evitar problemas de rutas con file system
 const UsingHash = window.location.protocol === 'file:';
 const Router = ({ children }) => UsingHash ? _jsx(HashRouter, { children: children }) : _jsx(BrowserRouter, { children: children });
-if (UsingHash) {
-    console.log('[bootstrap] Ejecutando en modo producción file:// usando HashRouter');
-}
+// (debug removed)
 ReactDOM.createRoot(document.getElementById('root')).render(_jsx(React.StrictMode, { children: _jsx(AuthProvider, { children: _jsx(Router, { children: _jsx(App, {}) }) }) }));

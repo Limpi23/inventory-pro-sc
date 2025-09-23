@@ -269,7 +269,7 @@ export const logAppEvent = async (
     await eventLogService.create({ action, entity: entity ?? null, entity_id: entity_id ?? null, details, actor_id, actor_email });
   } catch (e) {
     // No-op: nunca bloqueamos la UI por un fallo de logging
-    try { console.debug('[logAppEvent] fallo al registrar', action, e); } catch {}
+    /* swallow logging errors */
   }
 };
 // Servicios para interactuar con Supabase
@@ -412,12 +412,10 @@ export const productService = {
         if (data) results.push(...(data as Product[]));
       } catch (e) {
         errors.push(e);
-        console.error('Error lote productos', e);
+        /* batch insert error swallowed; aggregated below */
       }
     }
-    if (errors.length) {
-      console.warn(`Insertados ${results.length} con ${errors.length} errores`);
-    }
+    // optionally handle aggregated errors via UI toast upstream
     await logAppEvent('product.create_batch', 'product', null, { count: results.length, errors: errors.length });
     return results;
   }

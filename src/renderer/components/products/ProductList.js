@@ -52,7 +52,6 @@ export default function ProductList() {
                 setLocations(locs?.map(l => ({ id: l.id, name: l.name, warehouse_id: l.warehouse_id })) || []);
             }
             catch (e) {
-                console.error('Error cargando filtros almacén/ubicación', e);
             }
         })();
     }, []);
@@ -68,7 +67,6 @@ export default function ProductList() {
                 setPage(1);
         }
         catch (error) {
-            console.error("Error al cargar productos:", error);
         }
         finally {
             setIsLoading(false);
@@ -88,7 +86,6 @@ export default function ProductList() {
             setPage(1);
         }
         catch (error) {
-            console.error("Error al buscar productos:", error);
         }
         finally {
             setIsLoading(false);
@@ -161,7 +158,6 @@ export default function ProductList() {
                 fetchProducts({ keepPage: true });
             }
             catch (error) {
-                console.error("Error al eliminar producto:", error);
             }
         }
     }
@@ -174,7 +170,6 @@ export default function ProductList() {
             fetchProducts({ keepPage: true });
         }
         catch (error) {
-            console.error('Error al marcar inactivo:', error);
         }
     }
     async function handleMarkActive(id, alreadyActive) {
@@ -186,7 +181,6 @@ export default function ProductList() {
             fetchProducts({ keepPage: true });
         }
         catch (error) {
-            console.error('Error al marcar activo:', error);
         }
     }
     function handleModalClose() {
@@ -255,7 +249,6 @@ export default function ProductList() {
             XLSX.writeFile(wb, `productos_${new Date().toISOString().slice(0, 10)}.xlsx`);
         }
         catch (e) {
-            console.error('Error exportando productos', e);
             toast?.error?.('No se pudo exportar productos');
         }
     };
@@ -277,7 +270,6 @@ export default function ProductList() {
                                                     await fetchProducts({ keepPage: true });
                                                 }
                                                 catch (e) {
-                                                    console.error('Error en eliminación masiva de productos', e);
                                                     toast.error('Ocurrió un error eliminando uno o más productos.');
                                                 }
                                                 finally {

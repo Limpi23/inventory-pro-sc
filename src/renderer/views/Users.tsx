@@ -32,6 +32,14 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Switch } from '../components/ui/switch';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '../components/ui/dropdown-menu';
+import authService from '../lib/authService';
 
 const Users: React.FC = () => {
   const { user: currentUser, hasPermission } = useAuth();
@@ -164,6 +172,15 @@ const Users: React.FC = () => {
     } catch (error: any) {
       console.error('Error al eliminar usuario:', error.message);
       toast.error(`Error al eliminar usuario: ${error.message}`);
+    }
+  };
+
+  const handleSendReset = async (email: string) => {
+    try {
+      await authService.requestPasswordReset(email);
+      toast.success('Correo de recuperación enviado');
+    } catch (error: any) {
+      toast.error(error.message || 'No se pudo enviar el correo');
     }
   };
 
@@ -339,28 +356,41 @@ const Users: React.FC = () => {
                       {user.last_login ? new Date(user.last_login).toLocaleString() : 'Nunca'}
                     </TableCell>
                     <TableCell>
-                      <div className="flex space-x-2">
-                        {canEdit && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEditUser(user)}
-                            title="Editar usuario"
-                          >
-                            <i className="fas fa-edit text-muted-foreground"></i>
-                          </Button>
-                        )}
-                        {canDelete && !isCurrentUser(user.id) && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteUser(user.id)}
-                            title="Eliminar usuario"
-                          >
-                            <i className="fas fa-trash text-red-500"></i>
-                          </Button>
-                        )}
-                      </div>
+                      {(canEdit || canDelete) ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="h-8 px-2">
+                              <i className="fas fa-ellipsis-v mr-2"></i>
+                              Acciones
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="min-w-[180px]">
+                            {canEdit && (
+                              <DropdownMenuItem onClick={() => handleEditUser(user)}>
+                                <i className="fas fa-edit text-muted-foreground"></i>
+                                <span className="ml-2">Editar</span>
+                              </DropdownMenuItem>
+                            )}
+                            {canEdit && (
+                              <DropdownMenuItem onClick={() => handleSendReset(user.email)}>
+                                <i className="fas fa-unlock-alt text-muted-foreground"></i>
+                                <span className="ml-2">Enviar recuperación</span>
+                              </DropdownMenuItem>
+                            )}
+                            {canEdit && canDelete && !isCurrentUser(user.id) && (
+                              <DropdownMenuSeparator />
+                            )}
+                            {canDelete && !isCurrentUser(user.id) && (
+                              <DropdownMenuItem onClick={() => handleDeleteUser(user.id)} className="text-red-600 focus:text-red-700">
+                                <i className="fas fa-trash"></i>
+                                <span className="ml-2">Eliminar</span>
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))

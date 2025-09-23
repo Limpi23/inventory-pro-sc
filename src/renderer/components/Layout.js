@@ -115,10 +115,7 @@ const Layout = ({ children, onOpenConfig }) => {
         const allowed = hasPermission(item.requiredPermission.resource, item.requiredPermission.action);
         // Debug puntual para Ubicaciones
         if (item.requiredPermission.resource === 'ubicaciones') {
-            try {
-                console.log('[Layout] Ubicaciones visible?', { roleName, role_id: user?.role_id, allowed });
-            }
-            catch { }
+            // debug silenciado
         }
         return allowed;
     });
@@ -128,7 +125,6 @@ const Layout = ({ children, onOpenConfig }) => {
             // Al cerrar sesión, la redirección se manejará en el AuthProvider
         }
         catch (error) {
-            console.error('Error al cerrar sesión:', error);
         }
     };
     const [appVersion, setAppVersion] = useState('');

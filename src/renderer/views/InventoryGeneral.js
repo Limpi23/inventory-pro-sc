@@ -42,7 +42,7 @@ const InventoryGeneral = () => {
             setIsLoading(false);
         }
         catch (err) {
-            console.error('Error cargando inventario:', err);
+            // error already surfaced via toast elsewhere; no console noise
             setError(err.message);
             setIsLoading(false);
         }
@@ -81,7 +81,7 @@ const InventoryGeneral = () => {
             setActiveTab('history');
         }
         catch (err) {
-            console.error('Error cargando historial:', err);
+            // swallow console noise
             setError(err.message);
         }
         finally {
@@ -132,7 +132,7 @@ const InventoryGeneral = () => {
             setLocationsByRow(prev => ({ ...prev, [cacheKey]: mapped }));
         }
         catch (e) {
-            console.error('Error cargando existencias por ubicación:', e);
+            // swallow console noise
             setError(e.message || 'No se pudieron cargar las ubicaciones');
         }
         finally {
@@ -180,7 +180,7 @@ const InventoryGeneral = () => {
         contentRef: printComponentRef,
         documentTitle: `Inventario para Conteo Físico - ${new Date().toLocaleDateString()}`,
         onAfterPrint: () => {
-            console.log('Impresión completada');
+            // impresión completada (silenciado)
         }
     });
     // Función para abrir las opciones de exportación
@@ -261,7 +261,7 @@ const InventoryGeneral = () => {
             closeExportOptions();
         }
         catch (err) {
-            console.error('Error al exportar inventario:', err);
+            // swallow console noise
             setError('Error al generar el archivo CSV: ' + err.message);
         }
         finally {

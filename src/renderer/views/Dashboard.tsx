@@ -218,10 +218,10 @@ const Dashboard: React.FC = () => {
           .select('*');
         
         if (topProductsError) {
-          console.error('Error fetching top products via RPC:', topProductsError);
+          
           
           // Fallback - consultar movimientos y productos directamente
-          console.log("Usando método alternativo para obtener productos más vendidos");
+          // debug silenciado
           
           // Obtener todos los productos primero
           const { data: products, error: productsError } = await client
@@ -290,7 +290,7 @@ const Dashboard: React.FC = () => {
           setTopProducts(formattedTopProducts);
         }
       } catch (error) {
-        console.error("Error al obtener los productos más vendidos:", error);
+        
         setTopProducts([]);
       }
       
@@ -366,12 +366,12 @@ const Dashboard: React.FC = () => {
           setLowStockProducts(formattedLowStock);
         }
       } catch (error) {
-        console.error("Error al obtener productos con bajo stock:", error);
+        
         setLowStockProducts([]);
       }
       
     } catch (error: any) {
-      console.error('Error fetching dashboard data:', error);
+      
       toast.error('Error al cargar los datos del dashboard');
     } finally {
       setLoading(false);

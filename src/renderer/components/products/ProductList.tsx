@@ -57,7 +57,7 @@ export default function ProductList() {
         setWarehouses((whs as any[])?.map(w => ({ id: w.id, name: w.name })) || []);
         setLocations((locs as any[])?.map(l => ({ id: l.id, name: l.name, warehouse_id: (l as any).warehouse_id })) || []);
       } catch (e) {
-        console.error('Error cargando filtros almacén/ubicación', e);
+        
       }
     })();
   }, []);
@@ -72,7 +72,7 @@ export default function ProductList() {
   setSelectedIds(prev => new Set([...prev].filter(id => list.some(p => p.id === id))));
   if (!opts?.keepPage) setPage(1);
     } catch (error) {
-      console.error("Error al cargar productos:", error);
+      
     } finally {
       setIsLoading(false);
     }
@@ -92,7 +92,7 @@ export default function ProductList() {
   setSelectedIds(prev => new Set([...prev].filter(id => list.some(p => p.id === id))));
   setPage(1);
     } catch (error) {
-      console.error("Error al buscar productos:", error);
+      
     } finally {
       setIsLoading(false);
     }
@@ -166,7 +166,7 @@ export default function ProductList() {
   });
     fetchProducts({ keepPage: true });
       } catch (error) {
-        console.error("Error al eliminar producto:", error);
+        
       }
     }
   }
@@ -178,7 +178,7 @@ export default function ProductList() {
   window.logger?.log({ action: 'product.mark_inactive', entity: 'product', entityId: id, actor: user?.email || undefined });
   fetchProducts({ keepPage: true });
     } catch (error) {
-      console.error('Error al marcar inactivo:', error);
+      
     }
   }
 
@@ -189,7 +189,7 @@ export default function ProductList() {
   window.logger?.log({ action: 'product.mark_active', entity: 'product', entityId: id, actor: user?.email || undefined });
   fetchProducts({ keepPage: true });
     } catch (error) {
-      console.error('Error al marcar activo:', error);
+      
     }
   }
 
@@ -264,7 +264,7 @@ export default function ProductList() {
       XLSX.utils.book_append_sheet(wb, ws, "Productos");
       XLSX.writeFile(wb, `productos_${new Date().toISOString().slice(0,10)}.xlsx`);
     } catch (e) {
-      console.error('Error exportando productos', e);
+      
       (toast as any)?.error?.('No se pudo exportar productos');
     }
   };
@@ -362,7 +362,7 @@ export default function ProductList() {
                         setSelectedIds(new Set());
                         await fetchProducts({ keepPage: true });
                       } catch (e) {
-                        console.error('Error en eliminación masiva de productos', e);
+                        
                         toast.error('Ocurrió un error eliminando uno o más productos.');
                       } finally {
                         setIsLoading(false);

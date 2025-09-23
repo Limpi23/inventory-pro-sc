@@ -130,34 +130,61 @@ export const authService = {
   }): Promise<User> => {
     try {
       const client = await supabase.getClient();
+      // Pre-chequeo: evitar registrar si el email ya existe en public.users
+      const lowerEmail = userData.email.toLowerCase();
+      try {
+        const { data: existing } = await client
+          .from('users')
+          .select('id')
+          .eq('email', lowerEmail)
+          .maybeSingle();
+        if (existing?.id) {
+          throw new Error('El email ya está registrado en el sistema.');
+        }
+      } catch (preErr: any) {
+        // Si la API no soporta maybeSingle y responde con error distinto a not found, propagamos
+        if (preErr?.message && !/not found|PGRST116/i.test(preErr.message)) {
+          throw preErr;
+        }
+      }
       // Registrar en Supabase Auth directamente
       const { data: signUpData, error: signUpError } = await client.auth.signUp({
-        email: userData.email,
+        email: lowerEmail,
         password: userData.password,
         options: {
           data: {
             full_name: userData.full_name
-          }
+          },
+          emailRedirectTo: getConfirmEmailRedirectUrl()
         }
       });
       if (signUpError || !signUpData.user) {
-        // Si el error es de email ya registrado, muestra mensaje claro
-        if (signUpError?.message?.toLowerCase().includes('user already registered') || signUpError?.message?.toLowerCase().includes('email')) {
+        // Clarificar mensajes comunes
+        const raw = (signUpError?.message || '').toLowerCase();
+        if (raw.includes('user already registered') || raw.includes('email')) {
           throw new Error('El email ya está registrado en el sistema.');
         }
+        if (raw.includes('over quota') || raw.includes('status 500')) {
+          throw new Error('Servicio de autenticación temporalmente no disponible. Inténtalo de nuevo.');
+        }
+        // Propagar el error original si no es uno de los conocidos
         throw new Error(signUpError?.message || 'No se pudo registrar el usuario');
       }
-      // Insertar en la tabla users
+      // Actualizar/crear registro en public.users SIN duplicar (el trigger ya crea una fila)
+      // Usamos upsert por id para que sea idempotente y podamos aplicar el rol elegido
       const { data: newUserData, error } = await client
         .from('users')
-        .insert({
-          id: signUpData.user.id,
-          email: userData.email.toLowerCase(),
-          full_name: userData.full_name,
-          role_id: userData.role_id,
-          active: true,
-          created_at: new Date().toISOString()
-        })
+        .upsert(
+          {
+            id: signUpData.user.id,
+            email: userData.email.toLowerCase(),
+            full_name: userData.full_name,
+            role_id: userData.role_id,
+            active: true,
+            created_at: new Date().toISOString()
+          },
+          { onConflict: 'id' }
+        )
         .select(`
           id, 
           email, 
@@ -168,7 +195,7 @@ export const authService = {
         `)
         .single();
       if (error || !newUserData) {
-        throw new Error(error?.message || 'No se pudo crear el usuario en la base de datos.');
+        throw new Error(error?.message || 'No se pudo actualizar el perfil del usuario.');
       }
       // Obtener información del rol
       const { data: roleData } = await client
@@ -203,6 +230,28 @@ export const authService = {
       throw error;
     }
   },
+
+  // Enviar email de recuperación de contraseña
+  requestPasswordReset: async (email: string): Promise<void> => {
+    const client = await supabase.getClient();
+    const redirectTo = getResetRedirectUrl();
+    const { error } = await (client as any).auth.resetPasswordForEmail(email.toLowerCase(), {
+      redirectTo,
+    });
+    if (error) throw error;
+  },
+
+  // Reenviar correo de confirmación de registro
+  resendSignupConfirmation: async (email: string): Promise<void> => {
+    const client = await supabase.getClient();
+    const redirectTo = getConfirmEmailRedirectUrl();
+    const { error } = await (client as any).auth.resend({
+      type: 'signup',
+      email: email.toLowerCase(),
+      options: { emailRedirectTo: redirectTo }
+    } as any);
+    if (error) throw error;
+  },
 };
 
 // Función auxiliar para guardar la sesión
@@ -216,3 +265,44 @@ function isRoleArray(roles: any): roles is { name: string; description?: string 
 }
 
 export default authService; 
+
+// URL de redirección para el flujo de recuperación
+function getResetRedirectUrl(): string | undefined {
+  try {
+    // Si estamos en un contexto web (dev), usamos la misma origin
+    if (typeof window !== 'undefined' && window.location && window.location.origin.startsWith('http')) {
+      return `${window.location.origin}/reset-password`;
+    }
+    // En producción (Electron) se recomienda configurar en Supabase Authentication > URL Configuration
+    // un Site URL público (p.ej. página estática) que apunte a /reset-password.
+    // Si no hay, devolver undefined para usar el Site URL por defecto de Supabase.
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// URL de redirección después de confirmar email
+function getLoginRedirectUrl(): string | undefined {
+  try {
+    if (typeof window !== 'undefined' && window.location && window.location.origin.startsWith('http')) {
+      return `${window.location.origin}/login`;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// URL a la que debe llegar el usuario tras confirmar su email
+function getConfirmEmailRedirectUrl(): string | undefined {
+  try {
+    if (typeof window !== 'undefined' && window.location && window.location.origin.startsWith('http')) {
+      // Tras confirmar, que vuelva al login por si necesita iniciar sesión
+      return `${window.location.origin}/login`;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}

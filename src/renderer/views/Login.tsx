@@ -16,6 +16,7 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   
   const { signIn } = useAuth();
+  const [lastError, setLastError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   // Cargar credenciales guardadas al iniciar
@@ -53,14 +54,22 @@ const Login: React.FC = () => {
       }
       
       // Usar el método signIn del contexto de autenticación
-      const success = await signIn(email, password);
+  const success = await signIn(email, password);
       
       if (success) {
         navigate('/');
+      } else {
+        setLastError('AuthApiError: Email not confirmed');
       }
     } catch (error) {
       console.error('Error en inicio de sesión:', error);
-      toast.error('Error al iniciar sesión');
+      const msg = (error as any)?.message || '';
+      setLastError(msg);
+      if (/email not confirmed/i.test(msg)) {
+        toast.error('Debes confirmar tu email. Puedes reenviar el correo de confirmación.');
+      } else {
+        toast.error('Error al iniciar sesión');
+      }
     } finally {
       setLoading(false);
     }
@@ -168,6 +177,35 @@ const Login: React.FC = () => {
             </Button>
           </div>
         </form>
+        <div className="text-center mt-2">
+          <button
+            type="button"
+            onClick={() => navigate('/reset-password')}
+            className="text-sm text-blue-600 hover:underline"
+          >
+            ¿Olvidaste tu contraseña?
+          </button>
+        </div>
+        {lastError && /email not confirmed/i.test(lastError) && (
+          <div className="text-center mt-2">
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const svc = (await import('../lib/authService')).default;
+                  await svc.resendSignupConfirmation(email);
+                  toast.success('Correo de confirmación reenviado');
+                } catch (e: any) {
+                  toast.error(e?.message || 'No se pudo reenviar el correo');
+                }
+              }}
+              className="text-sm text-blue-600 hover:underline"
+              disabled={!email}
+            >
+              Reenviar correo de confirmación
+            </button>
+          </div>
+        )}
         
         <div className="mt-6 text-center text-sm">
           <p className="text-gray-600">

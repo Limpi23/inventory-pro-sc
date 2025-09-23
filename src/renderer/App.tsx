@@ -34,6 +34,7 @@ import ReturnDetail from './views/ReturnDetail';
 import Users from './views/Users';
 import RolePermissions from './views/RolePermissions';
 import Login from './views/Login';
+import ResetPassword from './views/ResetPassword';
 import Settings from './views/Settings';
 import { AuthProvider, useAuth } from './lib/auth';
 import { Toaster } from 'react-hot-toast';
@@ -104,26 +105,26 @@ const App = () => {
     const win = window as any;
     const forced = sessionStorage.getItem('forceOnboarding') === '1';
     if (forced) {
-      console.log('[App] forceOnboarding activo');
+  // debug silenciado
       setShowOnboarding(true);
       sessionStorage.removeItem('forceOnboarding');
       return;
     }
     if (win.supabaseConfig && typeof win.supabaseConfig.get === 'function') {
       win.supabaseConfig.get().then((config: any) => {
-        console.log('[App] Supabase config obtenida:', config);
+  // debug silenciado
         if (config?.url && config?.anonKey) {
           setReady(true);
         } else {
-          console.log('[App] No hay config guardada: mostrando onboarding');
+          // debug silenciado
           setShowOnboarding(true);
         }
       }).catch((e: any) => {
-        console.warn('[App] Error obteniendo config supabase:', e);
+  // debug silenciado
         setShowOnboarding(true);
       });
     } else {
-      console.log('[App] win.supabaseConfig no disponible; continuando');
+  // debug silenciado
       setReady(true);
     }
   }, []);
@@ -163,6 +164,8 @@ const App = () => {
       <Routes>
         {/* Ruta pública para login */}
         <Route path="/login" element={<Login />} />
+        {/* Ruta pública para recuperación de contraseña */}
+        <Route path="/reset-password" element={<ResetPassword />} />
         {/* Rutas de suscripción */}
         <Route path="/subscription/expired" element={
           <ProtectedRoute>

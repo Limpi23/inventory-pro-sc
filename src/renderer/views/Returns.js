@@ -30,7 +30,6 @@ const Returns = () => {
             setReturns(data || []);
         }
         catch (error) {
-            console.error('Error al cargar devoluciones:', error.message);
             toast.error(`Error al cargar devoluciones: ${error.message}`);
         }
         finally {
@@ -69,7 +68,6 @@ const Returns = () => {
             fetchReturns();
         }
         catch (error) {
-            console.error('Error al actualizar estado de devolución:', error.message);
             toast.error(`Error al actualizar estado: ${error.message}`);
         }
     };

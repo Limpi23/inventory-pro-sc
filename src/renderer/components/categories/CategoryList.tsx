@@ -33,7 +33,7 @@ export default function CategoryList() {
       const data = await categoriesService.getAll();
       setCategories(data || []);
     } catch (error) {
-      console.error("Error al cargar categorías:", error);
+      
       toast.error("Error al cargar categorías");
     } finally {
       setIsLoading(false);
@@ -52,7 +52,7 @@ export default function CategoryList() {
         fetchCategories();
         toast.success("Categoría eliminada correctamente");
       } catch (error) {
-        console.error("Error al eliminar categoría:", error);
+        
         toast.error("Error al eliminar categoría");
       }
     }
@@ -103,11 +103,11 @@ export default function CategoryList() {
           
           if (result.errors > 0) {
             toast.error(`No se pudieron importar ${result.errors} categorías`);
-            console.error("Errores de importación:", result.messages);
+            
           }
           
         } catch (error) {
-          console.error("Error al procesar el archivo CSV:", error);
+          
           toast.error("Error al procesar el archivo");
         } finally {
           setIsImporting(false);
@@ -120,7 +120,7 @@ export default function CategoryList() {
       reader.readAsText(file);
       
     } catch (error) {
-      console.error("Error al importar categorías:", error);
+      
       toast.error("Error al importar categorías");
       setIsImporting(false);
       if (fileInputRef.current) {
@@ -152,7 +152,7 @@ export default function CategoryList() {
       
       toast.success("Categorías exportadas correctamente");
     } catch (error) {
-      console.error("Error al exportar categorías:", error);
+      
       toast.error("Error al exportar categorías");
     } finally {
       setIsExporting(false);

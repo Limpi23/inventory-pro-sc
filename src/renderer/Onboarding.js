@@ -19,12 +19,10 @@ const Onboarding = ({ onFinish }) => {
                     setLoading(false);
                 }
             }).catch((e) => {
-                console.warn('[Onboarding] Error obteniendo config', e);
                 setLoading(false);
             });
         }
         else {
-            console.warn('[Onboarding] supabaseConfig API no disponible');
             setLoading(false);
         }
     }, [onFinish]);

@@ -69,7 +69,7 @@ const InventoryGeneral: React.FC = () => {
       
       setIsLoading(false);
     } catch (err: any) {
-      console.error('Error cargando inventario:', err);
+  // error already surfaced via toast elsewhere; no console noise
       setError(err.message);
       setIsLoading(false);
     }
@@ -110,7 +110,7 @@ const InventoryGeneral: React.FC = () => {
       setMovements(formattedMovements);
       setActiveTab('history');
     } catch (err: any) {
-      console.error('Error cargando historial:', err);
+  // swallow console noise
       setError(err.message);
     } finally {
       setIsLoading(false);
@@ -158,7 +158,7 @@ const InventoryGeneral: React.FC = () => {
 
       setLocationsByRow(prev => ({ ...prev, [cacheKey]: mapped }));
     } catch (e: any) {
-      console.error('Error cargando existencias por ubicación:', e);
+  // swallow console noise
       setError(e.message || 'No se pudieron cargar las ubicaciones');
     } finally {
       setLocationsLoading(false);
@@ -208,7 +208,7 @@ const InventoryGeneral: React.FC = () => {
     contentRef: printComponentRef,
     documentTitle: `Inventario para Conteo Físico - ${new Date().toLocaleDateString()}`,
     onAfterPrint: () => {
-      console.log('Impresión completada');
+  // impresión completada (silenciado)
     }
   });
   
@@ -301,7 +301,7 @@ const InventoryGeneral: React.FC = () => {
       closeExportOptions();
       
     } catch (err: any) {
-      console.error('Error al exportar inventario:', err);
+  // swallow console noise
       setError('Error al generar el archivo CSV: ' + err.message);
     } finally {
       setIsExporting(false);

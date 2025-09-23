@@ -54,7 +54,6 @@ export const AuthProvider = ({ children }) => {
                     setUser(userMapped);
                     // Debug: log user role info
                     try {
-                        console.log('[Auth] Usuario cargado', { id: userMapped.id, role_id: userMapped.role_id, role_name: userMapped.role_name });
                     }
                     catch { }
                     // Cargar permisos del usuario
@@ -65,7 +64,6 @@ export const AuthProvider = ({ children }) => {
                     })));
                     try {
                         const hasUbicacionesRead = userPermissions.some((p) => p.resource === 'ubicaciones' && (p.action === 'read' || p.action === '*'));
-                        console.log('[Auth] Permisos cargados', { total: userPermissions.length, ubicacionesRead: hasUbicacionesRead });
                     }
                     catch { }
                 }
@@ -118,7 +116,6 @@ export const AuthProvider = ({ children }) => {
                     .eq('id', userData.id);
             }
             catch (e) {
-                console.warn('No se pudo actualizar el último acceso:', e);
             }
             // Establecer usuario en el estado
             setUser(userData);
@@ -145,7 +142,6 @@ export const AuthProvider = ({ children }) => {
             })));
             try {
                 const hasUbicacionesRead = userPermissions.some((p) => p.resource === 'ubicaciones' && (p.action === 'read' || p.action === '*'));
-                console.log('[Auth] Permisos post-login', { total: userPermissions.length, ubicacionesRead: hasUbicacionesRead });
             }
             catch { }
             // Verificar suscripción al iniciar sesión
@@ -157,7 +153,6 @@ export const AuthProvider = ({ children }) => {
             return true;
         }
         catch (error) {
-            console.error('Error en inicio de sesión:', error);
             toast.error(error.message || 'Error al iniciar sesión');
             return false;
         }
@@ -181,7 +176,6 @@ export const AuthProvider = ({ children }) => {
             return subscriptionInfo;
         }
         catch (error) {
-            console.error('Error al verificar suscripción:', error);
             return {
                 isActive: false,
                 endDate: null,

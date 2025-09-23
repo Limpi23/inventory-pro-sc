@@ -32,6 +32,7 @@ import ReturnDetail from './views/ReturnDetail';
 import Users from './views/Users';
 import RolePermissions from './views/RolePermissions';
 import Login from './views/Login';
+import ResetPassword from './views/ResetPassword';
 import Settings from './views/Settings';
 import { useAuth } from './lib/auth';
 import { Toaster } from 'react-hot-toast';
@@ -85,28 +86,28 @@ const App = () => {
         const win = window;
         const forced = sessionStorage.getItem('forceOnboarding') === '1';
         if (forced) {
-            console.log('[App] forceOnboarding activo');
+            // debug silenciado
             setShowOnboarding(true);
             sessionStorage.removeItem('forceOnboarding');
             return;
         }
         if (win.supabaseConfig && typeof win.supabaseConfig.get === 'function') {
             win.supabaseConfig.get().then((config) => {
-                console.log('[App] Supabase config obtenida:', config);
+                // debug silenciado
                 if (config?.url && config?.anonKey) {
                     setReady(true);
                 }
                 else {
-                    console.log('[App] No hay config guardada: mostrando onboarding');
+                    // debug silenciado
                     setShowOnboarding(true);
                 }
             }).catch((e) => {
-                console.warn('[App] Error obteniendo config supabase:', e);
+                // debug silenciado
                 setShowOnboarding(true);
             });
         }
         else {
-            console.log('[App] win.supabaseConfig no disponible; continuando');
+            // debug silenciado
             setReady(true);
         }
     }, []);
@@ -124,6 +125,6 @@ const App = () => {
     if (!ready && !showOnboarding) {
         return (_jsxs("div", { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', fontFamily: 'system-ui' }, children: [_jsx("div", { className: "animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mb-4" }), _jsx("div", { style: { opacity: 0.7, fontSize: 14 }, children: "Inicializando aplicaci\u00F3n..." })] }));
     }
-    return (_jsxs(_Fragment, { children: [_jsx(Toaster, { position: "top-right" }), showConfigModal && (_jsx(SupabaseConfigModal, { onFinish: handleConfigFinish, onClose: () => setShowConfigModal(false) })), showOnboarding && (_jsx(Onboarding, { onFinish: handleOnboardingFinish })), _jsxs(Routes, { children: [_jsx(Route, { path: "/login", element: _jsx(Login, {}) }), _jsx(Route, { path: "/subscription/expired", element: _jsx(ProtectedRoute, { children: _jsx(SubscriptionExpired, {}) }) }), _jsx(Route, { path: "/subscription/renew", element: _jsx(ProtectedRoute, { children: _jsx(SubscriptionRenew, {}) }) }), _jsxs(Route, { path: "/", element: _jsx(ProtectedRoute, { children: _jsx(SubscriptionGuard, { children: _jsx(LayoutWrapper, { onOpenConfig: handleOpenConfig }) }) }), children: [_jsx(Route, { index: true, element: _jsx(Dashboard, {}) }), _jsx(Route, { path: "productos", element: _jsx(Products, {}) }), _jsx(Route, { path: "categorias", element: _jsx(Categories, {}) }), _jsx(Route, { path: "almacenes", element: _jsx(Warehouses, {}) }), _jsx(Route, { path: "ubicaciones", element: _jsx(Locations, {}) }), _jsx(Route, { path: "proveedores", element: _jsx(Suppliers, {}) }), _jsx(Route, { path: "proveedores/:id", element: _jsx(SupplierDetail, {}) }), _jsx(Route, { path: "proveedores/:id/compras", element: _jsx(SupplierPurchases, {}) }), _jsx(Route, { path: "inventario", element: _jsx(Inventory, {}) }), _jsx(Route, { path: "inventario/general", element: _jsx(InventoryGeneral, {}) }), _jsx(Route, { path: "reportes", element: _jsx(Reports, {}) }), _jsx(Route, { path: "ordenes-compra", element: _jsx(PurchaseOrders, {}) }), _jsx(Route, { path: "ordenes-compra/lista", element: _jsx(PurchaseOrderList, {}) }), _jsx(Route, { path: "ordenes-compra/nueva", element: _jsx(PurchaseOrderForm, {}) }), _jsx(Route, { path: "ordenes-compra/editar/:id", element: _jsx(PurchaseOrderForm, {}) }), _jsx(Route, { path: "ordenes-compra/:id", element: _jsx(PurchaseOrderDetail, {}) }), _jsx(Route, { path: "ordenes-compra/:id/recibir", element: _jsx(PurchaseOrderDetail, {}) }), _jsx(Route, { path: "ventas", element: _jsx(Sales, {}) }), _jsx(Route, { path: "ventas/clientes", element: _jsx(Customers, {}) }), _jsx(Route, { path: "ventas/clientes/nuevo", element: _jsx(CustomerForm, {}) }), _jsx(Route, { path: "ventas/clientes/editar/:id", element: _jsx(CustomerForm, {}) }), _jsx(Route, { path: "ventas/facturas", element: _jsx(Invoices, {}) }), _jsx(Route, { path: "ventas/facturas/nueva", element: _jsx(InvoiceForm, {}) }), _jsx(Route, { path: "ventas/facturas/editar/:id", element: _jsx(InvoiceForm, {}) }), _jsx(Route, { path: "ventas/facturas/:id", element: _jsx(InvoiceDetail, {}) }), _jsx(Route, { path: "ventas/devoluciones", element: _jsx(Returns, {}) }), _jsx(Route, { path: "ventas/devoluciones/nueva", element: _jsx(ReturnForm, {}) }), _jsx(Route, { path: "ventas/devoluciones/:id", element: _jsx(ReturnDetail, {}) }), _jsx(Route, { path: "usuarios", element: _jsx(Users, {}) }), _jsx(Route, { path: "usuarios/permisos", element: _jsx(RolePermissions, {}) }), _jsx(Route, { path: "ajustes", element: _jsx(Settings, {}) }), _jsx(Route, { path: "*", element: _jsx(Navigate, { to: "/", replace: true }) })] })] })] }));
+    return (_jsxs(_Fragment, { children: [_jsx(Toaster, { position: "top-right" }), showConfigModal && (_jsx(SupabaseConfigModal, { onFinish: handleConfigFinish, onClose: () => setShowConfigModal(false) })), showOnboarding && (_jsx(Onboarding, { onFinish: handleOnboardingFinish })), _jsxs(Routes, { children: [_jsx(Route, { path: "/login", element: _jsx(Login, {}) }), _jsx(Route, { path: "/reset-password", element: _jsx(ResetPassword, {}) }), _jsx(Route, { path: "/subscription/expired", element: _jsx(ProtectedRoute, { children: _jsx(SubscriptionExpired, {}) }) }), _jsx(Route, { path: "/subscription/renew", element: _jsx(ProtectedRoute, { children: _jsx(SubscriptionRenew, {}) }) }), _jsxs(Route, { path: "/", element: _jsx(ProtectedRoute, { children: _jsx(SubscriptionGuard, { children: _jsx(LayoutWrapper, { onOpenConfig: handleOpenConfig }) }) }), children: [_jsx(Route, { index: true, element: _jsx(Dashboard, {}) }), _jsx(Route, { path: "productos", element: _jsx(Products, {}) }), _jsx(Route, { path: "categorias", element: _jsx(Categories, {}) }), _jsx(Route, { path: "almacenes", element: _jsx(Warehouses, {}) }), _jsx(Route, { path: "ubicaciones", element: _jsx(Locations, {}) }), _jsx(Route, { path: "proveedores", element: _jsx(Suppliers, {}) }), _jsx(Route, { path: "proveedores/:id", element: _jsx(SupplierDetail, {}) }), _jsx(Route, { path: "proveedores/:id/compras", element: _jsx(SupplierPurchases, {}) }), _jsx(Route, { path: "inventario", element: _jsx(Inventory, {}) }), _jsx(Route, { path: "inventario/general", element: _jsx(InventoryGeneral, {}) }), _jsx(Route, { path: "reportes", element: _jsx(Reports, {}) }), _jsx(Route, { path: "ordenes-compra", element: _jsx(PurchaseOrders, {}) }), _jsx(Route, { path: "ordenes-compra/lista", element: _jsx(PurchaseOrderList, {}) }), _jsx(Route, { path: "ordenes-compra/nueva", element: _jsx(PurchaseOrderForm, {}) }), _jsx(Route, { path: "ordenes-compra/editar/:id", element: _jsx(PurchaseOrderForm, {}) }), _jsx(Route, { path: "ordenes-compra/:id", element: _jsx(PurchaseOrderDetail, {}) }), _jsx(Route, { path: "ordenes-compra/:id/recibir", element: _jsx(PurchaseOrderDetail, {}) }), _jsx(Route, { path: "ventas", element: _jsx(Sales, {}) }), _jsx(Route, { path: "ventas/clientes", element: _jsx(Customers, {}) }), _jsx(Route, { path: "ventas/clientes/nuevo", element: _jsx(CustomerForm, {}) }), _jsx(Route, { path: "ventas/clientes/editar/:id", element: _jsx(CustomerForm, {}) }), _jsx(Route, { path: "ventas/facturas", element: _jsx(Invoices, {}) }), _jsx(Route, { path: "ventas/facturas/nueva", element: _jsx(InvoiceForm, {}) }), _jsx(Route, { path: "ventas/facturas/editar/:id", element: _jsx(InvoiceForm, {}) }), _jsx(Route, { path: "ventas/facturas/:id", element: _jsx(InvoiceDetail, {}) }), _jsx(Route, { path: "ventas/devoluciones", element: _jsx(Returns, {}) }), _jsx(Route, { path: "ventas/devoluciones/nueva", element: _jsx(ReturnForm, {}) }), _jsx(Route, { path: "ventas/devoluciones/:id", element: _jsx(ReturnDetail, {}) }), _jsx(Route, { path: "usuarios", element: _jsx(Users, {}) }), _jsx(Route, { path: "usuarios/permisos", element: _jsx(RolePermissions, {}) }), _jsx(Route, { path: "ajustes", element: _jsx(Settings, {}) }), _jsx(Route, { path: "*", element: _jsx(Navigate, { to: "/", replace: true }) })] })] })] }));
 };
 export default App;

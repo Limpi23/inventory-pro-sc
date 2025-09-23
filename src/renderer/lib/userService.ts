@@ -178,8 +178,9 @@ export const userService = {
       
       return newUser;
     } catch (error: any) {
-      console.error('Error al crear usuario:', error);
-      throw new Error(`Database error saving new user: ${error.message}`);
+      console.error('Error al crear usuario (detalle):', error);
+      // No enmascarar el error original para mostrar el motivo real (p.ej., 500 de Auth)
+      throw error;
     }
   },
   
@@ -216,13 +217,17 @@ export const userService = {
   deleteUser: async (id: string): Promise<void> => {
     try {
       const client = await supabase.getClient();
-      // Eliminar directamente de la tabla users
-      const { error } = await client
-        .from('users')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      // Intentar eliminar a través del RPC que borra en auth.users (cascade a public.users)
+      const { error: rpcError } = await client.rpc('admin_delete_user', { p_user_id: id });
+
+      if (rpcError) {
+        // Fallback: si el RPC no existe o no hay permisos, intentar borrar la fila visible
+        const { error: tblErr } = await client
+          .from('users')
+          .delete()
+          .eq('id', id);
+        if (tblErr) throw rpcError; // preferimos surfacing el error real del RPC
+      }
     } catch (error) {
       console.error('Error al eliminar usuario:', error);
       throw error;

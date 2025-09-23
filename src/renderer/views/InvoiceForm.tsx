@@ -123,7 +123,7 @@ const InvoiceForm: React.FC = () => {
       if (error) throw error;
       setCustomers(data || []);
     } catch (err: any) {
-      console.error('Error cargando clientes:', err);
+      
       setError(err.message);
     }
   };
@@ -138,7 +138,7 @@ const InvoiceForm: React.FC = () => {
       if (error) throw error;
       setWarehouses(data || []);
     } catch (err: any) {
-      console.error('Error cargando almacenes:', err);
+      
       setError(err.message);
     }
   };
@@ -153,7 +153,7 @@ const InvoiceForm: React.FC = () => {
       if (error) throw error;
       setProducts(data || []);
     } catch (err: any) {
-      console.error('Error cargando productos:', err);
+      
       setError(err.message);
     } finally {
       setIsLoading(false);
@@ -226,7 +226,7 @@ const InvoiceForm: React.FC = () => {
         }
       }
     } catch (err: any) {
-      console.error('Error cargando detalles de la factura:', err);
+      
       setError(err.message);
     } finally {
       setIsLoading(false);
@@ -489,7 +489,7 @@ const InvoiceForm: React.FC = () => {
               .insert(stockMovements);
               
             if (movementError) {
-              console.error('Error registrando movimientos de inventario:', movementError);
+              
               // No interrumpimos el proceso por errores en los movimientos
             }
           }
@@ -501,7 +501,7 @@ const InvoiceForm: React.FC = () => {
       // Redirigir a la lista de facturas
       navigate('/ventas/facturas');
     } catch (err: any) {
-      console.error('Error guardando factura:', err);
+      
       toast.error(`Error: ${err.message}`);
     } finally {
       setIsSaving(false);
