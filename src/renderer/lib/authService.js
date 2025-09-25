@@ -148,7 +148,8 @@ export const authService = {
                 options: {
                     data: {
                         full_name: userData.full_name
-                    }
+                    },
+                    emailRedirectTo: getConfirmEmailRedirectUrl()
                 }
             });
             if (signUpError || !signUpData.user) {
@@ -234,7 +235,7 @@ export const authService = {
     // Reenviar correo de confirmación de registro
     resendSignupConfirmation: async (email) => {
         const client = await supabase.getClient();
-        const redirectTo = getLoginRedirectUrl();
+        const redirectTo = getConfirmEmailRedirectUrl();
         const { error } = await client.auth.resend({
             type: 'signup',
             email: email.toLowerCase(),
@@ -256,6 +257,10 @@ export default authService;
 // URL de redirección para el flujo de recuperación
 function getResetRedirectUrl() {
     try {
+        // Permitir override por variable de entorno en tiempo de build
+        const envBase = import.meta?.env?.VITE_PUBLIC_APP_URL;
+        if (envBase)
+            return `${envBase.replace(/\/$/, '')}/reset-password`;
         // Si estamos en un contexto web (dev), usamos la misma origin
         if (typeof window !== 'undefined' && window.location && window.location.origin.startsWith('http')) {
             return `${window.location.origin}/reset-password`;
@@ -272,7 +277,26 @@ function getResetRedirectUrl() {
 // URL de redirección después de confirmar email
 function getLoginRedirectUrl() {
     try {
+        const envBase = import.meta?.env?.VITE_PUBLIC_APP_URL;
+        if (envBase)
+            return `${envBase.replace(/\/$/, '')}/login`;
         if (typeof window !== 'undefined' && window.location && window.location.origin.startsWith('http')) {
+            return `${window.location.origin}/login`;
+        }
+        return undefined;
+    }
+    catch {
+        return undefined;
+    }
+}
+// URL a la que debe llegar el usuario tras confirmar su email
+function getConfirmEmailRedirectUrl() {
+    try {
+        const envBase = import.meta?.env?.VITE_PUBLIC_APP_URL;
+        if (envBase)
+            return `${envBase.replace(/\/$/, '')}/login`;
+        if (typeof window !== 'undefined' && window.location && window.location.origin.startsWith('http')) {
+            // Tras confirmar, que vuelva al login por si necesita iniciar sesión
             return `${window.location.origin}/login`;
         }
         return undefined;

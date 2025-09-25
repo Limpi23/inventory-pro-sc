@@ -11,8 +11,8 @@ const Sales = () => {
             color: 'bg-blue-100 text-blue-800'
         },
         {
-            title: 'Facturación',
-            description: 'Crear y gestionar facturas de venta',
+            title: 'Cotizaciones',
+            description: 'Crear y gestionar cotizaciones de venta',
             icon: 'fa-file-invoice-dollar',
             link: '/ventas/facturas',
             color: 'bg-green-100 text-green-800'

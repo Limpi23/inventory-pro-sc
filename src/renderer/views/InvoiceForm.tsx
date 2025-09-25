@@ -164,7 +164,7 @@ const InvoiceForm: React.FC = () => {
     try {
       setIsLoading(true);
       
-      // Obtener la factura
+  // Obtener la cotización
       const { data: invoiceData, error: invoiceError } = await supabase
         .from('invoices')
         .select('*')
@@ -188,7 +188,7 @@ const InvoiceForm: React.FC = () => {
           setDueDate(invoiceData.due_date);
         }
         
-        // Obtener los items de la factura
+  // Obtener los items de la cotización
         const { data: itemsData, error: itemsError } = await supabase
           .from('invoice_items')
           .select(`
@@ -368,7 +368,7 @@ const InvoiceForm: React.FC = () => {
     }
     
     if (invoiceItems.length === 0) {
-      toast.error('Por favor agregue al menos un producto a la factura');
+  toast.error('Por favor agregue al menos un producto a la cotización');
       return;
     }
     
@@ -379,7 +379,7 @@ const InvoiceForm: React.FC = () => {
       const status = saveAsDraft ? 'borrador' : 'emitida';
       
       if (isEditing) {
-        // Actualizar factura existente
+  // Actualizar cotización existente
         const { error: invoiceError } = await supabase
           .from('invoices')
           .update({
@@ -425,7 +425,7 @@ const InvoiceForm: React.FC = () => {
         
         toast.success(`Factura ${status === 'borrador' ? 'guardada como borrador' : 'emitida'} correctamente`);
       } else {
-        // Crear nueva factura
+  // Crear nueva cotización
         const { data: invoiceData, error: invoiceError } = await supabase
           .from('invoices')
           .insert({
@@ -469,7 +469,7 @@ const InvoiceForm: React.FC = () => {
             
           if (itemsError) throw itemsError;
           
-          // Si la factura se emite, registrar los movimientos de inventario
+          // Si la cotización se emite, registrar los movimientos de inventario
           if (status === 'emitida') {
             // Nota: Para productos serializados, en próximas iteraciones se deben insertar N movimientos por serial con quantity=1 y serial_id.
             // Por ahora mantenemos el comportamiento existente para productos por cantidad.
@@ -478,10 +478,10 @@ const InvoiceForm: React.FC = () => {
               warehouse_id: formData.warehouse_id,
               quantity: item.quantity,
               movement_type_id: 2, // OUT_SALE
-              reference: `Factura ${invoiceData.invoice_number}`,
+              reference: `Cotización ${invoiceData.invoice_number}`,
               related_id: invoiceData.id,
               movement_date: new Date().toISOString(),
-              notes: `Venta a cliente, factura #${invoiceData.invoice_number}`
+              notes: `Venta a cliente, cotización #${invoiceData.invoice_number}`
             }));
 
             const { error: movementError } = await supabase
@@ -494,11 +494,11 @@ const InvoiceForm: React.FC = () => {
             }
           }
           
-          toast.success(`Factura ${status === 'borrador' ? 'guardada como borrador' : 'emitida'} correctamente`);
+          toast.success(`Cotización ${status === 'borrador' ? 'guardada como borrador' : 'emitida'} correctamente`);
         }
       }
       
-      // Redirigir a la lista de facturas
+  // Redirigir a la lista de cotizaciones
       navigate('/ventas/facturas');
     } catch (err: any) {
       
@@ -526,10 +526,10 @@ const InvoiceForm: React.FC = () => {
         <div>
           <Link to="/ventas/facturas" className="text-blue-600 hover:text-blue-800 flex items-center mb-2">
             <i className="fas fa-arrow-left mr-2"></i>
-            Volver a Facturas
+            Volver a Cotizaciones
           </Link>
           <h1 className="text-2xl font-semibold">
-            {isEditing ? 'Editar Factura' : 'Nueva Factura'}
+            {isEditing ? 'Editar Cotización' : 'Nueva Cotización'}
           </h1>
         </div>
       </div>
@@ -542,7 +542,7 @@ const InvoiceForm: React.FC = () => {
 
       <form onSubmit={(e) => handleSubmit(e, true)} className="bg-white rounded-lg shadow-md overflow-hidden">
         <div className="p-6 space-y-6">
-          {/* Encabezado de la factura */}
+          {/* Encabezado de la cotización */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Cliente <span className="text-red-500">*</span></label>
@@ -579,7 +579,7 @@ const InvoiceForm: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Número de Factura</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Número de Cotización</label>
               <input
                 type="text"
                 name="invoice_number"
@@ -596,7 +596,7 @@ const InvoiceForm: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de Factura <span className="text-red-500">*</span></label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de Cotización <span className="text-red-500">*</span></label>
               <input
                 type="date"
                 value={invoiceDate}
@@ -727,11 +727,11 @@ const InvoiceForm: React.FC = () => {
 
           {/* Lista de productos */}
           <div>
-            <h2 className="text-lg font-medium mb-4">Productos en la Factura</h2>
+            <h2 className="text-lg font-medium mb-4">Productos en la Cotización</h2>
             
             {invoiceItems.length === 0 ? (
               <div className="text-center py-8 border rounded-lg">
-                <p className="text-gray-500">No hay productos agregados a la factura</p>
+                <p className="text-gray-500">No hay productos agregados a la cotización</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -859,7 +859,7 @@ const InvoiceForm: React.FC = () => {
                 Emitiendo...
               </>
             ) : (
-              <>Emitir Factura</>
+              <>Emitir Cotización</>
             )}
           </button>
         </div>

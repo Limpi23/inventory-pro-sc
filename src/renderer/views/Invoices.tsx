@@ -33,7 +33,7 @@ const Invoices: React.FC = () => {
   }, [selectedInvoice]);
 
   useEffect(() => {
-    // Detectar facturas próximas a vencer (en los próximos 7 días)
+  // Detectar cotizaciones próximas a vencer (en los próximos 7 días)
     const checkUpcomingDueInvoices = () => {
       const today = new Date();
       const nextWeek = new Date();
@@ -66,7 +66,7 @@ const Invoices: React.FC = () => {
 
       if (error) throw error;
       
-      // Actualizar el estado de facturas vencidas
+  // Actualizar el estado de cotizaciones vencidas
       const today = new Date();
       const updatedInvoices = (data || []).map(invoice => {
         if (invoice.status === 'emitida' && invoice.due_date) {
@@ -78,7 +78,7 @@ const Invoices: React.FC = () => {
         return invoice;
       });
       
-      // Actualizar facturas vencidas en la base de datos
+  // Actualizar cotizaciones vencidas en la base de datos
       const overdueInvoices = updatedInvoices.filter(
         invoice => invoice.status === 'vencida' && data?.find(i => i.id === invoice.id)?.status !== 'vencida'
       );
@@ -95,16 +95,16 @@ const Invoices: React.FC = () => {
         }
         
         if (overdueInvoices.length === 1) {
-          toast.error(`La factura ${overdueInvoices[0].invoice_number} ha vencido`);
+          toast.error(`La cotización ${overdueInvoices[0].invoice_number} ha vencido`);
         } else {
-          toast.error(`${overdueInvoices.length} facturas han vencido`);
+          toast.error(`${overdueInvoices.length} cotizaciones han vencido`);
         }
       }
       
       setInvoices(updatedInvoices);
     } catch (error: any) {
       
-      toast.error(`Error al cargar facturas: ${error.message}`);
+  toast.error(`Error al cargar cotizaciones: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -124,8 +124,8 @@ const Invoices: React.FC = () => {
       if (error) throw error;
       setInvoiceItems(data || []);
     } catch (error: any) {
-      console.error('Error al cargar items de factura:', error.message);
-      toast.error(`Error al cargar detalles: ${error.message}`);
+  console.error('Error al cargar items de cotización:', error.message);
+  toast.error(`Error al cargar detalles de cotización: ${error.message}`);
     } finally {
       setDrawerLoading(false);
     }
@@ -164,12 +164,12 @@ const Invoices: React.FC = () => {
   const totalPages = Math.ceil(filteredInvoices.length / invoicesPerPage);
 
   const handleDeleteInvoice = async (id: string) => {
-    if (!confirm('¿Está seguro que desea anular esta factura? Esta acción no se puede deshacer.')) {
+  if (!confirm('¿Está seguro que desea anular esta cotización? Esta acción no se puede deshacer.')) {
       return;
     }
 
     try {
-      // En vez de eliminar, anulamos la factura
+  // En vez de eliminar, anulamos la cotización
       const { error } = await supabase
         .from('invoices')
         .update({ 
@@ -180,11 +180,11 @@ const Invoices: React.FC = () => {
 
       if (error) throw error;
 
-      toast.success('Factura anulada correctamente');
+  toast.success('Cotización anulada correctamente');
       fetchInvoices();
     } catch (error: any) {
-      console.error('Error al anular factura:', error.message);
-      toast.error(`Error al anular factura: ${error.message}`);
+  console.error('Error al anular cotización:', error.message);
+  toast.error(`Error al anular cotización: ${error.message}`);
     }
   };
 
@@ -254,7 +254,7 @@ const Invoices: React.FC = () => {
     return statusMap[status] || 'Desconocido';
   };
 
-  // Filtro rápido para mostrar solo facturas próximas a vencer
+  // Filtro rápido para mostrar solo cotizaciones próximas a vencer
   const filterUpcomingDue = () => {
     setStatusFilter('emitida');
     const upcomingIds = upcomingDueInvoices.map(invoice => invoice.invoice_number);
@@ -269,13 +269,13 @@ const Invoices: React.FC = () => {
             <i className="fas fa-arrow-left mr-2"></i>
             Volver a Ventas
           </Link>
-          <h1 className="text-2xl font-semibold">Gestión de Facturas</h1>
+          <h1 className="text-2xl font-semibold">Gestión de Cotizaciones</h1>
         </div>
         <Link 
           to="/ventas/facturas/nueva" 
           className="mt-4 md:mt-0 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center"
         >
-          <i className="fas fa-plus mr-2"></i> Nueva Factura
+          <i className="fas fa-plus mr-2"></i> Nueva Cotización
         </Link>
       </div>
 
@@ -284,11 +284,11 @@ const Invoices: React.FC = () => {
           <div className="flex items-center">
             <i className="fas fa-exclamation-triangle text-amber-500 mr-3 text-lg"></i>
             <div>
-              <h3 className="font-semibold text-amber-800">Facturas próximas a vencer</h3>
+              <h3 className="font-semibold text-amber-800">Cotizaciones próximas a vencer</h3>
               <p className="text-amber-700">
                 {upcomingDueInvoices.length === 1 
-                  ? `Hay 1 factura que vencerá en los próximos 7 días` 
-                  : `Hay ${upcomingDueInvoices.length} facturas que vencerán en los próximos 7 días`
+                  ? `Hay 1 cotización que vencerá en los próximos 7 días` 
+                  : `Hay ${upcomingDueInvoices.length} cotizaciones que vencerán en los próximos 7 días`
                 }
               </p>
             </div>
@@ -298,7 +298,7 @@ const Invoices: React.FC = () => {
               onClick={filterUpcomingDue}
               className="px-3 py-1 bg-amber-100 text-amber-800 rounded hover:bg-amber-200 text-sm"
             >
-              Ver facturas
+              Ver cotizaciones
             </button>
             <button 
               onClick={() => setShowUpcomingAlert(false)}
@@ -313,7 +313,7 @@ const Invoices: React.FC = () => {
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
         <div className="p-4 border-b">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <h2 className="text-lg font-medium">Lista de Facturas</h2>
+            <h2 className="text-lg font-medium">Lista de Cotizaciones</h2>
             
             <div className="flex flex-col md:flex-row gap-3">
               <div className="relative">
@@ -335,7 +335,7 @@ const Invoices: React.FC = () => {
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Buscar factura..."
+                  placeholder="Buscar cotización..."
                   className="pl-10 pr-4 py-2 border rounded-md w-full"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -355,8 +355,8 @@ const Invoices: React.FC = () => {
             <i className="fas fa-file-invoice text-gray-300 text-5xl mb-4"></i>
             <p className="text-gray-500">
               {searchTerm || statusFilter !== 'all'
-                ? 'No se encontraron facturas que coincidan con la búsqueda.'
-                : 'No hay facturas registradas. ¡Registra tu primera factura!'}
+                ? 'No se encontraron cotizaciones que coincidan con la búsqueda.'
+                : 'No hay cotizaciones registradas. ¡Crea tu primera cotización!'}
             </p>
           </div>
         ) : (
@@ -365,7 +365,7 @@ const Invoices: React.FC = () => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Factura</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cotización</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
@@ -375,12 +375,12 @@ const Invoices: React.FC = () => {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {currentInvoices.map((invoice) => {
-                    // Calcular días restantes para facturas emitidas
+                    // Calcular días restantes para cotizaciones emitidas
                     const daysRemaining = invoice.due_date && invoice.status === 'emitida' 
                       ? getDaysRemaining(invoice.due_date)
                       : null;
                     
-                    // Determinar si esta factura está próxima a vencer (menos de 7 días)
+                    // Determinar si esta cotización está próxima a vencer (menos de 7 días)
                     const isUpcomingDue = daysRemaining !== null && daysRemaining > 0 && daysRemaining <= 7;
                     
                     return (
@@ -476,7 +476,7 @@ const Invoices: React.FC = () => {
                     <span className="font-medium">
                       {Math.min(indexOfLastInvoice, filteredInvoices.length)}
                     </span>{' '}
-                    de <span className="font-medium">{filteredInvoices.length}</span> facturas
+                    de <span className="font-medium">{filteredInvoices.length}</span> cotizaciones
                   </p>
                 </div>
                 <div className="flex space-x-2">
@@ -511,7 +511,7 @@ const Invoices: React.FC = () => {
 
       <div className={`fixed inset-y-0 right-0 max-w-lg w-full bg-white shadow-xl transform ${isDrawerOpen ? 'translate-x-0' : 'translate-x-full'} transition-transform duration-300 ease-in-out z-50 flex flex-col`}>
         <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-          <h2 className="text-lg font-medium">Vista Previa de Factura</h2>
+          <h2 className="text-lg font-medium">Vista Previa de Cotización</h2>
           <button 
             onClick={closeDrawer}
             className="text-gray-500 hover:text-gray-700"
@@ -543,7 +543,7 @@ const Invoices: React.FC = () => {
                     )}
                   </div>
                   <div className="bg-blue-50 p-4 rounded-md text-right">
-                    <h2 className="text-lg font-bold text-blue-800 mb-1">FACTURA</h2>
+                    <h2 className="text-lg font-bold text-blue-800 mb-1">COTIZACIÓN</h2>
                     <p className="text-md font-semibold text-blue-700">
                       # {selectedInvoice.invoice_number}
                     </p>
@@ -564,7 +564,7 @@ const Invoices: React.FC = () => {
                     <p>{selectedInvoice.customer?.phone} | {selectedInvoice.customer?.email}</p>
                   </div>
                   <div>
-                    <h3 className="text-gray-500 font-medium mb-2">Información de la Factura</h3>
+                    <h3 className="text-gray-500 font-medium mb-2">Información de la Cotización</h3>
                     <div className="grid grid-cols-2 gap-2">
                       <p className="text-gray-600">Fecha de Emisión:</p>
                       <p className="font-medium">{formatDate(selectedInvoice.invoice_date)}</p>
@@ -672,7 +672,7 @@ const Invoices: React.FC = () => {
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-gray-500">
               <i className="fas fa-file-invoice text-6xl mb-4"></i>
-              <p>Seleccione una factura para ver su detalle</p>
+              <p>Seleccione una cotización para ver su detalle</p>
             </div>
           )}
         </div>

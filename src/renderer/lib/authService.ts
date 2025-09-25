@@ -269,6 +269,9 @@ export default authService;
 // URL de redirección para el flujo de recuperación
 function getResetRedirectUrl(): string | undefined {
   try {
+    // Permitir override por variable de entorno en tiempo de build
+    const envBase = (import.meta as any)?.env?.VITE_PUBLIC_APP_URL as string | undefined;
+    if (envBase) return `${envBase.replace(/\/$/, '')}/reset-password`;
     // Si estamos en un contexto web (dev), usamos la misma origin
     if (typeof window !== 'undefined' && window.location && window.location.origin.startsWith('http')) {
       return `${window.location.origin}/reset-password`;
@@ -285,6 +288,8 @@ function getResetRedirectUrl(): string | undefined {
 // URL de redirección después de confirmar email
 function getLoginRedirectUrl(): string | undefined {
   try {
+    const envBase = (import.meta as any)?.env?.VITE_PUBLIC_APP_URL as string | undefined;
+    if (envBase) return `${envBase.replace(/\/$/, '')}/login`;
     if (typeof window !== 'undefined' && window.location && window.location.origin.startsWith('http')) {
       return `${window.location.origin}/login`;
     }
@@ -297,6 +302,8 @@ function getLoginRedirectUrl(): string | undefined {
 // URL a la que debe llegar el usuario tras confirmar su email
 function getConfirmEmailRedirectUrl(): string | undefined {
   try {
+    const envBase = (import.meta as any)?.env?.VITE_PUBLIC_APP_URL as string | undefined;
+    if (envBase) return `${envBase.replace(/\/$/, '')}/login`;
     if (typeof window !== 'undefined' && window.location && window.location.origin.startsWith('http')) {
       // Tras confirmar, que vuelva al login por si necesita iniciar sesión
       return `${window.location.origin}/login`;

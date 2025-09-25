@@ -95,6 +95,27 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+// Ruta solo para administradores
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  const roleName = (user.role_name || '').toLowerCase();
+  const isAdmin = roleName.includes('admin') || user.role_id === 1;
+  if (!isAdmin) {
+    return <Navigate to="/" replace />;
+  }
+  return <>{children}</>;
+};
+
 const App = () => {
   const [ready, setReady] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -218,9 +239,17 @@ const App = () => {
           <Route path="ventas/devoluciones" element={<Returns />} />
           <Route path="ventas/devoluciones/nueva" element={<ReturnForm />} />
           <Route path="ventas/devoluciones/:id" element={<ReturnDetail />} />
-          {/* Rutas de Gestión de Usuarios */}
-          <Route path="usuarios" element={<Users />} />
-          <Route path="usuarios/permisos" element={<RolePermissions />} />
+          {/* Rutas de Gestión de Usuarios (solo admin) */}
+          <Route path="usuarios" element={
+            <AdminRoute>
+              <Users />
+            </AdminRoute>
+          } />
+          <Route path="usuarios/permisos" element={
+            <AdminRoute>
+              <RolePermissions />
+            </AdminRoute>
+          } />
           {/* Ruta de Ajustes */}
           <Route path="ajustes" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />

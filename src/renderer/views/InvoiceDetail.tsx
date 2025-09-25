@@ -108,14 +108,14 @@ const InvoiceDetail: React.FC = () => {
       }
     } catch (err: any) {
       console.error('Error fetching invoice details:', err);
-      setError(`Error al cargar los detalles de la factura: ${err.message}`);
+  setError(`Error al cargar los detalles de la cotización: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
   
   const handleCancelInvoice = async () => {
-    if (!confirm('¿Está seguro que desea anular esta factura? Esta acción no se puede deshacer.')) {
+  if (!confirm('¿Está seguro que desea anular esta cotización? Esta acción no se puede deshacer.')) {
       return;
     }
     
@@ -138,10 +138,10 @@ const InvoiceDetail: React.FC = () => {
           warehouse_id: invoice.warehouse.id,
           quantity: item.quantity,
           movement_type_id: 3, // Entrada por ajuste (asumimos que es el ID para IN_ADJUST)
-          reference: `Anulación Factura ${invoice.invoice_number}`,
+          reference: `Anulación Cotización ${invoice.invoice_number}`,
           related_id: invoice.id,
           movement_date: new Date().toISOString(),
-          notes: `Anulación de factura #${invoice.invoice_number}`
+          notes: `Anulación de cotización #${invoice.invoice_number}`
         }));
         
         const { error: movementError } = await supabase
@@ -154,22 +154,22 @@ const InvoiceDetail: React.FC = () => {
         }
       }
       
-      toast.success('Factura anulada correctamente');
+  toast.success('Cotización anulada correctamente');
       
       // Refresh the invoice details
       fetchInvoiceDetails();
     } catch (err: any) {
-      console.error('Error anulando factura:', err);
-      toast.error(`Error al anular factura: ${err.message}`);
+  console.error('Error anulando cotización:', err);
+  toast.error(`Error al anular cotización: ${err.message}`);
     }
   };
   
   const handlePrint = useReactToPrint({
     contentRef: printFormat === 'letter' ? letterPrintRef : rollPrintRef,
-    documentTitle: `Factura-${invoice?.invoice_number || 'Desconocida'}`,
+  documentTitle: `Cotización-${invoice?.invoice_number || 'Desconocida'}`,
     onAfterPrint: () => {
       setShowPrintDialog(false);
-      toast.success('Factura enviada a impresión correctamente');
+  toast.success('Cotización enviada a impresión correctamente');
     },
   });
   
@@ -225,7 +225,7 @@ const InvoiceDetail: React.FC = () => {
       <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4">
         <p className="text-red-700">{error}</p>
         <Link to="/ventas/facturas" className="text-blue-600 hover:text-blue-800 mt-2 inline-block">
-          Volver a Facturas
+          Volver a Cotizaciones
         </Link>
       </div>
     );
@@ -234,9 +234,9 @@ const InvoiceDetail: React.FC = () => {
   if (!invoice) {
     return (
       <div className="text-center py-10">
-        <p className="text-gray-500">Factura no encontrada</p>
+        <p className="text-gray-500">Cotización no encontrada</p>
         <Link to="/ventas/facturas" className="text-blue-600 hover:text-blue-800 mt-2 inline-block">
-          Volver a Facturas
+          Volver a Cotizaciones
         </Link>
       </div>
     );
@@ -248,10 +248,10 @@ const InvoiceDetail: React.FC = () => {
         <div>
           <Link to="/ventas/facturas" className="text-blue-600 hover:text-blue-800 flex items-center mb-2">
             <i className="fas fa-arrow-left mr-2"></i>
-            Volver a Facturas
+            Volver a Cotizaciones
           </Link>
           <h1 className="text-2xl font-semibold">
-            Factura #{invoice.invoice_number}
+            Cotización #{invoice.invoice_number}
             <span className={`ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(invoice.status)}`}>
               {getStatusText(invoice.status)}
             </span>
@@ -293,11 +293,11 @@ const InvoiceDetail: React.FC = () => {
         </div>
       </div>
       
-      {/* Detalles de factura */}
+  {/* Detalles de cotización */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
           <div>
-            <h2 className="text-lg font-medium mb-4 border-b pb-2">Información de Factura</h2>
+            <h2 className="text-lg font-medium mb-4 border-b pb-2">Información de Cotización</h2>
             <div className="space-y-3">
               <div className="grid grid-cols-2">
                 <div className="text-gray-600">Número:</div>
@@ -484,7 +484,7 @@ const InvoiceDetail: React.FC = () => {
         {/* Formato carta */}
         <div ref={letterPrintRef} className="p-8 bg-white min-h-[11in] w-[8.5in] text-black">
           <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold">FACTURA</h1>
+            <h1 className="text-2xl font-bold">COTIZACIÓN</h1>
             <p className="text-xl">{invoice.invoice_number}</p>
           </div>
           
@@ -512,7 +512,7 @@ const InvoiceDetail: React.FC = () => {
           </div>
           
           <div className="mb-6">
-            <h2 className="text-lg font-bold mb-2">Detalles de Factura</h2>
+            <h2 className="text-lg font-bold mb-2">Detalles de Cotización</h2>
             <div className="grid grid-cols-2 gap-6">
               <div>
                 <p><strong>Fecha de emisión:</strong> {formatDate(invoice.invoice_date)}</p>
@@ -606,7 +606,7 @@ const InvoiceDetail: React.FC = () => {
             <p>{settings.address}</p>
             <p>Tel: {settings.phone}</p>
             <hr className="my-2" />
-            <h2 className="font-bold">FACTURA {invoice.invoice_number}</h2>
+            <h2 className="font-bold">COTIZACIÓN {invoice.invoice_number}</h2>
             <p>Fecha: {formatDate(invoice.invoice_date)}</p>
             {invoice.due_date && <p>Vencimiento: {formatDate(invoice.due_date)}</p>}
           </div>
