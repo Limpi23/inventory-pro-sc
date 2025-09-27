@@ -25,7 +25,9 @@ const UpdateNotification: React.FC = () => {
       setUpdateStatus(message);
       
       // Verificamos el estado de la actualización
-      if (message.includes('Actualización disponible')) {
+      if (message.includes('Buscando actualizaciones')) {
+        toast(message, { icon: '🔍' });
+      } else if (message.includes('Actualización disponible')) {
         setUpdateAvailable(true);
         toast.success(message);
       } else if (message.includes('Error')) {
@@ -34,9 +36,10 @@ const UpdateNotification: React.FC = () => {
         setUpdateDownloaded(true);
         setUpdateAvailable(true);
         toast.success(message);
-      } else if (message.includes('Aplicación actualizada')) {
+      } else if (message.includes('Aplicación actualizada') || message.includes('última versión')) {
         setUpdateAvailable(false);
         setUpdateDownloaded(false);
+        toast.success(message);
       }
     };
     

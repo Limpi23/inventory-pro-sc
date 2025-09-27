@@ -2,6 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Supplier } from '../lib/supabase';
+import { Button } from '../components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '../components/ui/dropdown-menu';
 
 interface ContactInfo {
   email?: string;
@@ -316,32 +324,49 @@ const Suppliers: React.FC = () => {
                           )}
                         </td>
                         <td className="py-3 px-4 text-sm dark:text-gray-300">
-                          {contactInfo.phone || '-'}
+                          {contactInfo.phone ? (
+                            <a
+                              href={`tel:${contactInfo.phone}`}
+                              className="text-blue-600 dark:text-blue-400 hover:underline"
+                            >
+                              {contactInfo.phone}
+                            </a>
+                          ) : (
+                            '-'
+                          )}
                         </td>
                         <td className="py-3 px-4 text-sm text-center">
-                          <div className="flex items-center justify-center space-x-2">
-                            <button
-                              onClick={() => openModal(supplier)}
-                              className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 focus:outline-none rounded-md p-1"
-                              title="Editar"
-                            >
-                              <i className="fas fa-edit"></i>
-                            </button>
-                            <Link 
-                              to={`/proveedores/${supplier.id}/compras`}
-                              className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 focus:outline-none rounded-md p-1"
-                              title="Ver historial de compras"
-                            >
-                              <i className="fas fa-shopping-cart"></i>
-                            </Link>
-                            <button
-                              onClick={() => handleDelete(supplier.id)}
-                              className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 focus:outline-none rounded-md p-1"
-                              title="Eliminar"
-                            >
-                              <i className="fas fa-trash"></i>
-                            </button>
-                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="outline" size="sm" className="h-8 px-2">
+                                <i className="fas fa-ellipsis-v mr-2"></i>
+                                Acciones
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="min-w-[180px]">
+                              <DropdownMenuItem onClick={() => openModal(supplier)}>
+                                <i className="fas fa-edit text-muted-foreground"></i>
+                                <span className="ml-2">Editar</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem asChild>
+                                <Link
+                                  to={`/proveedores/${supplier.id}/compras`}
+                                  className="flex items-center gap-2 w-full"
+                                >
+                                  <i className="fas fa-shopping-cart text-green-600"></i>
+                                  <span>Historial de compras</span>
+                                </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => handleDelete(supplier.id)}
+                                className="text-red-600 focus:text-red-700"
+                              >
+                                <i className="fas fa-trash"></i>
+                                <span className="ml-2">Eliminar</span>
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </td>
                       </tr>
                     );

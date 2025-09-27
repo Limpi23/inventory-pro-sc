@@ -73,6 +73,14 @@ Salida: `out/make/squirrel.windows/x64/*.exe`.
 
 Notas: NSIS no se usa. Los archivos `.env` no se empaquetan; la configuración se realiza dentro de la app y se persiste en `electron-store`.
 
+## Actualizaciones
+
+- Desde la ventana principal abre `Herramientas → Buscar actualizaciones` para forzar una revisión manual en GitHub Releases.
+- Mientras se consulta el feed verás una notificación "Buscando actualizaciones" en la interfaz.
+- Si existe una versión más reciente, el sistema descargará el instalador y mostrará la opción "Instalar actualización".
+- Si ya tienes la última versión, aparecerá un aviso "Ya estás utilizando la última versión (...)" tanto en pantalla como en un cuadro de diálogo informativo.
+- Ante cualquier error durante la consulta manual se mostrará una alerta detallando el motivo para que puedas reintentar más tarde.
+
 ## Contribuir
 
 1. Haz fork del proyecto

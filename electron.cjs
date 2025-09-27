@@ -13,6 +13,7 @@ const fs = require('fs');
 const Store = require('electron-store');
 
 let mainWindow;
+let manualUpdateRequested = false;
 
 // Mitigar crashes del proceso GPU en algunos drivers de Windows
 try { app.disableHardwareAcceleration(); } catch (_) {}
@@ -52,6 +53,7 @@ autoUpdater.on('checking-for-update', () => {
   sendStatusToWindow('Buscando actualizaciones...');
 });
 autoUpdater.on('update-available', (info) => {
+  manualUpdateRequested = false;
   sendStatusToWindow('Actualización disponible.');
   dialog.showMessageBox({
     type: 'info',
@@ -65,10 +67,26 @@ autoUpdater.on('update-available', (info) => {
   });
 });
 autoUpdater.on('update-not-available', () => {
-  sendStatusToWindow('Aplicación actualizada.');
+  const currentVersion = app.getVersion();
+  const message = `Ya estás utilizando la última versión (${currentVersion}).`;
+  sendStatusToWindow(message);
+  if (manualUpdateRequested) {
+    dialog.showMessageBox({
+      type: 'info',
+      title: 'Sin actualizaciones disponibles',
+      message,
+      detail: 'No se encontraron nuevas versiones en este momento.'
+    });
+    manualUpdateRequested = false;
+  }
 });
 autoUpdater.on('error', (err) => {
-  sendStatusToWindow(`Error en actualización: ${err.toString()}`);
+  const errorMessage = `Error en actualización: ${err.toString()}`;
+  sendStatusToWindow(errorMessage);
+  if (manualUpdateRequested) {
+    dialog.showErrorBox('Error al buscar actualizaciones', errorMessage);
+    manualUpdateRequested = false;
+  }
 });
 autoUpdater.on('download-progress', (progressObj) => {
   let logMessage = `Velocidad: ${progressObj.bytesPerSecond} - Descargado ${progressObj.percent}%`;
@@ -374,12 +392,18 @@ function setupApplicationMenu() {
         },
         {
           label: 'Buscar actualizaciones',
-          click: () => {
+          click: async () => {
             try {
+              manualUpdateRequested = true;
               sendStatusToWindow('Buscando actualizaciones (manual)...');
-              autoUpdater.checkForUpdates();
+              await autoUpdater.checkForUpdates();
             } catch (e) {
-              sendStatusToWindow('Error al buscar actualizaciones: ' + (e && e.message ? e.message : e));
+              const errMsg = 'Error al buscar actualizaciones: ' + (e && e.message ? e.message : e);
+              sendStatusToWindow(errMsg);
+              if (manualUpdateRequested) {
+                dialog.showErrorBox('Error al buscar actualizaciones', errMsg);
+                manualUpdateRequested = false;
+              }
             }
           }
         },
