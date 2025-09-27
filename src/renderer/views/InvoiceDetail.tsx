@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { useReactToPrint } from 'react-to-print';
 import useCompanySettings from '../hooks/useCompanySettings';
 import { useCurrency } from '../hooks/useCurrency';
+import { useAuth } from '../lib/auth';
 
 interface Invoice {
   id: string;
@@ -20,6 +21,7 @@ interface Invoice {
   notes?: string;
   created_at: string;
   updated_at?: string;
+  sales_order_id?: string | null;
   customer: {
     id: string;
     name: string;
@@ -62,15 +64,19 @@ const InvoiceDetail: React.FC = () => {
   const [showPrintDialog, setShowPrintDialog] = useState(false);
   const { settings } = useCompanySettings();
   const currency = useCurrency();
+  const location = useLocation();
+  const { user } = useAuth();
+  const roleName = (user?.role_name || '').toLowerCase();
+  const isAdmin = roleName.includes('admin') || user?.role_id === 1;
+  const [isGeneratingSale, setIsGeneratingSale] = useState(false);
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const shouldAutoGenerateSale = searchParams.get('generar-venta') === '1';
+  const attemptedAutoSaleRef = useRef(false);
   
   const letterPrintRef = useRef<HTMLDivElement>(null);
   const rollPrintRef = useRef<HTMLDivElement>(null);
-  
-  useEffect(() => {
-    fetchInvoiceDetails();
-  }, [id]);
-  
-  const fetchInvoiceDetails = async () => {
+
+  const fetchInvoiceDetails = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -112,10 +118,19 @@ const InvoiceDetail: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    fetchInvoiceDetails();
+  }, [fetchInvoiceDetails]);
   
   const handleCancelInvoice = async () => {
-  if (!confirm('¿Está seguro que desea anular esta cotización? Esta acción no se puede deshacer.')) {
+    if (!isAdmin) {
+      toast.error('Solo un administrador puede anular una cotización.');
+      return;
+    }
+
+    if (!confirm('¿Está seguro que desea anular esta cotización? Esta acción no se puede deshacer.')) {
       return;
     }
     
@@ -163,6 +178,161 @@ const InvoiceDetail: React.FC = () => {
   toast.error(`Error al anular cotización: ${err.message}`);
     }
   };
+
+  const handleGenerateSale = useCallback(async (options?: { skipConfirmation?: boolean }) => {
+    if (!invoice) {
+      toast.error('No se encontró la cotización a convertir.');
+      return;
+    }
+
+    if (!isAdmin) {
+      toast.error('Solo un administrador puede generar una venta desde la cotización.');
+      return;
+    }
+
+    if (isGeneratingSale) {
+      return;
+    }
+
+    if (invoice.status === 'anulada') {
+      toast.error('No se puede generar una venta a partir de una cotización anulada.');
+      return;
+    }
+
+    if (invoice.sales_order_id || invoice.status === 'pagada') {
+      toast.success('Esta cotización ya tiene una venta generada.');
+      return;
+    }
+
+    if (invoiceItems.length === 0) {
+      toast.error('La cotización no tiene productos para generar una venta.');
+      return;
+    }
+
+    if (!invoice.customer?.id) {
+      toast.error('La cotización no tiene un cliente asociado.');
+      return;
+    }
+
+    if (!invoice.warehouse?.id) {
+      toast.error('La cotización no tiene un almacén asociado.');
+      return;
+    }
+
+    if (!options?.skipConfirmation) {
+      const confirmed = confirm('¿Deseas generar una venta a partir de esta cotización? Se actualizará el estado a pagada y se registrará la salida de inventario si aún no existe.');
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    try {
+      setIsGeneratingSale(true);
+
+      const orderDate = new Date().toISOString().split('T')[0];
+      const { data: salesOrder, error: salesOrderError } = await supabase
+        .from('sales_orders')
+        .insert({
+          customer_id: invoice.customer.id,
+          warehouse_id: invoice.warehouse.id,
+          order_date: orderDate,
+          status: 'completada',
+          total_amount: invoice.total_amount ?? 0
+        })
+        .select()
+        .single();
+
+      if (salesOrderError) throw salesOrderError;
+
+      try {
+        const saleItemsPayload = invoiceItems.map(item => ({
+          sales_order_id: salesOrder.id,
+          product_id: item.product_id,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          total_price: item.total_price
+        }));
+
+        if (saleItemsPayload.length > 0) {
+          const { error: salesItemsError } = await supabase
+            .from('sales_order_items')
+            .insert(saleItemsPayload);
+          if (salesItemsError) throw salesItemsError;
+        }
+      } catch (itemsError) {
+        await supabase.from('sales_orders').delete().eq('id', salesOrder.id);
+        throw itemsError;
+      }
+
+      const { data: existingMovements, error: movementCheckError } = await supabase
+        .from('stock_movements')
+        .select('id')
+        .eq('related_id', invoice.id)
+        .eq('movement_type_id', 2);
+
+      if (movementCheckError) {
+        console.error('Error verificando movimientos de inventario:', movementCheckError);
+      }
+
+      if (!existingMovements || existingMovements.length === 0) {
+        const stockMovements = invoiceItems.map(item => ({
+          product_id: item.product_id,
+          warehouse_id: invoice.warehouse.id,
+          quantity: item.quantity,
+          movement_type_id: 2,
+          reference: `Cotización ${invoice.invoice_number}`,
+          related_id: invoice.id,
+          movement_date: new Date().toISOString(),
+          notes: `Venta generada desde cotización #${invoice.invoice_number}`
+        }));
+
+        if (stockMovements.length > 0) {
+          const { error: movementError } = await supabase
+            .from('stock_movements')
+            .insert(stockMovements);
+
+          if (movementError) {
+            console.error('Error registrando movimientos de inventario:', movementError);
+            toast.error('La venta se generó, pero hubo un error registrando el inventario.');
+          }
+        }
+      }
+
+      const { error: updateInvoiceError } = await supabase
+        .from('invoices')
+        .update({
+          status: 'pagada',
+          updated_at: new Date().toISOString(),
+          sales_order_id: salesOrder.id
+        })
+        .eq('id', invoice.id);
+
+      if (updateInvoiceError) throw updateInvoiceError;
+
+      toast.success('Venta generada correctamente a partir de la cotización.');
+      fetchInvoiceDetails();
+
+      if (shouldAutoGenerateSale) {
+        const params = new URLSearchParams(location.search);
+        params.delete('generar-venta');
+        const newSearch = params.toString();
+        window.history.replaceState({}, '', `${location.pathname}${newSearch ? `?${newSearch}` : ''}`);
+      }
+    } catch (err: any) {
+      console.error('Error al generar la venta:', err);
+      toast.error(`Error al generar la venta: ${err.message || err}`);
+    } finally {
+      setIsGeneratingSale(false);
+    }
+  }, [invoice, invoiceItems, isAdmin, isGeneratingSale, fetchInvoiceDetails, shouldAutoGenerateSale, location.pathname, location.search]);
+
+  useEffect(() => {
+    if (!invoice) return;
+    if (!shouldAutoGenerateSale) return;
+    if (attemptedAutoSaleRef.current) return;
+    attemptedAutoSaleRef.current = true;
+    handleGenerateSale();
+  }, [invoice, shouldAutoGenerateSale, handleGenerateSale]);
   
   const handlePrint = useReactToPrint({
     contentRef: printFormat === 'letter' ? letterPrintRef : rollPrintRef,
@@ -258,7 +428,27 @@ const InvoiceDetail: React.FC = () => {
           </h1>
         </div>
         
-        <div className="mt-4 md:mt-0 flex space-x-2">
+        <div className="mt-4 md:mt-0 flex flex-wrap gap-2 justify-end">
+          {isAdmin && invoice.status !== 'anulada' && invoice.status !== 'pagada' && !invoice.sales_order_id && (
+            <button
+              onClick={() => handleGenerateSale()}
+              disabled={isGeneratingSale}
+              className="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 flex items-center disabled:opacity-70"
+            >
+              {isGeneratingSale ? (
+                <>
+                  <i className="fas fa-spinner fa-spin mr-2"></i>
+                  Generando...
+                </>
+              ) : (
+                <>
+                  <i className="fas fa-cash-register mr-2"></i>
+                  Generar venta
+                </>
+              )}
+            </button>
+          )}
+
           {invoice.status !== 'anulada' && (
             <button
               onClick={() => setShowPrintDialog(true)}
@@ -269,7 +459,7 @@ const InvoiceDetail: React.FC = () => {
             </button>
           )}
           
-          {(invoice.status === 'borrador' || invoice.status === 'emitida') && (
+          {isAdmin && (invoice.status === 'borrador' || invoice.status === 'emitida') && (
             <>
               {invoice.status === 'borrador' && (
                 <Link
@@ -319,6 +509,14 @@ const InvoiceDetail: React.FC = () => {
                   {getStatusText(invoice.status)}
                 </div>
               </div>
+              {invoice.sales_order_id && (
+                <div className="grid grid-cols-2">
+                  <div className="text-gray-600">Venta generada:</div>
+                  <div className="font-medium break-words">
+                    {invoice.sales_order_id}
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2">
                 <div className="text-gray-600">Método de pago:</div>
                 <div className="capitalize">{invoice.payment_method ? `${invoice.payment_method.charAt(0).toUpperCase()}${invoice.payment_method.slice(1)}` : 'No especificado'}</div>

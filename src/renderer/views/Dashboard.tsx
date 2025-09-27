@@ -56,7 +56,7 @@ const Dashboard: React.FC = () => {
   const currency = useCurrency();
   const [stats, setStats] = useState<StatCard[]>([
     { title: 'Total Productos', value: '0', icon: 'fas fa-box', color: 'bg-primary' },
-    { title: 'Ventas del Mes', value: '$0', icon: 'fas fa-shopping-cart', color: 'bg-secondary' },
+    { title: 'Ventas del Mes', value: currency.format(0), icon: 'fas fa-shopping-cart', color: 'bg-secondary' },
     { title: 'Productos Agotados', value: '0', icon: 'fas fa-exclamation-triangle', color: 'bg-orange-500' },
     { title: 'Movimientos Hoy', value: '0', icon: 'fas fa-exchange-alt', color: 'bg-blue-500' },
   ]);

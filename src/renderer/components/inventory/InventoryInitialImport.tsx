@@ -19,40 +19,72 @@ const InventoryInitialImport: React.FC<Props> = ({ onImported, trigger }) => {
   const [preview, setPreview] = useState<any[]>([]);
   const [mode, setMode] = useState<'standard' | 'serialized'>('standard');
 
-  const templateCSV = useMemo(() => {
+  const templateData = useMemo(() => {
     if (mode === 'serialized') {
-      return [
-        'sku,serial_code,vin,engine_number,year,color,warehouse,location,acquired_at,reference',
-        'DE191033,ABC12345,1HGBH41JXMN109186,ENG987654,2024,Negro,Almacen Central,Pasillo A - Estante 1,2025-09-01,Importación inicial',
-      ].join('\n');
+      const header = ['sku', 'serial_code', 'vin', 'engine_number', 'year', 'color', 'warehouse', 'location', 'acquired_at', 'reference'];
+      const sample = ['DE191033', 'ABC12345', '1HGBH41JXMN109186', 'ENG987654', '2024', 'Negro', 'Almacen Central', 'Pasillo A - Estante 1', '2025-09-01', 'Importación inicial'];
+      return {
+        aoa: [header, sample],
+        csv: `${header.join(',')}\n${sample.join(',')}`,
+        filename: 'plantilla_inventario_inicial_serial',
+      };
     }
-    return [
-      'sku,warehouse,location,quantity,reference,movement_date',
-      'DE191033,Almacen Central,Pasillo A - Estante 1,3,Inventario inicial,2025-09-01',
-    ].join('\n');
+
+    const header = ['sku', 'warehouse', 'location', 'quantity', 'reference', 'movement_date'];
+    const sample = ['DE191033', 'Almacen Central', 'Pasillo A - Estante 1', '3', 'Inventario inicial', '2025-09-01'];
+    return {
+      aoa: [header, sample],
+      csv: `${header.join(',')}\n${sample.join(',')}`,
+      filename: 'plantilla_inventario_inicial',
+    };
   }, [mode]);
 
-  const downloadTemplate = () => {
-    const blob = new Blob([templateCSV], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = mode === 'serialized' ? 'plantilla_inventario_inicial_serial.csv' : 'plantilla_inventario_inicial.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  const downloadTemplate = async () => {
+    try {
+      const XLSX = await import('xlsx');
+      const ws = XLSX.utils.aoa_to_sheet(templateData.aoa);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Plantilla');
+      XLSX.writeFile(wb, `${templateData.filename}.xlsx`);
+    } catch (err) {
+      console.warn('xlsx no disponible, exportando CSV', err);
+      const blob = new Blob([templateData.csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${templateData.filename}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
   };
 
-  const parseCSV = async () => {
+  const parseFile = async () => {
     if (!file) return;
     setIsProcessing(true);
     setErrors([]);
     setPreview([]);
     try {
-      const results = await new Promise<Papa.ParseResult<any>>((resolve, reject) => {
-        Papa.parse(file!, { header: true, skipEmptyLines: true, complete: resolve, error: reject });
-      });
-      const rows = results.data as any[];
+      const filename = file.name?.toLowerCase() || '';
+      let rows: any[] = [];
+
+      if (filename.endsWith('.xlsx') || filename.endsWith('.xls')) {
+        const XLSX = await import('xlsx');
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        rows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+      } else if (filename.endsWith('.csv')) {
+        const results = await new Promise<Papa.ParseResult<any>>((resolve, reject) => {
+          Papa.parse(file!, { header: true, skipEmptyLines: true, complete: resolve, error: reject });
+        });
+        rows = results.data as any[];
+      } else {
+        throw new Error('Formato no soportado. Usa un archivo .xlsx, .xls o .csv');
+      }
+
       // Preload maps
       const [products, warehouses, locs] = await Promise.all([
         productService.getAllAll(),
@@ -66,54 +98,233 @@ const InventoryInitialImport: React.FC<Props> = ({ onImported, trigger }) => {
       const out: any[] = [];
       const errs: string[] = [];
 
+      const normalizeRow = (input: Record<string, any>) => {
+        return Object.entries(input || {}).reduce<Record<string, any>>((acc, [key, value]) => {
+          const cleanKey = String(key || '').trim().toLowerCase();
+          if (!cleanKey) return acc;
+          acc[cleanKey] = value;
+          return acc;
+        }, {});
+      };
+
+      const coerceDate = (value: any): null | { iso: string; dateOnly: string } => {
+        const toResult = (date: Date | null) => {
+          if (!date || isNaN(date.getTime())) return null;
+          const iso = date.toISOString();
+          return { iso, dateOnly: iso.slice(0, 10) };
+        };
+
+        if (!value) return null;
+        if (value instanceof Date) {
+          return toResult(value);
+        }
+        if (typeof value === 'number') {
+          const excelEpoch = Date.UTC(1899, 11, 30);
+          const millis = excelEpoch + value * 24 * 60 * 60 * 1000;
+          return toResult(new Date(millis));
+        }
+        if (typeof value === 'string') {
+          const trimmed = value.trim();
+          if (!trimmed) return null;
+          const isoCandidate = new Date(trimmed);
+          if (!isNaN(isoCandidate.getTime())) return toResult(isoCandidate);
+          const match = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+          if (match) {
+            const [, day, month, year] = match;
+            return toResult(new Date(Number(year), Number(month) - 1, Number(day)));
+          }
+        }
+        return null;
+      };
+
+      const sanitizeRows = rows
+        .map((row) => ({ original: row, normalized: normalizeRow(row) }))
+        .filter(({ normalized }) => Object.values(normalized).some((value) => String(value ?? '').trim().length));
+
+      if (!sanitizeRows.length) {
+        setErrors(['El archivo está vacío o no pudimos leer filas válidas.']);
+        return;
+      }
+
+      const headerSet = new Set<string>();
+      sanitizeRows.forEach(({ normalized }) => {
+        Object.keys(normalized).forEach((key) => {
+          if (key) headerSet.add(key);
+        });
+      });
+
+      const formatErrors: string[] = [];
+      const ensureColumns = (columns: string[], modeLabel: string) => {
+        const missing = columns.filter((col) => !headerSet.has(col));
+        if (missing.length) {
+          formatErrors.push(`Faltan columnas obligatorias para el modo ${modeLabel}: ${missing.map((col) => `“${col}”`).join(', ')}.`);
+        }
+      };
+      const ensureAny = (columns: string[], message: string) => {
+        if (!columns.some((col) => headerSet.has(col))) {
+          formatErrors.push(message);
+        }
+      };
+
       if (mode === 'serialized') {
-        for (let i = 0; i < rows.length; i++) {
-          const r = rows[i];
-          const sku = String(r.sku || '').trim().toLowerCase();
+        ensureColumns(['sku', 'serial_code'], 'serializado');
+        ensureAny(['warehouse', 'warehouse_id'], 'Agrega la columna “warehouse” o “warehouse_id” para indicar el almacén.');
+      } else {
+        ensureColumns(['sku', 'quantity'], 'estándar');
+        ensureAny(['warehouse', 'warehouse_id'], 'Agrega la columna “warehouse” o “warehouse_id” para indicar el almacén.');
+      }
+
+      if (formatErrors.length) {
+        setErrors(formatErrors);
+        return;
+      }
+
+      if (mode === 'serialized') {
+        for (let i = 0; i < sanitizeRows.length; i++) {
+          const { normalized: r, original } = sanitizeRows[i];
+          const rowNumber = i + 2;
+          const rawSku = String(r.sku ?? '').trim();
+          if (!rawSku) { errs.push(`Fila ${rowNumber}: "sku" requerido.`); continue; }
+          const sku = rawSku.toLowerCase();
           const product = bySku.get(sku);
-          if (!product) { errs.push(`Fila ${i + 2}: SKU no encontrado: ${r.sku}`); continue; }
-          const warehouse_id = r.warehouse_id || whByName.get(String(r.warehouse || '').trim().toLowerCase()) || null;
-          const location_id = r.location_id || locByName.get(String(r.location || '').trim().toLowerCase()) || null;
-          if (!warehouse_id) { errs.push(`Fila ${i + 2}: almacén requerido`); continue; }
+          const displaySku = (original?.sku ?? original?.SKU ?? r.sku ?? '').toString().trim();
+          if (!product) { errs.push(`Fila ${rowNumber}: SKU no encontrado: ${displaySku || rawSku}`); continue; }
+
+          let warehouse_id: number | null = null;
+          let location_id: number | null = null;
+          const warehouseIdRaw = r.warehouse_id;
+          if (warehouseIdRaw !== undefined && warehouseIdRaw !== null && String(warehouseIdRaw).trim() !== '') {
+            const parsed = Number(warehouseIdRaw);
+            if (!Number.isFinite(parsed) || parsed <= 0) {
+              errs.push(`Fila ${rowNumber}: "warehouse_id" debe ser un número válido.`);
+              continue;
+            }
+            warehouse_id = parsed;
+          } else {
+            warehouse_id = whByName.get(String(r.warehouse || '').trim().toLowerCase()) || null;
+          }
+          if (!warehouse_id) { errs.push(`Fila ${rowNumber}: almacén requerido`); continue; }
+
+          const locationIdRaw = r.location_id;
+          if (locationIdRaw !== undefined && locationIdRaw !== null && String(locationIdRaw).trim() !== '') {
+            const parsedLoc = Number(locationIdRaw);
+            if (!Number.isFinite(parsedLoc) || parsedLoc <= 0) {
+              errs.push(`Fila ${rowNumber}: "location_id" debe ser un número válido.`);
+              continue;
+            }
+            location_id = parsedLoc;
+          } else {
+            location_id = locByName.get(String(r.location || '').trim().toLowerCase()) || null;
+          }
           const serial_code = String(r.serial_code || '').trim();
-          if (!serial_code) { errs.push(`Fila ${i + 2}: serial_code requerido`); continue; }
+          if (!serial_code) { errs.push(`Fila ${rowNumber}: serial_code requerido`); continue; }
+
+          let year: number | null = null;
+          if (r.year !== undefined && String(r.year ?? '').trim() !== '') {
+            const parsedYear = Number(r.year);
+            if (!Number.isFinite(parsedYear)) {
+              errs.push(`Fila ${rowNumber}: "year" debe ser numérico.`);
+              continue;
+            }
+            year = parsedYear;
+          }
+
+          const parsedAcquired = coerceDate(r.acquired_at);
+          if (r.acquired_at && !parsedAcquired) {
+            errs.push(`Fila ${rowNumber}: "acquired_at" no tiene un formato de fecha válido.`);
+            continue;
+          }
           const row = {
             product_id: product.id,
+            product_sku: product.sku ?? rawSku,
+            product_name: product.name ?? (displaySku || rawSku),
             warehouse_id,
             location_id,
             serial_code,
             vin: r.vin || null,
             engine_number: r.engine_number || null,
-            year: r.year ? Number(r.year) : null,
+            year,
             color: r.color || null,
-            acquired_at: r.acquired_at || new Date().toISOString(),
+            acquired_at: parsedAcquired?.iso || new Date().toISOString(),
             reference: r.reference || 'INICIAL',
           };
           out.push(row);
         }
       } else {
-        for (let i = 0; i < rows.length; i++) {
-          const r = rows[i];
-          const sku = String(r.sku || '').trim().toLowerCase();
+        for (let i = 0; i < sanitizeRows.length; i++) {
+          const { normalized: r, original } = sanitizeRows[i];
+          const rowNumber = i + 2;
+          const rawSku = String(r.sku ?? '').trim();
+          if (!rawSku) { errs.push(`Fila ${rowNumber}: "sku" requerido.`); continue; }
+          const sku = rawSku.toLowerCase();
           const product = bySku.get(sku);
-          if (!product) { errs.push(`Fila ${i + 2}: SKU no encontrado: ${r.sku}`); continue; }
-          const warehouse_id = r.warehouse_id || whByName.get(String(r.warehouse || '').trim().toLowerCase()) || null;
-          const location_id = r.location_id || locByName.get(String(r.location || '').trim().toLowerCase()) || null;
-          const quantity = Number(r.quantity || 0);
-          if (!warehouse_id) { errs.push(`Fila ${i + 2}: almacén requerido`); continue; }
-          if (!(quantity > 0)) { errs.push(`Fila ${i + 2}: cantidad inválida`); continue; }
-          const movement_date = r.movement_date || new Date().toISOString();
-          out.push({ product_id: product.id, warehouse_id, location_id, quantity, reference: r.reference || 'INICIAL', movement_date });
+          const displaySku = (original?.sku ?? original?.SKU ?? r.sku ?? '').toString().trim();
+          if (!product) { errs.push(`Fila ${rowNumber}: SKU no encontrado: ${displaySku || rawSku}`); continue; }
+
+          let warehouse_id: number | null = null;
+          const warehouseIdRaw = r.warehouse_id;
+          if (warehouseIdRaw !== undefined && warehouseIdRaw !== null && String(warehouseIdRaw).trim() !== '') {
+            const parsed = Number(warehouseIdRaw);
+            if (!Number.isFinite(parsed) || parsed <= 0) {
+              errs.push(`Fila ${rowNumber}: "warehouse_id" debe ser un número válido.`);
+              continue;
+            }
+            warehouse_id = parsed;
+          } else {
+            warehouse_id = whByName.get(String(r.warehouse || '').trim().toLowerCase()) || null;
+          }
+          if (!warehouse_id) { errs.push(`Fila ${rowNumber}: almacén requerido`); continue; }
+
+          let location_id: number | null = null;
+          const locationIdRaw = r.location_id;
+          if (locationIdRaw !== undefined && locationIdRaw !== null && String(locationIdRaw).trim() !== '') {
+            const parsedLoc = Number(locationIdRaw);
+            if (!Number.isFinite(parsedLoc) || parsedLoc <= 0) {
+              errs.push(`Fila ${rowNumber}: "location_id" debe ser un número válido.`);
+              continue;
+            }
+            location_id = parsedLoc;
+          } else {
+            location_id = locByName.get(String(r.location || '').trim().toLowerCase()) || null;
+          }
+
+          const quantityRaw = r.quantity;
+          const quantity = Number(quantityRaw);
+          if (!Number.isFinite(quantity) || quantity <= 0) { errs.push(`Fila ${rowNumber}: "quantity" debe ser un número mayor que 0.`); continue; }
+
+          const parsedMovementDate = coerceDate(r.movement_date);
+          if (r.movement_date && !parsedMovementDate) {
+            errs.push(`Fila ${rowNumber}: "movement_date" no tiene un formato de fecha válido.`);
+            continue;
+          }
+          const movement_date = parsedMovementDate?.dateOnly || new Date().toISOString().slice(0, 10);
+          out.push({
+            product_id: product.id,
+            product_sku: product.sku ?? rawSku,
+            product_name: product.name ?? (displaySku || rawSku),
+            warehouse_id,
+            location_id,
+            quantity,
+            reference: r.reference || 'INICIAL',
+            movement_date,
+          });
         }
       }
 
       setPreview(out);
       setErrors(errs);
     } catch (e: any) {
-      setErrors([e.message || 'Error al parsear CSV']);
+      setErrors([e.message || 'Error al procesar el archivo']);
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const nextFile = event.target.files?.[0] || null;
+    setFile(nextFile);
+    setPreview([]);
+    setErrors([]);
   };
 
   const doImport = async () => {
@@ -135,7 +346,7 @@ const InventoryInitialImport: React.FC<Props> = ({ onImported, trigger }) => {
           warehouse_id: r.warehouse_id || null,
           location_id: r.location_id || null,
           status: 'in_stock' as const,
-          acquired_at: r.acquired_at || new Date().toISOString(),
+            acquired_at: r.acquired_at || new Date().toISOString(),
         }));
         const inserted = await serialsService.createMany(serials);
         // Index by serial_code
@@ -162,7 +373,7 @@ const InventoryInitialImport: React.FC<Props> = ({ onImported, trigger }) => {
           movement_type_id: typeId,
           reference: r.reference || 'INICIAL',
           related_id: null,
-          movement_date: r.movement_date || new Date().toISOString(),
+          movement_date: r.movement_date || new Date().toISOString().slice(0, 10),
           notes: 'Importación inicial',
         }));
         created = await stockMovementService.createBatch(moves);
@@ -208,13 +419,18 @@ const InventoryInitialImport: React.FC<Props> = ({ onImported, trigger }) => {
               </div>
 
               <div className="flex gap-2">
-                <button className="px-3 py-2 bg-gray-100 rounded-md hover:bg-gray-200" onClick={downloadTemplate}>Descargar plantilla CSV</button>
+                <button className="px-3 py-2 bg-gray-100 rounded-md hover:bg-gray-200" onClick={downloadTemplate}>Descargar plantilla Excel</button>
                 <label className="px-3 py-2 bg-white border rounded-md cursor-pointer hover:bg-gray-50">
-                  <input type="file" accept=".csv" className="hidden" onChange={(e)=> setFile(e.target.files?.[0] || null)} />
-                  Seleccionar archivo CSV
+                  <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileChange} />
+                  Seleccionar archivo (.xlsx / .xls / .csv)
                 </label>
-                <button disabled={!file || isProcessing} onClick={parseCSV} className="px-3 py-2 bg-blue-600 text-white rounded-md disabled:opacity-50">Validar</button>
+                <button disabled={!file || isProcessing} onClick={parseFile} className="px-3 py-2 bg-blue-600 text-white rounded-md disabled:opacity-50">Validar</button>
               </div>
+              <p className="text-xs text-gray-500">
+                {mode === 'serialized'
+                  ? 'En la columna “acquired_at” usa la fecha en la que se recibió cada unidad (formato YYYY-MM-DD o dd/mm/aaaa). Si la dejas vacía registraremos la fecha de hoy.'
+                  : 'En la columna “movement_date” usa la fecha en la que el stock entró al inventario (formato YYYY-MM-DD o dd/mm/aaaa). Si la dejas vacía registraremos la fecha de hoy.'}
+              </p>
 
               {!!errors.length && (
                 <div className="bg-red-50 border border-red-200 text-red-700 rounded p-3 text-sm">

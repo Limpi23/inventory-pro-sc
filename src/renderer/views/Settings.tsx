@@ -114,7 +114,7 @@ const Settings: React.FC = () => {
             <CardHeader>
               <CardTitle>Moneda y Tipo de Cambio</CardTitle>
               <CardDescription>
-                Define cómo mostrar los precios (Bs.) y el tipo de cambio desde USD.
+                La aplicación opera únicamente en Bolivianos (Bs.) y mantiene el tipo de cambio fijo en 1.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -127,28 +127,18 @@ const Settings: React.FC = () => {
 
                 <div className="space-y-2">
                   <Label>Moneda de visualización</Label>
-                  <select
-                    className="w-full border rounded-md px-3 py-2"
-                    value={currency.settings.displayCurrency}
-                    onChange={(e) => currency.set({ displayCurrency: e.target.value as any })}
-                  >
-                    <option value="BOB">Bolivianos (Bs.)</option>
-                    <option value="VES">Bolívares (Bs.)</option>
-                    <option value="USD">Dólares (USD)</option>
-                    <option value="COP">Pesos (COP)</option>
-                  </select>
+                  <Input disabled value="Bolivianos (Bs.)" />
+                  <p className="text-xs text-muted-foreground">Todos los valores se muestran en Bolivianos.</p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Tipo de cambio (1 {currency.settings.baseCurrency} → {currency.settings.displayCurrency})</Label>
+                  <Label>Tipo de cambio</Label>
                   <Input
                     type="number"
-                    step="0.0001"
-                    min="0"
                     value={currency.settings.exchangeRate}
-                    onChange={(e) => currency.set({ exchangeRate: Number(e.target.value) || 0 })}
+                    disabled
                   />
-                  <p className="text-xs text-muted-foreground">Última actualización: {new Date(currency.settings.lastUpdated || '').toLocaleString('es-BO')}</p>
+                  <p className="text-xs text-muted-foreground">La conversión está deshabilitada porque el sistema trabaja 100% en Bs.</p>
                 </div>
 
                 <div className="space-y-2">

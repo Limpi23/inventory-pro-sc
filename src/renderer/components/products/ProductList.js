@@ -15,9 +15,11 @@ import ProductImport from "./ProductImport";
 import ProductPriceUpdate from './ProductPriceUpdate';
 import ProductBulkAssignLocation from './ProductBulkAssignLocation';
 import { useAuth } from "../../lib/auth";
+import { useCurrency } from "../../hooks/useCurrency";
 import { toast } from "react-hot-toast";
 export default function ProductList() {
     const { user, hasPermission } = useAuth();
+    const currency = useCurrency();
     const isAdmin = ((user?.role_name || '').toLowerCase().includes('admin')) || user?.role_id === 1;
     const canUpdateProducts = (isAdmin ||
         hasPermission('products', 'update') ||
@@ -188,13 +190,10 @@ export default function ProductList() {
         setEditingProduct(null);
         fetchProducts({ keepPage: true });
     }
-    // Formatear el precio como moneda
+    // Formatear el precio como moneda en Bolivianos
     const formatCurrency = (value) => {
-        return new Intl.NumberFormat('es-CO', {
-            style: 'currency',
-            currency: 'COP',
-            minimumFractionDigits: 0
-        }).format(value);
+        const numeric = Number(value);
+        return currency.format(Number.isFinite(numeric) ? numeric : 0);
     };
     // Exportar a Excel (seleccionados o todos si no hay selección) con soporte >1000 y columnas compatibles con importación
     const handleExportExcel = async () => {

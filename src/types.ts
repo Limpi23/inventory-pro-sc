@@ -93,6 +93,7 @@ export interface Invoice {
   total_amount: number;
   status: string;
   notes?: string;
+  sales_order_id?: string | null;
   customer?: Customer;
   warehouse?: { id?: string; name?: string };
 }

@@ -18,12 +18,12 @@ export function useCurrency() {
   const api = useMemo(() => ({
     settings,
     set: (partial: Partial<CurrencySettings>) => {
-      setCurrencySettings(partial);
-      setSettings(getCurrencySettings());
+      const next = setCurrencySettings(partial);
+      setSettings(next);
     },
     reset: () => {
-      setCurrencySettings(DEFAULT_CURRENCY_SETTINGS);
-      setSettings(getCurrencySettings());
+      const next = setCurrencySettings(DEFAULT_CURRENCY_SETTINGS);
+      setSettings(next);
     },
     toDisplay: (amountInBase: number) => toDisplay(amountInBase, settings),
     toBase: (amountInDisplay: number) => toBase(amountInDisplay, settings),

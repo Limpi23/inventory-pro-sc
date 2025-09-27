@@ -2,6 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Link } from 'react-router-dom';
 import { useCurrency } from '../hooks/useCurrency';
+import { toast } from 'react-hot-toast';
+import { useAuth } from '../lib/auth';
+import { Button } from '../components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../components/ui/dropdown-menu';
 
 interface PurchaseOrder {
   id: string;
@@ -12,6 +22,37 @@ interface PurchaseOrder {
   warehouse_name: string;
   items_count: number;
   created_at: string;
+}
+
+interface PurchaseOrderPreview extends PurchaseOrder {
+  supplier?: {
+    id?: string;
+    name?: string;
+    contact_name?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+  } | null;
+  warehouse?: {
+    id?: string;
+    name?: string;
+    location?: string;
+  } | null;
+  notes?: string | null;
+  updated_at?: string;
+}
+
+interface PurchaseOrderItemPreview {
+  id: string;
+  product_id: string;
+  quantity: number;
+  received_quantity?: number | null;
+  unit_price: number;
+  total_price: number;
+  product?: {
+    name?: string;
+    sku?: string;
+  } | null;
 }
 
 const PurchaseOrders: React.FC = () => {
@@ -25,16 +66,37 @@ const PurchaseOrders: React.FC = () => {
     end: new Date().toISOString().split('T')[0] // Hoy
   });
   const currency = useCurrency();
+  const { hasPermission, user } = useAuth();
+
+  const [selectedOrderSummary, setSelectedOrderSummary] = useState<PurchaseOrder | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<PurchaseOrderPreview | null>(null);
+  const [orderItems, setOrderItems] = useState<PurchaseOrderItemPreview[]>([]);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [drawerLoading, setDrawerLoading] = useState(false);
+  const [drawerError, setDrawerError] = useState<string | null>(null);
   
   // Paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
 
+  const canViewOrders = hasPermission('purchase_orders', 'view');
+  const canEditOrders = hasPermission('purchase_orders', 'edit');
+  const roleName = (user?.role_name || '').toLowerCase();
+  const isAdmin = roleName.includes('admin') || user?.role_id === 1;
+  const canManageOrders = isAdmin || canEditOrders;
+  const showActionsColumn = canViewOrders;
+
   useEffect(() => {
+    if (!canViewOrders) {
+      setIsLoading(false);
+      return;
+    }
     fetchOrders();
-  }, [dateRange, statusFilter]);
+  }, [dateRange, statusFilter, canViewOrders]);
 
   const fetchOrders = async () => {
+    if (!canViewOrders) return;
+
     try {
       setIsLoading(true);
       
@@ -108,6 +170,120 @@ const PurchaseOrders: React.FC = () => {
     setCurrentPage(1);
   };
 
+  const handleOrderRowClick = (order: PurchaseOrder) => {
+    if (!canViewOrders) return;
+    setSelectedOrderSummary(order);
+    setSelectedOrder(null);
+    setOrderItems([]);
+    setDrawerError(null);
+    setIsDrawerOpen(true);
+    fetchOrderPreview(order.id, order);
+  };
+
+  const closeDrawer = () => {
+    setIsDrawerOpen(false);
+    setTimeout(() => {
+      setSelectedOrderSummary(null);
+      setSelectedOrder(null);
+      setOrderItems([]);
+      setDrawerError(null);
+    }, 250);
+  };
+
+  const fetchOrderPreview = async (orderId: string, summary?: PurchaseOrder) => {
+    try {
+      setDrawerLoading(true);
+      setDrawerError(null);
+      const client = await supabase.getClient();
+
+      const { data: orderData, error: orderError } = await client
+        .from('purchase_orders')
+        .select(`
+          *,
+          supplier:suppliers(id, name, contact_name, phone, email, address),
+          warehouse:warehouses(id, name, location)
+        `)
+        .eq('id', orderId)
+        .single();
+
+      if (orderError) throw orderError;
+
+      const { data: itemsData, error: itemsError } = await client
+        .from('purchase_order_items')
+        .select(`
+          id,
+          product_id,
+          quantity,
+          received_quantity,
+          unit_price,
+          total_price,
+          product:products(name, sku)
+        `)
+        .eq('purchase_order_id', orderId);
+
+      if (itemsError) throw itemsError;
+
+      const baseSummary = summary || selectedOrderSummary;
+
+      const normalizedOrder: PurchaseOrderPreview = {
+        id: (orderData as any).id,
+        order_date: (orderData as any).order_date,
+        status: (orderData as any).status,
+        total_amount: (orderData as any).total_amount ?? 0,
+        supplier_name:
+          (orderData as any)?.supplier?.name || baseSummary?.supplier_name || 'Desconocido',
+        warehouse_name:
+          (orderData as any)?.warehouse?.name || baseSummary?.warehouse_name || 'Desconocido',
+        items_count: baseSummary?.items_count ?? (itemsData?.length ?? 0),
+        created_at: (orderData as any).created_at,
+        supplier: (orderData as any)?.supplier || null,
+        warehouse: (orderData as any)?.warehouse || null,
+        notes: (orderData as any)?.notes || null,
+        updated_at: (orderData as any)?.updated_at || (orderData as any)?.created_at,
+      };
+
+      setSelectedOrder(normalizedOrder);
+      setOrderItems((itemsData || []) as unknown as PurchaseOrderItemPreview[]);
+    } catch (err: any) {
+      console.error('Error al cargar vista previa de orden:', err);
+      setDrawerError(err.message || 'No se pudo cargar la orden seleccionada');
+      toast.error(`Error al cargar la orden: ${err.message || err}`);
+    } finally {
+      setDrawerLoading(false);
+    }
+  };
+
+  const handleCancelOrder = async (orderId: string) => {
+    if (!canManageOrders) {
+      toast.error('No tienes permiso para cancelar órdenes de compra.');
+      return;
+    }
+
+    const confirmed = confirm('¿Está seguro que desea cancelar esta orden de compra? Esta acción no se puede deshacer.');
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const client = await supabase.getClient();
+      const { error: updateError } = await client
+        .from('purchase_orders')
+        .update({ status: 'cancelada', updated_at: new Date().toISOString() })
+        .eq('id', orderId);
+
+      if (updateError) throw updateError;
+
+      toast.success('Orden cancelada correctamente');
+      fetchOrders();
+      if (selectedOrderSummary?.id === orderId) {
+        fetchOrderPreview(orderId, selectedOrderSummary);
+      }
+    } catch (err: any) {
+      console.error('Error al cancelar orden:', err);
+      toast.error(`Error al cancelar orden: ${err.message || err}`);
+    }
+  };
+
   // Filtrar órdenes por término de búsqueda
   const filteredOrders = orders.filter(order => 
     order.supplier_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -126,6 +302,15 @@ const PurchaseOrders: React.FC = () => {
 
   // Formatear moneda
   const formatCurrency = (amount: number) => currency.format(amount);
+
+  const formatDateLong = (dateString: string) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleDateString(currency.settings.locale, {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
 
   // Formatear estado con colores
   const getStatusBadge = (status: string) => {
@@ -171,17 +356,28 @@ const PurchaseOrders: React.FC = () => {
     );
   };
 
+  if (!canViewOrders) {
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-md">
+        <h1 className="text-xl font-semibold text-gray-800 mb-2">Órdenes de Compra</h1>
+        <p className="text-gray-600">No tienes permisos para ver las órdenes de compra.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-semibold">Órdenes de Compra</h1>
-        <Link
-          to="/ordenes-compra/nueva"
-          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors inline-flex items-center"
-        >
-          <i className="fas fa-plus mr-2"></i>
-          Nueva Orden
-        </Link>
+        {canManageOrders && (
+          <Link
+            to="/ordenes-compra/nueva"
+            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors inline-flex items-center"
+          >
+            <i className="fas fa-plus mr-2"></i>
+            Nueva Orden
+          </Link>
+        )}
       </div>
       
       {error && (
@@ -296,9 +492,11 @@ const PurchaseOrders: React.FC = () => {
                   <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4">
                     Total
                   </th>
-                  <th className="text-center text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4">
-                    Acciones
-                  </th>
+                  {showActionsColumn && (
+                    <th className="text-center text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4">
+                      Acciones
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -318,9 +516,17 @@ const PurchaseOrders: React.FC = () => {
                   </tr>
                 ) : (
                   currentOrders.map((order) => (
-                    <tr key={order.id} className="hover:bg-gray-50 transition-colors">
+                    <tr
+                      key={order.id}
+                      className="hover:bg-gray-50 transition-colors cursor-pointer"
+                      onClick={() => handleOrderRowClick(order)}
+                    >
                       <td className="py-3 px-4 text-sm font-medium">
-                        <Link to={`/ordenes-compra/${order.id}`} className="text-blue-600 hover:text-blue-800 hover:underline">
+                        <Link
+                          to={`/ordenes-compra/${order.id}`}
+                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           # {order.id.slice(0, 8)}...
                         </Link>
                       </td>
@@ -339,35 +545,79 @@ const PurchaseOrders: React.FC = () => {
                       <td className="py-3 px-4 text-sm text-right font-medium">
                         {formatCurrency(order.total_amount)}
                       </td>
-                      <td className="py-3 px-4 text-sm text-center">
-                        <div className="flex items-center justify-center space-x-2">
-                          <Link 
-                            to={`/ordenes-compra/${order.id}`}
-                            className="text-blue-600 hover:text-blue-800 focus:outline-none rounded-md p-1"
-                            title="Ver detalles"
-                          >
-                            <i className="fas fa-eye"></i>
-                          </Link>
-                          {order.status !== 'completada' && order.status !== 'cancelada' && (
-                            <Link
-                              to={`/ordenes-compra/${order.id}/recibir`}
-                              className="text-green-600 hover:text-green-800 focus:outline-none rounded-md p-1"
-                              title="Recibir mercancía"
-                            >
-                              <i className="fas fa-truck-loading"></i>
-                            </Link>
-                          )}
-                          {order.status === 'borrador' && (
-                            <Link
-                              to={`/ordenes-compra/${order.id}/editar`}
-                              className="text-yellow-600 hover:text-yellow-800 focus:outline-none rounded-md p-1"
-                              title="Editar"
-                            >
-                              <i className="fas fa-edit"></i>
-                            </Link>
-                          )}
-                        </div>
-                      </td>
+                      {showActionsColumn && (
+                        <td className="py-3 px-4 text-sm text-center">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 px-2"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <i className="fas fa-ellipsis-v mr-2"></i>
+                                Acciones
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="min-w-[200px]" onClick={(e) => e.stopPropagation()}>
+                              {canViewOrders && (
+                                <DropdownMenuItem asChild>
+                                  <Link
+                                    to={`/ordenes-compra/${order.id}`}
+                                    className="flex items-center gap-2 w-full"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <i className="fas fa-eye text-muted-foreground"></i>
+                                    <span>Ver detalle</span>
+                                  </Link>
+                                </DropdownMenuItem>
+                              )}
+
+                              {canManageOrders && ['enviada', 'recibida_parcialmente'].includes(order.status) && (
+                                <DropdownMenuItem asChild>
+                                  <Link
+                                    to={`/ordenes-compra/${order.id}/recibir`}
+                                    className="flex items-center gap-2 w-full"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <i className="fas fa-truck-loading text-green-600"></i>
+                                    <span>Registrar recepción</span>
+                                  </Link>
+                                </DropdownMenuItem>
+                              )}
+
+                              {canManageOrders && order.status === 'borrador' && (
+                                <DropdownMenuItem asChild>
+                                  <Link
+                                    to={`/ordenes-compra/${order.id}/editar`}
+                                    className="flex items-center gap-2 w-full"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <i className="fas fa-edit text-yellow-600"></i>
+                                    <span>Editar</span>
+                                  </Link>
+                                </DropdownMenuItem>
+                              )}
+
+                              {canManageOrders && ['borrador', 'enviada'].includes(order.status) && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleCancelOrder(order.id);
+                                    }}
+                                    className="text-red-600 focus:text-red-700"
+                                  >
+                                    <i className="fas fa-ban"></i>
+                                    <span>Cancelar orden</span>
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}
@@ -438,6 +688,205 @@ const PurchaseOrders: React.FC = () => {
           </div>
         )}
       </div>
+
+      {canViewOrders && (
+        <div
+          className={`fixed inset-y-0 right-0 max-w-lg w-full bg-white shadow-xl transform ${isDrawerOpen ? 'translate-x-0' : 'translate-x-full'} transition-transform duration-300 ease-in-out z-50 flex flex-col`}
+        >
+          <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+            <h2 className="text-lg font-medium">Vista previa de orden de compra</h2>
+            <button
+              onClick={closeDrawer}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <i className="fas fa-times"></i>
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4">
+            {drawerLoading ? (
+              <div className="flex justify-center items-center h-full">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
+              </div>
+            ) : drawerError ? (
+              <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg">
+                <p>{drawerError}</p>
+              </div>
+            ) : selectedOrder ? (
+              <div className="space-y-6">
+                <div className="bg-white rounded-lg border shadow-sm p-6">
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-sm text-gray-500">Orden</p>
+                        <h3 className="text-xl font-semibold">#{selectedOrder.id}</h3>
+                      </div>
+                      <div>{getStatusBadge(selectedOrder.status)}</div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-500">Proveedor</h4>
+                        <p className="font-semibold text-gray-900">{selectedOrder.supplier?.name || selectedOrder.supplier_name}</p>
+                        {selectedOrder.supplier?.contact_name && (
+                          <p className="text-sm text-gray-600">Contacto: {selectedOrder.supplier.contact_name}</p>
+                        )}
+                        {(selectedOrder.supplier?.phone || selectedOrder.supplier?.email) && (
+                          <p className="text-sm text-gray-600">
+                            {selectedOrder.supplier?.phone}
+                            {selectedOrder.supplier?.phone && selectedOrder.supplier?.email && ' | '}
+                            {selectedOrder.supplier?.email}
+                          </p>
+                        )}
+                        {selectedOrder.supplier?.address && (
+                          <p className="text-sm text-gray-600">{selectedOrder.supplier.address}</p>
+                        )}
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-500">Información</h4>
+                        <p className="text-sm text-gray-600">Fecha: {formatDateLong(selectedOrder.order_date)}</p>
+                        <p className="text-sm text-gray-600">Almacén: {selectedOrder.warehouse?.name || selectedOrder.warehouse_name}</p>
+                        {selectedOrder.updated_at && (
+                          <p className="text-sm text-gray-600">Actualizado: {formatDateLong(selectedOrder.updated_at)}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Link
+                        to={`/ordenes-compra/${selectedOrder.id}`}
+                        className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 inline-flex items-center gap-2"
+                        onClick={closeDrawer}
+                      >
+                        <i className="fas fa-external-link-alt"></i>
+                        Ver detalle completo
+                      </Link>
+                      {canManageOrders && ['enviada', 'recibida_parcialmente'].includes(selectedOrder.status) && (
+                        <Link
+                          to={`/ordenes-compra/${selectedOrder.id}/recibir`}
+                          className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 inline-flex items-center gap-2"
+                          onClick={closeDrawer}
+                        >
+                          <i className="fas fa-truck-loading"></i>
+                          Registrar recepción
+                        </Link>
+                      )}
+                      {canManageOrders && ['borrador', 'enviada'].includes(selectedOrder.status) && (
+                        <button
+                          onClick={() => handleCancelOrder(selectedOrder.id)}
+                          className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 inline-flex items-center gap-2"
+                        >
+                          <i className="fas fa-ban"></i>
+                          Cancelar orden
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border shadow-sm p-6">
+                  <h3 className="font-medium text-gray-700 mb-4">Resumen del inventario</h3>
+                  {orderItems.length > 0 ? (
+                    (() => {
+                      const totalOrdered = orderItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
+                      const totalReceived = orderItems.reduce((sum, item) => sum + (item.received_quantity || 0), 0);
+                      const totalPending = Math.max(totalOrdered - totalReceived, 0);
+                      return (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          <div className="bg-gray-50 rounded-md p-4">
+                            <p className="text-xs uppercase text-gray-500">Total ordenado</p>
+                            <p className="text-lg font-semibold">{totalOrdered}</p>
+                          </div>
+                          <div className="bg-green-50 rounded-md p-4">
+                            <p className="text-xs uppercase text-green-600">Total recibido</p>
+                            <p className="text-lg font-semibold text-green-700">{totalReceived}</p>
+                          </div>
+                          <div className="bg-yellow-50 rounded-md p-4">
+                            <p className="text-xs uppercase text-yellow-600">Pendiente por recibir</p>
+                            <p className="text-lg font-semibold text-yellow-700">{totalPending}</p>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  ) : (
+                    <p className="text-sm text-gray-600">No hay productos asociados a esta orden.</p>
+                  )}
+                </div>
+
+                <div className="bg-white rounded-lg border shadow-sm">
+                  <div className="p-4 border-b">
+                    <h3 className="font-medium text-gray-700">Detalle de productos</h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Cantidad</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Recibido</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Pendiente</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {orderItems.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="px-4 py-6 text-sm text-center text-gray-500">
+                              No se encontraron productos para esta orden.
+                            </td>
+                          </tr>
+                        ) : (
+                          orderItems.map((item) => {
+                            const received = item.received_quantity || 0;
+                            const pending = Math.max((item.quantity || 0) - received, 0);
+                            return (
+                              <tr key={item.id}>
+                                <td className="px-4 py-3">
+                                  <div className="font-medium text-gray-900">{item.product?.name || 'Producto sin nombre'}</div>
+                                  {item.product?.sku && (
+                                    <div className="text-xs text-gray-500">SKU: {item.product.sku}</div>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-right text-sm">{item.quantity}</td>
+                                <td className="px-4 py-3 text-right text-sm text-green-700">{received}</td>
+                                <td className={`px-4 py-3 text-right text-sm ${pending === 0 ? 'text-gray-500' : 'text-yellow-600'}`}>{pending}</td>
+                                <td className="px-4 py-3 text-right text-sm font-medium">{formatCurrency(item.total_price)}</td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="p-4 border-t flex justify-end">
+                    <div className="w-full sm:w-64 space-y-2">
+                      <div className="flex justify-between text-sm text-gray-600">
+                        <span>Total ordenado:</span>
+                        <span>{formatCurrency(orderItems.reduce((sum, item) => sum + (item.total_price || 0), 0))}</span>
+                      </div>
+                      <div className="flex justify-between text-base font-semibold text-gray-900">
+                        <span>Total factura:</span>
+                        <span>{formatCurrency(selectedOrder.total_amount)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {selectedOrder.notes && (
+                  <div className="bg-white rounded-lg border shadow-sm p-6">
+                    <h3 className="font-medium text-gray-700 mb-2">Notas</h3>
+                    <p className="text-sm text-gray-700 whitespace-pre-line">{selectedOrder.notes}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="h-full flex items-center justify-center">
+                <p className="text-sm text-gray-500">Selecciona una orden para ver su vista previa.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

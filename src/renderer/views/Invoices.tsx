@@ -5,6 +5,15 @@ import { Invoice } from '../../types';
 import { toast } from 'react-hot-toast';
 import useCompanySettings from '../hooks/useCompanySettings';
 import { useCurrency } from '../hooks/useCurrency';
+import { useAuth } from '../lib/auth';
+import { Button } from '../components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../components/ui/dropdown-menu';
 
 const Invoices: React.FC = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -21,6 +30,15 @@ const Invoices: React.FC = () => {
   const [drawerLoading, setDrawerLoading] = useState(false);
   const { settings } = useCompanySettings();
   const currency = useCurrency();
+  const { hasPermission, user } = useAuth();
+
+  const canViewInvoices = hasPermission('invoices', 'view');
+  const canCreateInvoices = hasPermission('invoices', 'create');
+  const canEditInvoices = hasPermission('invoices', 'edit');
+  const canDeleteInvoices = hasPermission('invoices', 'delete');
+  const roleName = (user?.role_name || '').toLowerCase();
+  const isAdmin = roleName.includes('admin') || user?.role_id === 1;
+  const hasActionPermissions = isAdmin && (canViewInvoices || canEditInvoices || canDeleteInvoices);
 
   useEffect(() => {
     fetchInvoices();
@@ -132,6 +150,7 @@ const Invoices: React.FC = () => {
   };
 
   const handleInvoiceRowClick = (invoice: Invoice) => {
+    if (!canViewInvoices) return;
     setSelectedInvoice(invoice);
     setIsDrawerOpen(true);
   };
@@ -164,12 +183,17 @@ const Invoices: React.FC = () => {
   const totalPages = Math.ceil(filteredInvoices.length / invoicesPerPage);
 
   const handleDeleteInvoice = async (id: string) => {
-  if (!confirm('¿Está seguro que desea anular esta cotización? Esta acción no se puede deshacer.')) {
+    if (!isAdmin || !canDeleteInvoices) {
+      toast.error('No tienes permiso para anular cotizaciones.');
+      return;
+    }
+
+    if (!confirm('¿Está seguro que desea anular esta cotización? Esta acción no se puede deshacer.')) {
       return;
     }
 
     try {
-  // En vez de eliminar, anulamos la cotización
+      // En vez de eliminar, anulamos la cotización
       const { error } = await supabase
         .from('invoices')
         .update({ 
@@ -180,11 +204,11 @@ const Invoices: React.FC = () => {
 
       if (error) throw error;
 
-  toast.success('Cotización anulada correctamente');
+      toast.success('Cotización anulada correctamente');
       fetchInvoices();
     } catch (error: any) {
-  console.error('Error al anular cotización:', error.message);
-  toast.error(`Error al anular cotización: ${error.message}`);
+      console.error('Error al anular cotización:', error.message);
+      toast.error(`Error al anular cotización: ${error.message}`);
     }
   };
 
@@ -271,12 +295,14 @@ const Invoices: React.FC = () => {
           </Link>
           <h1 className="text-2xl font-semibold">Gestión de Cotizaciones</h1>
         </div>
-        <Link 
-          to="/ventas/facturas/nueva" 
-          className="mt-4 md:mt-0 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center"
-        >
-          <i className="fas fa-plus mr-2"></i> Nueva Cotización
-        </Link>
+        {canCreateInvoices && (
+          <Link 
+            to="/ventas/facturas/nueva" 
+            className="mt-4 md:mt-0 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center"
+          >
+            <i className="fas fa-plus mr-2"></i> Nueva Cotización
+          </Link>
+        )}
       </div>
 
       {upcomingDueInvoices.length > 0 && showUpcomingAlert && (
@@ -370,7 +396,9 @@ const Invoices: React.FC = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                    {hasActionPermissions && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -383,6 +411,15 @@ const Invoices: React.FC = () => {
                     // Determinar si esta cotización está próxima a vencer (menos de 7 días)
                     const isUpcomingDue = daysRemaining !== null && daysRemaining > 0 && daysRemaining <= 7;
                     
+                    const showDetail = canViewInvoices;
+                    const showGenerateSale = isAdmin && invoice.status !== 'anulada' && invoice.status !== 'pagada' && !invoice.sales_order_id;
+                    const showEdit = canEditInvoices && invoice.status === 'borrador';
+                    const showCancel = canDeleteInvoices && invoice.status !== 'anulada';
+                    const showPrint = canViewInvoices;
+                    const hasPrimaryActions = showDetail || showGenerateSale || showEdit;
+                    const shouldShowCancelSeparator = showCancel && hasPrimaryActions;
+                    const shouldShowPrintSeparator = showPrint && (hasPrimaryActions || showCancel);
+
                     return (
                       <tr 
                         key={invoice.id} 
@@ -418,48 +455,93 @@ const Invoices: React.FC = () => {
                         <td className="px-6 py-4 whitespace-nowrap">
                           {renderStatusBadge(invoice.status)}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          <div className="flex space-x-2">
-                            <Link 
-                              to={`/ventas/facturas/${invoice.id}`}
-                              className="text-blue-600 hover:text-blue-900"
-                              title="Ver detalle"
-                            >
-                              <i className="fas fa-eye"></i>
-                            </Link>
-                            
-                            {invoice.status === 'borrador' && (
-                              <Link 
-                                to={`/ventas/facturas/editar/${invoice.id}`}
-                                className="text-yellow-600 hover:text-yellow-900"
-                                title="Editar"
-                              >
-                                <i className="fas fa-edit"></i>
-                              </Link>
-                            )}
-                            
-                            {invoice.status !== 'anulada' && (
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteInvoice(invoice.id);
-                                }}
-                                className="text-red-600 hover:text-red-900"
-                                title="Anular"
-                              >
-                                <i className="fas fa-ban"></i>
-                              </button>
-                            )}
-                            
-                            <Link 
-                              to={`/ventas/facturas/${invoice.id}`}
-                              className="text-green-600 hover:text-green-900"
-                              title="Imprimir"
-                            >
-                              <i className="fas fa-print"></i>
-                            </Link>
-                          </div>
-                        </td>
+                        {hasActionPermissions && (
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 px-2"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <i className="fas fa-ellipsis-v mr-2"></i>
+                                  Acciones
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="min-w-[200px]" onClick={(e) => e.stopPropagation()}>
+                                {showDetail && (
+                                  <DropdownMenuItem asChild>
+                                    <Link
+                                      to={`/ventas/facturas/${invoice.id}`}
+                                      className="flex items-center gap-2 w-full"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <i className="fas fa-eye text-muted-foreground"></i>
+                                      <span>Ver detalle</span>
+                                    </Link>
+                                  </DropdownMenuItem>
+                                )}
+
+                                {showGenerateSale && (
+                                  <DropdownMenuItem asChild>
+                                    <Link
+                                      to={`/ventas/facturas/${invoice.id}?generar-venta=1`}
+                                      className="flex items-center gap-2 w-full"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <i className="fas fa-cash-register text-emerald-600"></i>
+                                      <span>Generar venta</span>
+                                    </Link>
+                                  </DropdownMenuItem>
+                                )}
+
+                                {showEdit && (
+                                  <DropdownMenuItem asChild>
+                                    <Link
+                                      to={`/ventas/facturas/editar/${invoice.id}`}
+                                      className="flex items-center gap-2 w-full"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <i className="fas fa-edit text-yellow-600"></i>
+                                      <span>Editar</span>
+                                    </Link>
+                                  </DropdownMenuItem>
+                                )}
+
+                                {shouldShowCancelSeparator && <DropdownMenuSeparator />}
+
+                                {showCancel && (
+                                  <DropdownMenuItem
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleDeleteInvoice(invoice.id);
+                                    }}
+                                    className="text-red-600 focus:text-red-700"
+                                  >
+                                    <i className="fas fa-ban"></i>
+                                    <span>Anular</span>
+                                  </DropdownMenuItem>
+                                )}
+
+                                {shouldShowPrintSeparator && <DropdownMenuSeparator />}
+
+                                {showPrint && (
+                                  <DropdownMenuItem asChild>
+                                    <Link
+                                      to={`/ventas/facturas/${invoice.id}`}
+                                      className="flex items-center gap-2 w-full"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <i className="fas fa-print text-green-600"></i>
+                                      <span>Imprimir</span>
+                                    </Link>
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}

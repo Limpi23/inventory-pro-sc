@@ -72,12 +72,14 @@ const InvoiceForm: React.FC = () => {
     product_id: string;
     quantity: number;
     unit_price: number;
+    unit_price_display: string;
     tax_rate: number;
     discount_percent: number;
   }>({
     product_id: '',
     quantity: 1,
     unit_price: 0,
+    unit_price_display: '',
     tax_rate: 0,
     discount_percent: 0
   });
@@ -251,6 +253,10 @@ const InvoiceForm: React.FC = () => {
           ...prev,
           [name]: value,
           unit_price: selectedProduct.sale_price,
+          unit_price_display: (() => {
+            const displayPrice = currency.toDisplay(selectedProduct.sale_price);
+            return Number.isFinite(displayPrice) ? `${displayPrice}` : '';
+          })(),
           tax_rate: selectedProduct.tax_rate || 0
         }));
       } else {
@@ -260,9 +266,21 @@ const InvoiceForm: React.FC = () => {
         }));
       }
     } else {
+      if (name === 'unit_price') {
+        const displayValue = value;
+        const parsedDisplay = displayValue === '' ? NaN : parseFloat(displayValue);
+        const baseValue = Number.isNaN(parsedDisplay) ? 0 : currency.toBase(parsedDisplay);
+        setCurrentItem(prev => ({
+          ...prev,
+          unit_price: Number.isFinite(baseValue) ? Number(baseValue.toFixed(6)) : 0,
+          unit_price_display: displayValue
+        }));
+        return;
+      }
+
       setCurrentItem(prev => ({
         ...prev,
-        [name]: name === 'quantity' || name === 'unit_price' || name === 'discount_percent' || name === 'tax_rate'
+        [name]: name === 'quantity' || name === 'discount_percent' || name === 'tax_rate'
           ? parseFloat(value) || 0
           : value
       }));
@@ -327,6 +345,7 @@ const InvoiceForm: React.FC = () => {
       product_id: '',
       quantity: 1,
       unit_price: 0,
+      unit_price_display: '',
       tax_rate: 0,
       discount_percent: 0
     });
@@ -655,10 +674,12 @@ const InvoiceForm: React.FC = () => {
                           key={product.id}
                           className="p-2 hover:bg-gray-100 cursor-pointer"
                           onClick={() => {
+                            const displayPrice = currency.toDisplay(product.sale_price);
                             setCurrentItem(prev => ({
                               ...prev,
                               product_id: product.id,
                               unit_price: product.sale_price,
+                              unit_price_display: Number.isFinite(displayPrice) ? `${displayPrice}` : '',
                               tax_rate: product.tax_rate || 0
                             }));
                             setProductSearchTerm(product.name);
@@ -693,7 +714,7 @@ const InvoiceForm: React.FC = () => {
                   name="unit_price"
                   min="0"
                   step="0.01"
-                  value={currentItem.unit_price}
+                  value={currentItem.unit_price_display}
                   onChange={handleItemInputChange}
                   className="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />

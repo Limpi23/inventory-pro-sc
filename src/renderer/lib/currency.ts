@@ -1,9 +1,9 @@
 export type CurrencyCode = 'USD' | 'BOB' | 'VES' | 'COP';
 
 export interface CurrencySettings {
-  baseCurrency: CurrencyCode; // Moneda en la que guardas los precios base (p.ej. USD)
-  displayCurrency: CurrencyCode; // Moneda para mostrar (p.ej. BOB o VES)
-  exchangeRate: number; // Cuántos displayCurrency por 1 baseCurrency (p.ej. 1 USD = 7.00 BOB)
+  baseCurrency: CurrencyCode; // Moneda en la que guardas los precios base (ahora siempre BOB)
+  displayCurrency: CurrencyCode; // Moneda para mostrar (en esta versión se fija a BOB)
+  exchangeRate: number; // Cuántos displayCurrency por 1 baseCurrency (se fija a 1 cuando todo es BOB)
   locale: string; // Locale para formatear (p.ej. 'es-BO' o 'es-VE')
   lastUpdated?: string; // ISO date de la última actualización del tipo de cambio
 }
@@ -11,32 +11,62 @@ export interface CurrencySettings {
 const STORAGE_KEY = 'currencySettings';
 
 export const DEFAULT_CURRENCY_SETTINGS: CurrencySettings = {
-  baseCurrency: 'USD',
+  baseCurrency: 'BOB',
   displayCurrency: 'BOB',
-  exchangeRate: 7,
+  exchangeRate: 1,
   locale: 'es-BO',
   lastUpdated: new Date().toISOString(),
 };
 
+function coerceToBolivianos(settings?: Partial<CurrencySettings>): CurrencySettings {
+  const merged = {
+    ...DEFAULT_CURRENCY_SETTINGS,
+    ...(settings || {}),
+  };
+
+  return {
+    ...merged,
+    baseCurrency: 'BOB',
+    displayCurrency: 'BOB',
+    exchangeRate: 1,
+    lastUpdated: merged.lastUpdated || DEFAULT_CURRENCY_SETTINGS.lastUpdated,
+  };
+}
+
 export function getCurrencySettings(): CurrencySettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_CURRENCY_SETTINGS;
+    if (!raw) {
+      const defaults = coerceToBolivianos();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults));
+      return defaults;
+    }
     const parsed = JSON.parse(raw);
-    return { ...DEFAULT_CURRENCY_SETTINGS, ...parsed } as CurrencySettings;
+    const coerced = coerceToBolivianos(parsed);
+    if (
+      parsed.baseCurrency !== coerced.baseCurrency ||
+      parsed.displayCurrency !== coerced.displayCurrency ||
+      parsed.exchangeRate !== coerced.exchangeRate
+    ) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(coerced));
+    }
+    return coerced;
   } catch {
-    return DEFAULT_CURRENCY_SETTINGS;
+    const defaults = coerceToBolivianos();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults));
+    return defaults;
   }
 }
 
-export function setCurrencySettings(settings: Partial<CurrencySettings>) {
+export function setCurrencySettings(settings: Partial<CurrencySettings>): CurrencySettings {
   const current = getCurrencySettings();
-  const next: CurrencySettings = {
+  const next = coerceToBolivianos({
     ...current,
     ...settings,
-    lastUpdated: settings.lastUpdated || new Date().toISOString(),
-  };
+    lastUpdated: settings.lastUpdated || current.lastUpdated || new Date().toISOString(),
+  });
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  return next;
 }
 
 // Convierte un monto en la moneda base hacia la moneda de visualización
@@ -53,27 +83,26 @@ export function toBase(amountInDisplay: number, s: CurrencySettings = getCurrenc
   return r === 0 ? amountInDisplay : amountInDisplay / r;
 }
 
-export function formatCurrency(amountInBase: number, s: CurrencySettings = getCurrencySettings()): string {
-  const value = toDisplay(amountInBase, s);
+function formatAsBolivianos(value: number, locale?: string): string {
+  const resolvedLocale = locale || 'es-BO';
+  const safeValue = Number.isFinite(value) ? value : 0;
+
   try {
-    return new Intl.NumberFormat(s.locale || 'es-BO', {
-      style: 'currency',
-      currency: s.displayCurrency || 'BOB',
+    const formatter = new Intl.NumberFormat(resolvedLocale, {
       minimumFractionDigits: 2,
-    }).format(value);
+      maximumFractionDigits: 2,
+    });
+    return `Bs. ${formatter.format(safeValue)}`;
   } catch {
-    return `${value.toFixed(2)} ${s.displayCurrency || 'BOB'}`;
+    return `Bs. ${safeValue.toFixed(2)}`;
   }
 }
 
+export function formatCurrency(amountInBase: number, s: CurrencySettings = getCurrencySettings()): string {
+  const value = toDisplay(amountInBase, s);
+  return formatAsBolivianos(value, s.locale);
+}
+
 export function formatCurrencyRaw(amountInDisplay: number, s: CurrencySettings = getCurrencySettings()): string {
-  try {
-    return new Intl.NumberFormat(s.locale || 'es-BO', {
-      style: 'currency',
-      currency: s.displayCurrency || 'BOB',
-      minimumFractionDigits: 2,
-    }).format(amountInDisplay);
-  } catch {
-    return `${amountInDisplay.toFixed(2)} ${s.displayCurrency || 'BOB'}`;
-  }
+  return formatAsBolivianos(amountInDisplay, s.locale);
 }

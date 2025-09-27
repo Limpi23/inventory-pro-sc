@@ -25,3 +25,4 @@ Este documento explica cómo funciona el control de inventario por ubicación (b
 
 - La vista `current_stock` se mantiene para compatibilidad, agregando todas las ubicaciones de un almacén.
 - Asegúrate de tener permisos de lectura sobre `stock_movements` para consumir las vistas.
+- Desde la lista de Órdenes de Compra puedes usar la opción **Registrar recepción** (menú de acciones) para abrir el flujo de recepción rápida. Esta pantalla solicita la ubicación destino antes de confirmar y genera movimientos `IN_PURCHASE` para cada producto recibido, actualizando el inventario por ubicación automáticamente.

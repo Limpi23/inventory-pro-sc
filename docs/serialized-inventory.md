@@ -65,3 +65,9 @@ Este diseño permite manejar productos que se controlan por unidad con serial ú
   FROM products p, movement_types mt, product_serials ps
   WHERE p.id = 'prod-uuid' AND mt.code = 'OUT_SALE' AND ps.id = 'serial-uuid';
   ```
+
+## Importación inicial vía Excel
+
+- Desde **Inventario General → Importar Inventario Inicial** puedes descargar una plantilla Excel (`.xlsx`) para carga masiva. Incluye ejemplos tanto para modo estándar (por cantidades) como para modo serializado (por unidad).
+- El importador acepta archivos `.xlsx`, `.xls` o `.csv` y valida SKU, almacén, ubicación y, en modo serializado, los códigos de serie antes de generar los movimientos iniciales.
+- Las columnas de fecha admiten formatos ISO (`2025-09-01`) o locales comunes (`01/09/2025`). Usa `movement_date` para indicar el día en que entró la cantidad al inventario (si se deja vacío se tomará la fecha actual) y `acquired_at` para la fecha de recepción de cada serial.

@@ -66,24 +66,28 @@ export function toBase(amountInDisplay, s = getCurrencySettings()) {
     const r = s.exchangeRate || 1;
     return r === 0 ? amountInDisplay : amountInDisplay / r;
 }
-function formatAsBolivianos(value, locale) {
-    const resolvedLocale = locale || 'es-BO';
-    const safeValue = Number.isFinite(value) ? value : 0;
-    try {
-        const formatter = new Intl.NumberFormat(resolvedLocale, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        });
-        return `Bs. ${formatter.format(safeValue)}`;
-    }
-    catch {
-        return `Bs. ${safeValue.toFixed(2)}`;
-    }
-}
 export function formatCurrency(amountInBase, s = getCurrencySettings()) {
     const value = toDisplay(amountInBase, s);
-    return formatAsBolivianos(value, s.locale);
+    try {
+        return new Intl.NumberFormat(s.locale || 'es-BO', {
+            style: 'currency',
+            currency: s.displayCurrency || 'BOB',
+            minimumFractionDigits: 2,
+        }).format(value);
+    }
+    catch {
+        return `${value.toFixed(2)} ${s.displayCurrency || 'BOB'}`;
+    }
 }
 export function formatCurrencyRaw(amountInDisplay, s = getCurrencySettings()) {
-    return formatAsBolivianos(amountInDisplay, s.locale);
+    try {
+        return new Intl.NumberFormat(s.locale || 'es-BO', {
+            style: 'currency',
+            currency: s.displayCurrency || 'BOB',
+            minimumFractionDigits: 2,
+        }).format(amountInDisplay);
+    }
+    catch {
+        return `${amountInDisplay.toFixed(2)} ${s.displayCurrency || 'BOB'}`;
+    }
 }
