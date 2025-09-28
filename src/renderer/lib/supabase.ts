@@ -873,4 +873,43 @@ export const eventLogService = {
   }
 };
 
+export const maintenanceService = {
+  resetOperationalData: async () => {
+    const client = await getSupabaseClient();
+    const tablesInOrder = [
+      'return_items',
+      'returns',
+      'invoice_items',
+      'invoices',
+      'sales_order_items',
+      'sales_orders',
+      'purchase_receipts',
+      'purchase_order_items',
+      'purchase_orders',
+      'inventory_count_items',
+      'inventory_counts',
+      'stock_movements',
+      'product_serials',
+      'products',
+      'locations',
+      'warehouses',
+      'categories'
+    ];
+
+    for (const table of tablesInOrder) {
+      try {
+        await client
+          .from(table)
+          .delete()
+          .neq('id', '00000000-0000-0000-0000-000000000000');
+      } catch (error: any) {
+        console.error(`Error limpiando tabla ${table}:`, error);
+        throw error;
+      }
+    }
+
+    await logAppEvent('maintenance.reset', 'maintenance', null, { tables: tablesInOrder });
+  }
+};
+
 // ...otros servicios 

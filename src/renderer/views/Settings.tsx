@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { toast } from 'react-hot-toast';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -10,9 +10,12 @@ import { Switch } from '../components/ui/switch';
 import { CompanySettings } from '../../types';
 import { useTheme } from '../hooks/useTheme';
 import { Sun, Moon } from 'lucide-react';
-import { eventLogService, AppEventLog } from '../lib/supabase';
+import { eventLogService, AppEventLog, maintenanceService } from '../lib/supabase';
 import { useCurrency } from '../hooks/useCurrency';
 import { DEFAULT_CURRENCY_SETTINGS } from '../lib/currency';
+import { useAuth } from '../lib/auth';
+
+const MAINTENANCE_RESET_SECRET = 'suitcore2025';
 
 const DEFAULT_SETTINGS: CompanySettings = {
   name: 'Inventario Pro - SC',
@@ -35,6 +38,14 @@ const Settings: React.FC = () => {
   const [loadingEvents, setLoadingEvents] = useState(false);
   const win: any = typeof window !== 'undefined' ? (window as any) : {};
   const currency = useCurrency();
+  const { user } = useAuth();
+  const isAdmin = useMemo(() => {
+    if (!user) return false;
+    const roleName = (user.role_name || '').toLowerCase();
+    return roleName.includes('admin') || user.role_id === 1;
+  }, [user]);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetting, setResetting] = useState(false);
 
   // Cargar configuración guardada al iniciar
   useEffect(() => {
@@ -108,7 +119,90 @@ const Settings: React.FC = () => {
       <TabsTrigger value="connection">Conexión</TabsTrigger>
       <TabsTrigger value="events">Eventos</TabsTrigger>
       <TabsTrigger value="currency">Moneda</TabsTrigger>
+      {isAdmin && <TabsTrigger value="maintenance">Mantenimiento</TabsTrigger>}
         </TabsList>
+        {isAdmin && (
+          <TabsContent value="maintenance">
+            <Card className="border-red-300 dark:border-red-600">
+              <CardHeader>
+                <CardTitle className="text-red-600 dark:text-red-400">Reiniciar datos operativos</CardTitle>
+                <CardDescription>
+                  Esta acción eliminará inventario, productos, ubicaciones, órdenes de compra y ventas. Los clientes, proveedores y reportes históricos permanecen intactos.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="p-4 border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/40 rounded-md text-sm text-red-800 dark:text-red-200">
+                  <p className="font-semibold mb-2">Advertencia</p>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>Esta operación es irreversible y no se puede deshacer.</li>
+                    <li>Se borrarán registros de inventario (movimientos, conteos y seriales).</li>
+                    <li>Se eliminarán facturas, devoluciones, órdenes de venta y compra, y sus ítems.</li>
+                    <li>Se eliminarán productos, categorías, almacenes y ubicaciones.</li>
+                  </ul>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="maintenance-secret">Contraseña de seguridad</Label>
+                  <Input
+                    id="maintenance-secret"
+                    type="password"
+                    value={resetPassword}
+                    onChange={(e) => setResetPassword(e.target.value)}
+                    placeholder="Ingresa la contraseña para confirmar"
+                    disabled={resetting}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Solicita la contraseña al equipo autorizado antes de ejecutar el reinicio.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    variant="destructive"
+                    disabled={resetting}
+                    onClick={async () => {
+                      if (resetPassword.trim() !== MAINTENANCE_RESET_SECRET) {
+                        toast.error('Contraseña incorrecta.');
+                        return;
+                      }
+                      if (!confirm('¿Seguro que deseas reiniciar los datos operativos? Esta acción eliminará información crítica.')) {
+                        return;
+                      }
+                      if (!confirm('Última confirmación: esta operación es irreversible. ¿Deseas continuar?')) {
+                        return;
+                      }
+                      try {
+                        setResetting(true);
+                        await maintenanceService.resetOperationalData();
+                        setResetPassword('');
+                        toast.success('Datos operativos reiniciados correctamente.');
+                      } catch (error: any) {
+                        console.error('Error al reiniciar datos:', error);
+                        toast.error(error?.message || 'No se pudo reiniciar la base de datos.');
+                      } finally {
+                        setResetting(false);
+                      }
+                    }}
+                  >
+                    {resetting ? 'Reiniciando…' : 'Reiniciar datos operativos'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => setResetPassword('')}
+                    disabled={resetting || !resetPassword}
+                  >
+                    Limpiar
+                  </Button>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Tras el reinicio, vuelve a sincronizar catálogos o importa nuevamente tus productos.
+                </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
         <TabsContent value="currency">
           <Card>
             <CardHeader>

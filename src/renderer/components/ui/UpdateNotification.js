@@ -10,7 +10,10 @@ const UpdateNotification = () => {
         const handleUpdateMessage = (_event, message) => {
             setUpdateStatus(message);
             // Verificamos el estado de la actualización
-            if (message.includes('Actualización disponible')) {
+            if (message.includes('Buscando actualizaciones')) {
+                toast(message, { icon: '🔍' });
+            }
+            else if (message.includes('Actualización disponible')) {
                 setUpdateAvailable(true);
                 toast.success(message);
             }
@@ -22,9 +25,10 @@ const UpdateNotification = () => {
                 setUpdateAvailable(true);
                 toast.success(message);
             }
-            else if (message.includes('Aplicación actualizada')) {
+            else if (message.includes('Aplicación actualizada') || message.includes('última versión')) {
                 setUpdateAvailable(false);
                 setUpdateDownloaded(false);
+                toast.success(message);
             }
         };
         // Registrar el listener para los mensajes de actualización

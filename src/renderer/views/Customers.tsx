@@ -1,8 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Customer } from '../../types';
 import { toast } from 'react-hot-toast';
+import { useAuth } from '../lib/auth';
+import { Button } from '../components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '../components/ui/dropdown-menu';
 
 const Customers: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -10,6 +19,13 @@ const Customers: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [customersPerPage] = useState(10);
+  const { user } = useAuth();
+
+  const isAdmin = useMemo(() => {
+    if (!user) return false;
+    const roleName = (user.role_name || '').toLowerCase();
+    return roleName.includes('admin') || user.role_id === 1;
+  }, [user]);
 
   useEffect(() => {
     fetchCustomers();
@@ -47,39 +63,30 @@ const Customers: React.FC = () => {
   const currentCustomers = filteredCustomers.slice(indexOfFirstCustomer, indexOfLastCustomer);
   const totalPages = Math.ceil(filteredCustomers.length / customersPerPage);
 
-  const handleDeleteCustomer = async (id: string) => {
-    if (!confirm('¿Está seguro que desea eliminar este cliente? Esta acción no se puede deshacer.')) {
+  const handleToggleCustomerStatus = async (customer: Customer, activate: boolean) => {
+    const verb = activate ? 'activar' : 'eliminar';
+    const confirmation = activate
+      ? `¿Desea reactivar al cliente ${customer.name}?`
+      : `¿Desea eliminar (marcar como inactivo) al cliente ${customer.name}? Los reportes históricos se mantendrán.`;
+    if (!confirm(confirmation)) {
       return;
     }
 
     try {
-      // Primero verificamos si el cliente tiene facturas asociadas
-      const { data: invoices, error: invoicesError } = await supabase
-        .from('invoices')
-        .select('id')
-        .eq('customer_id', id)
-        .limit(1);
-
-      if (invoicesError) throw invoicesError;
-
-      if (invoices && invoices.length > 0) {
-        toast.error('No se puede eliminar el cliente porque tiene facturas asociadas.');
-        return;
-      }
-
-      // Si no tiene facturas, procedemos a eliminar
       const { error } = await supabase
         .from('customers')
-        .delete()
-        .eq('id', id);
+        .update({
+          is_active: activate,
+        })
+        .eq('id', customer.id);
 
       if (error) throw error;
 
-      toast.success('Cliente eliminado correctamente');
+      toast.success(`Cliente ${activate ? 'reactivado' : 'marcado como inactivo'} correctamente`);
       fetchCustomers();
     } catch (error: any) {
-      console.error('Error al eliminar cliente:', error.message);
-      toast.error(`Error al eliminar cliente: ${error.message}`);
+      console.error(`Error al ${verb} cliente:`, error.message);
+      toast.error(`Error al ${verb} cliente: ${error.message}`);
     }
   };
 
@@ -190,29 +197,61 @@ const Customers: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <div className="flex space-x-2">
-                          <Link 
+                        {isAdmin ? (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="outline" size="sm" className="h-8 px-2">
+                                <i className="fas fa-ellipsis-v mr-2"></i>
+                                Acciones
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="min-w-[200px]">
+                              <DropdownMenuItem asChild>
+                                <Link
+                                  to={`/ventas/clientes/${customer.id}`}
+                                  className="flex items-center gap-2 w-full"
+                                >
+                                  <i className="fas fa-eye text-muted-foreground"></i>
+                                  <span>Ver detalle</span>
+                                </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem asChild>
+                                <Link
+                                  to={`/ventas/clientes/editar/${customer.id}`}
+                                  className="flex items-center gap-2 w-full"
+                                >
+                                  <i className="fas fa-edit text-yellow-600"></i>
+                                  <span>Editar</span>
+                                </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              {customer.is_active ? (
+                                <DropdownMenuItem
+                                  onClick={() => handleToggleCustomerStatus(customer, false)}
+                                  className="text-red-600 focus:text-red-700"
+                                >
+                                  <i className="fas fa-trash-alt"></i>
+                                  <span className="ml-2">Eliminar (inactivar)</span>
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem
+                                  onClick={() => handleToggleCustomerStatus(customer, true)}
+                                >
+                                  <i className="fas fa-undo text-green-600"></i>
+                                  <span className="ml-2">Reactivar cliente</span>
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        ) : (
+                          <Link
                             to={`/ventas/clientes/${customer.id}`}
                             className="text-blue-600 hover:text-blue-900"
                             title="Ver detalle"
                           >
                             <i className="fas fa-eye"></i>
                           </Link>
-                          <Link 
-                            to={`/ventas/clientes/editar/${customer.id}`}
-                            className="text-yellow-600 hover:text-yellow-900"
-                            title="Editar"
-                          >
-                            <i className="fas fa-edit"></i>
-                          </Link>
-                          <button 
-                            onClick={() => handleDeleteCustomer(customer.id)}
-                            className="text-red-600 hover:text-red-900"
-                            title="Eliminar"
-                          >
-                            <i className="fas fa-trash-alt"></i>
-                          </button>
-                        </div>
+                        )}
                       </td>
                     </tr>
                   ))}
