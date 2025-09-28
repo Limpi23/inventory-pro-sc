@@ -11,6 +11,18 @@ interface ProductImportProps {
   size?: 'sm' | 'default' | 'lg';
 }
 
+const REQUIRED_COLUMNS = ['name'];
+const OPTIONAL_BUT_VALIDATED_COLUMNS = ['sku', 'location', 'location_id', 'min_stock', 'max_stock', 'purchase_price', 'sale_price', 'tax_rate', 'status'];
+const SUPPORTED_COLUMNS = [...new Set([...REQUIRED_COLUMNS, ...OPTIONAL_BUT_VALIDATED_COLUMNS, 'description', 'barcode', 'category_id'])];
+const NUMBER_FIELDS: Array<{ key: string; label: string; allowEmpty?: boolean; min?: number }> = [
+  { key: 'min_stock', label: 'Stock mínimo', allowEmpty: true, min: 0 },
+  { key: 'max_stock', label: 'Stock máximo', allowEmpty: true, min: 0 },
+  { key: 'purchase_price', label: 'Precio de compra', allowEmpty: true, min: 0 },
+  { key: 'sale_price', label: 'Precio de venta', allowEmpty: true, min: 0 },
+  { key: 'tax_rate', label: 'Impuesto', allowEmpty: true, min: 0 }
+];
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, className, size = 'default' }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [fileData, setFileData] = useState<File | null>(null);
@@ -29,7 +41,7 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
   };
 
   const processCSV = async () => {
-    if (!fileData) return;
+  if (!fileData) return;
     
     setIsUploading(true);
     setUploadResult(null);
@@ -45,8 +57,33 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
         });
       });
       
+      const parseErrors = (parseResult.errors || []).map((err) => {
+        const rowInfo = typeof err.row === 'number' ? ` (fila aproximada ${err.row + 1})` : '';
+        return `Error al leer el CSV${rowInfo}: ${err.message}`;
+      }).filter(Boolean) as string[];
+
+      const csvFields = parseResult.meta?.fields || [];
+      const missingRequired = REQUIRED_COLUMNS.filter((column) => !csvFields.includes(column));
+      const unknownColumns = csvFields.filter((column) => column && !SUPPORTED_COLUMNS.includes(column));
+
+      const errors: string[] = [];
+      if (missingRequired.length > 0) {
+        errors.push(`Faltan columnas obligatorias: ${missingRequired.join(', ')}`);
+      }
+      if (unknownColumns.length > 0) {
+        errors.push(`Columnas desconocidas en el CSV: ${unknownColumns.join(', ')}. Verifica que los encabezados coincidan con la plantilla.`);
+      }
+      if (parseErrors.length > 0) {
+        errors.push(...parseErrors);
+      }
+
+      if (errors.length > 0) {
+        setUploadResult({ success: 0, errors: errors.length, errorMessages: errors });
+        return;
+      }
+
       // Obtener SKUs ya existentes en la base de datos
-  const existingProducts = await productService.getAll();
+      const existingProducts = await productService.getAll();
       // Cargar ubicaciones para mapear por nombre -> id si el archivo trae 'location'
       const allLocations = await locationsService.getAll();
       const locationByName = new Map<string, string>();
@@ -57,70 +94,132 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
       
       // Validar y procesar los datos
       const products = parseResult.data;
-      const errors: string[] = [];
-      const validProducts = [];
+  const validProducts: Array<{ rowNumber: number; data: any; sku?: string }> = [];
       let successCount = 0;
-      const seenSkus = new Set<string>();
+  const seenSkus = new Set<string>();
       
       for (let i = 0; i < products.length; i++) {
         try {
           const row = products[i];
           const sku = (row.sku || '').trim();
-          
-          // Validaciones básicas
-          if (!row.name) {
-            errors.push(`Fila ${i + 2}: El nombre del producto es obligatorio`);
+          const name = (row.name || '').toString().trim();
+          const rowNumber = i + 2; // header is row 1
+
+          if (!name) {
+            errors.push(`Fila ${rowNumber}: El nombre del producto es obligatorio.`);
             continue;
           }
           
           // Validar duplicados en el archivo
           if (sku && seenSkus.has(sku)) {
-            errors.push(`Fila ${i + 2}: SKU duplicado en el archivo: ${sku}`);
+            errors.push(`Fila ${rowNumber}: SKU duplicado en el archivo: ${sku}`);
             continue;
           }
-          seenSkus.add(sku);
           
           // Validar duplicados en la base de datos
           if (sku && existingSkus.has(sku)) {
-            errors.push(`Fila ${i + 2}: SKU ya registrado en la base de datos: ${sku}`);
+            errors.push(`Fila ${rowNumber}: SKU ya registrado en la base de datos: ${sku}`);
             continue;
           }
           
           // Transformar los datos al formato esperado
           let location_id: string | null = (row.location_id || '').trim() || null;
+          const locationName = row.location ? String(row.location).trim() : '';
+
+          if (location_id && !UUID_REGEX.test(location_id)) {
+            errors.push(`Fila ${rowNumber}: El valor de location_id no es un UUID válido.`);
+            continue;
+          }
+
           if (!location_id && row.location) {
-            const match = locationByName.get(String(row.location).toLowerCase().trim());
-            if (match) location_id = match;
+            const match = locationByName.get(locationName.toLowerCase());
+            if (match) {
+              location_id = match;
+            } else {
+              errors.push(`Fila ${rowNumber}: La ubicación "${locationName}" no existe en el sistema.`);
+              continue;
+            }
+          }
+
+          const numericValues: Record<string, number | null> = {};
+          let rowHasValidationError = false;
+          for (const field of NUMBER_FIELDS) {
+            const rawValue = row[field.key];
+            if (rawValue === undefined || rawValue === null || rawValue === '') {
+              if (!field.allowEmpty) {
+                errors.push(`Fila ${rowNumber}: El campo ${field.label} es obligatorio.`);
+                rowHasValidationError = true;
+              }
+              numericValues[field.key] = field.allowEmpty ? null : 0;
+              continue;
+            }
+
+            const value = Number(String(rawValue).replace(/,/g, '.'));
+            if (Number.isNaN(value)) {
+              errors.push(`Fila ${rowNumber}: El campo ${field.label} contiene un valor numérico inválido (${rawValue}).`);
+              rowHasValidationError = true;
+              continue;
+            }
+            if (field.min !== undefined && value < field.min) {
+              errors.push(`Fila ${rowNumber}: El campo ${field.label} no puede ser menor que ${field.min}.`);
+              rowHasValidationError = true;
+              continue;
+            }
+            numericValues[field.key] = value;
+          }
+
+          const minStockValue = typeof numericValues.min_stock === 'number' ? numericValues.min_stock : 0;
+          const maxStockValue = typeof numericValues.max_stock === 'number' ? numericValues.max_stock : null;
+          if (maxStockValue !== null && maxStockValue < minStockValue) {
+            errors.push(`Fila ${rowNumber}: El stock máximo no puede ser menor que el stock mínimo.`);
+            continue;
+          }
+
+          if (rowHasValidationError) {
+            continue;
           }
 
           const productData = {
-            name: row.name,
+            name,
             description: row.description || '',
             sku: sku,
             barcode: row.barcode || '',
             category_id: row.category_id || null,
             location_id,
-            min_stock: parseFloat(row.min_stock) || 0,
-            max_stock: parseFloat(row.max_stock) || null,
-            purchase_price: parseFloat(row.purchase_price) || 0,
-            sale_price: parseFloat(row.sale_price) || 0,
-            tax_rate: parseFloat(row.tax_rate) || 0,
+            min_stock: numericValues.min_stock ?? 0,
+            max_stock: numericValues.max_stock,
+            purchase_price: numericValues.purchase_price ?? 0,
+            sale_price: numericValues.sale_price ?? 0,
+            tax_rate: numericValues.tax_rate ?? 0,
             status: row.status || 'active'
           };
           
-          validProducts.push(productData);
+          validProducts.push({ rowNumber, data: productData, sku });
+          if (sku) {
+            seenSkus.add(sku);
+          }
         } catch (error: any) {
-          errors.push(`Fila ${i + 2}: ${error.message || 'Error desconocido'}`);
+          errors.push(`Fila ${i + 2}: ${error?.message || 'Error desconocido procesando la fila.'}`);
         }
       }
       
       // Intentar crear todos los productos en lote
       if (validProducts.length > 0) {
-        try {
-          const createdProducts = await productService.createBatch(validProducts);
-          successCount = createdProducts.length;
-        } catch (error: any) {
-          errors.push(`Error al crear productos en lote: ${error.message || 'Error desconocido'}`);
+        for (const entry of validProducts) {
+          try {
+            await productService.create(entry.data as any);
+            successCount += 1;
+            if (entry.data.sku) {
+              existingSkus.add(entry.data.sku);
+            }
+          } catch (error: any) {
+            const messageParts = [error?.message, error?.details, error?.hint]
+              .filter(Boolean)
+              .map((part) => part.trim());
+            const formatted = messageParts.length > 0 ? messageParts.join(' - ') : 'Error desconocido al crear el producto.';
+            const skuInfo = entry.sku ? ` (SKU ${entry.sku})` : '';
+            errors.push(`Fila ${entry.rowNumber}${skuInfo}: ${formatted}`);
+          }
         }
       }
       
