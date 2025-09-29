@@ -36,7 +36,7 @@ const ProductImport = ({ onImportComplete, className, size = 'default' }) => {
                     header: true,
                     skipEmptyLines: true,
                     complete: (results) => resolve(results),
-                    error: (error2) => reject(error2)
+                    error: (error) => reject(error)
                 });
             });
             const parseErrors = (parseResult.errors || []).map((err) => {
@@ -86,7 +86,9 @@ const ProductImport = ({ onImportComplete, className, size = 'default' }) => {
                 setUploadResult({ success: 0, errors: errors.length, errorMessages: errors });
                 return;
             }
+            // Obtener todos los SKUs ya existentes en la base de datos (en lotes)
             const existingProducts = await (productService.getAllAll ? productService.getAllAll() : productService.getAll());
+            // Cargar categorías y ubicaciones para mapear por nombre
             const [allCategories, allLocations] = await Promise.all([
                 categoriesService.getAll(),
                 locationsService.getAll()
@@ -104,6 +106,7 @@ const ProductImport = ({ onImportComplete, className, size = 'default' }) => {
             });
             const locationIds = new Set(allLocations.map((l) => l.id));
             const existingSkus = new Set(existingProducts.map((p) => (p.sku || '').trim()).filter(Boolean));
+            // Validar y procesar los datos
             const products = rows;
             const validProducts = [];
             let successCount = 0;
@@ -113,19 +116,22 @@ const ProductImport = ({ onImportComplete, className, size = 'default' }) => {
                     const row = products[i];
                     const sku = (row.sku || '').trim();
                     const name = (row.name || '').toString().trim();
-                    const rowNumber = i + 2;
+                    const rowNumber = i + 2; // header is row 1
                     if (!name) {
                         errors.push(`Fila ${rowNumber}: El nombre del producto es obligatorio.`);
                         continue;
                     }
+                    // Validar duplicados en el archivo
                     if (sku && seenSkus.has(sku)) {
                         errors.push(`Fila ${rowNumber}: SKU duplicado en el archivo: ${sku}`);
                         continue;
                     }
+                    // Validar duplicados en la base de datos
                     if (sku && existingSkus.has(sku)) {
                         errors.push(`Fila ${rowNumber}: SKU ya registrado en la base de datos: ${sku}`);
                         continue;
                     }
+                    // Transformar los datos al formato esperado
                     const rawCategoryId = (row.category_id || '').trim();
                     const rawCategoryName = (row.category || '').toString().trim();
                     let category_id = null;
@@ -231,10 +237,11 @@ const ProductImport = ({ onImportComplete, className, size = 'default' }) => {
                         seenSkus.add(sku);
                     }
                 }
-                catch (error2) {
-                    errors.push(`Fila ${i + 2}: ${error2?.message || 'Error desconocido procesando la fila.'}`);
+                catch (error) {
+                    errors.push(`Fila ${i + 2}: ${error?.message || 'Error desconocido procesando la fila.'}`);
                 }
             }
+            // Intentar crear todos los productos en lote
             if (validProducts.length > 0) {
                 for (const entry of validProducts) {
                     try {
@@ -244,8 +251,8 @@ const ProductImport = ({ onImportComplete, className, size = 'default' }) => {
                             existingSkus.add(entry.data.sku);
                         }
                     }
-                    catch (error2) {
-                        const messageParts = [error2?.message, error2?.details, error2?.hint]
+                    catch (error) {
+                        const messageParts = [error?.message, error?.details, error?.hint]
                             .filter(Boolean)
                             .map((part) => part.trim());
                         const formatted = messageParts.length > 0 ? messageParts.join(' - ') : 'Error desconocido al crear el producto.';
@@ -254,7 +261,11 @@ const ProductImport = ({ onImportComplete, className, size = 'default' }) => {
                     }
                 }
             }
-            setUploadResult({ success: successCount, errors: errors.length, errorMessages: errors });
+            setUploadResult({
+                success: successCount,
+                errors: errors.length,
+                errorMessages: errors
+            });
             if (successCount > 0) {
                 onImportComplete();
             }
@@ -319,6 +330,6 @@ const ProductImport = ({ onImportComplete, className, size = 'default' }) => {
         link.click();
         document.body.removeChild(link);
     };
-    return (_jsxs(Dialog, { open: isOpen, onOpenChange: setIsOpen, children: [_jsx(DialogTrigger, { asChild: true, children: _jsxs(Button, { variant: "outline", size: size, className: className, children: [_jsxs("svg", { xmlns: "http://www.w3.org/2000/svg", width: "16", height: "16", fill: "currentColor", className: "mr-2", viewBox: "0 0 16 16", children: [_jsx("path", { d: "M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z" }), _jsx("path", { d: "M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z" })] }), "Importar Productos"] }) }), _jsxs(DialogContent, { className: "sm:max-w-md", children: [_jsx(DialogHeader, { children: _jsx(DialogTitle, { children: "Importar Productos Masivamente" }) }), _jsxs("div", { className: "space-y-4 py-4", children: [_jsx("p", { className: "text-sm text-gray-500", children: "Sube un archivo CSV con los productos que deseas importar. Aseg\u00FArate de que el archivo tenga las columnas correctas." }), _jsx(Button, { variant: "outline", onClick: downloadTemplate, className: "w-full", children: "Descargar Plantilla CSV" }), _jsxs("div", { className: "flex flex-col space-y-2", children: [_jsx("label", { htmlFor: "file-upload", className: "text-sm font-medium", children: "Seleccionar archivo CSV" }), _jsx("input", { id: "file-upload", type: "file", accept: ".csv", onChange: handleFileChange, className: "border border-gray-300 rounded-md p-2 text-sm" })] }), uploadResult && (_jsxs(Alert, { variant: uploadResult.success > 0 ? "default" : "destructive", children: [_jsx(AlertTitle, { children: "Resultado de la importaci\u00F3n" }), _jsxs(AlertDescription, { children: [_jsxs("p", { children: ["Productos importados: ", uploadResult.success] }), _jsxs("p", { children: ["Errores: ", uploadResult.errors] }), uploadResult.errorMessages.length > 0 && (_jsxs("div", { className: "mt-2 space-y-2", children: [_jsxs("div", { children: [_jsx("p", { className: "text-xs font-medium text-red-600 dark:text-red-300", children: "Detalles del error:" }), _jsx("ul", { className: "mt-1 text-xs pl-5 list-disc space-y-1", children: uploadResult.errorMessages.slice(0, 5).map((error, index) => (_jsx("li", { children: error }, index))) }), uploadResult.errorMessages.length > 5 && (_jsxs("p", { className: "text-xs text-muted-foreground mt-1", children: ["Mostrando 5 de ", uploadResult.errorMessages.length, " errores. Usa el desplegable para ver todos."] }))] }), _jsxs("details", { children: [_jsx("summary", { className: "cursor-pointer font-medium", children: "Ver lista completa de errores" }), _jsx("ul", { className: "mt-2 text-xs pl-5 list-disc space-y-1 max-h-48 overflow-auto", children: uploadResult.errorMessages.map((error, index) => (_jsx("li", { children: error }, index))) })] })] }))] })] }))] }), _jsxs("div", { className: "flex justify-end space-x-2", children: [_jsx(Button, { variant: "outline", onClick: () => setIsOpen(false), children: "Cancelar" }), _jsx(Button, { onClick: processCSV, disabled: !fileData || isUploading, children: isUploading ? 'Importando...' : 'Importar Productos' })] })] })] }));
+    return (_jsxs(Dialog, { open: isOpen, onOpenChange: setIsOpen, children: [_jsx(DialogTrigger, { asChild: true, children: _jsxs(Button, { variant: "outline", size: size, className: className, children: [_jsxs("svg", { xmlns: "http://www.w3.org/2000/svg", width: "16", height: "16", fill: "currentColor", className: "mr-2", viewBox: "0 0 16 16", children: [_jsx("path", { d: "M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z" }), _jsx("path", { d: "M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z" })] }), "Importar Productos"] }) }), _jsxs(DialogContent, { className: "sm:max-w-md", children: [_jsx(DialogHeader, { children: _jsx(DialogTitle, { children: "Importar Productos Masivamente" }) }), _jsxs("div", { className: "space-y-4 py-4", children: [_jsx("p", { className: "text-sm text-gray-500", children: "Sube un archivo CSV con los productos que deseas importar. Aseg\u00FArate de que el archivo tenga las columnas correctas." }), _jsx(Button, { variant: "outline", onClick: downloadTemplate, className: "w-full", children: "Descargar Plantilla CSV" }), _jsxs("div", { className: "flex flex-col space-y-2", children: [_jsx("label", { htmlFor: "file-upload", className: "text-sm font-medium", children: "Seleccionar archivo CSV" }), _jsx("input", { id: "file-upload", type: "file", accept: ".csv,.xlsx,.xls", onChange: handleFileChange, className: "border border-gray-300 rounded-md p-2 text-sm" })] }), uploadResult && (_jsxs(Alert, { variant: uploadResult.success > 0 ? "default" : "destructive", children: [_jsx(AlertTitle, { children: "Resultado de la importaci\u00F3n" }), _jsxs(AlertDescription, { children: [_jsxs("p", { children: ["Productos importados: ", uploadResult.success] }), _jsxs("p", { children: ["Errores: ", uploadResult.errors] }), uploadResult.errorMessages.length > 0 && (_jsxs("div", { className: "mt-2 space-y-2", children: [_jsxs("div", { children: [_jsx("p", { className: "text-xs font-medium text-red-600 dark:text-red-300", children: "Detalles del error:" }), _jsx("ul", { className: "mt-1 text-xs pl-5 list-disc space-y-1", children: uploadResult.errorMessages.slice(0, 5).map((error, index) => (_jsx("li", { children: error }, index))) }), uploadResult.errorMessages.length > 5 && (_jsxs("p", { className: "text-xs text-muted-foreground mt-1", children: ["Mostrando 5 de ", uploadResult.errorMessages.length, " errores. Usa el desplegable para ver todos."] }))] }), _jsxs("details", { children: [_jsx("summary", { className: "cursor-pointer font-medium", children: "Ver lista completa de errores" }), _jsx("ul", { className: "mt-2 text-xs pl-5 list-disc space-y-1 max-h-48 overflow-auto", children: uploadResult.errorMessages.map((error, index) => (_jsx("li", { children: error }, index))) })] })] }))] })] }))] }), _jsxs("div", { className: "flex justify-end space-x-2", children: [_jsx(Button, { variant: "outline", onClick: () => setIsOpen(false), children: "Cancelar" }), _jsx(Button, { onClick: processCSV, disabled: !fileData || isUploading, children: isUploading ? 'Importando...' : 'Importar Productos' })] })] })] }));
 };
 export default ProductImport;

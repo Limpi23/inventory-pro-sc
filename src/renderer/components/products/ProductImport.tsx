@@ -73,8 +73,8 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
       if (!sheetName) {
         return { rows: [], fields: [], errors: ['El archivo Excel no contiene hojas válidas.'] };
       }
-      const worksheet = workbook.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { defval: '', blankrows: false });
+  const worksheet = workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(worksheet, { defval: '', blankrows: false }) as Array<Record<string, any>>;
       const fields = rows.length > 0 ? Object.keys(rows[0]) : [];
       return { rows, fields, errors: [] };
     }
