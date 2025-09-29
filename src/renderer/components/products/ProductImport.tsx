@@ -2,8 +2,9 @@ import { useState } from "react";
 import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
-import { productService, locationsService } from "../../lib/supabase";
+import { productService, locationsService, categoriesService } from "../../lib/supabase";
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 
 interface ProductImportProps {
   onImportComplete: () => void;
@@ -12,8 +13,8 @@ interface ProductImportProps {
 }
 
 const REQUIRED_COLUMNS = ['name'];
-const OPTIONAL_BUT_VALIDATED_COLUMNS = ['sku', 'location', 'location_id', 'min_stock', 'max_stock', 'purchase_price', 'sale_price', 'tax_rate', 'status'];
-const SUPPORTED_COLUMNS = [...new Set([...REQUIRED_COLUMNS, ...OPTIONAL_BUT_VALIDATED_COLUMNS, 'description', 'barcode', 'category_id'])];
+const OPTIONAL_BUT_VALIDATED_COLUMNS = ['sku', 'category', 'category_id', 'location', 'location_id', 'min_stock', 'max_stock', 'purchase_price', 'sale_price', 'tax_rate', 'status'];
+const SUPPORTED_COLUMNS = [...new Set([...REQUIRED_COLUMNS, ...OPTIONAL_BUT_VALIDATED_COLUMNS, 'description', 'barcode'])];
 const NUMBER_FIELDS: Array<{ key: string; label: string; allowEmpty?: boolean; min?: number }> = [
   { key: 'min_stock', label: 'Stock mínimo', allowEmpty: true, min: 0 },
   { key: 'max_stock', label: 'Stock máximo', allowEmpty: true, min: 0 },
@@ -40,6 +41,47 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
     }
   };
 
+  const parseFile = async (file: File): Promise<{ rows: any[]; fields: string[]; errors: string[] }> => {
+    const extension = file.name.split('.').pop()?.toLowerCase();
+
+    if (extension === 'csv') {
+      const parseResult = await new Promise<Papa.ParseResult<any>>((resolve, reject) => {
+        Papa.parse(file, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => resolve(results),
+          error: (error) => reject(error)
+        });
+      });
+
+      const parseErrors = (parseResult.errors || []).map((err) => {
+        const rowInfo = typeof err.row === 'number' ? ` (fila aproximada ${err.row + 1})` : '';
+        return `Error al leer el archivo${rowInfo}: ${err.message}`;
+      }).filter(Boolean) as string[];
+
+      return {
+        rows: parseResult.data,
+        fields: parseResult.meta?.fields || [],
+        errors: parseErrors
+      };
+    }
+
+    if (extension === 'xlsx' || extension === 'xls') {
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) {
+        return { rows: [], fields: [], errors: ['El archivo Excel no contiene hojas válidas.'] };
+      }
+      const worksheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { defval: '', blankrows: false });
+      const fields = rows.length > 0 ? Object.keys(rows[0]) : [];
+      return { rows, fields, errors: [] };
+    }
+
+    return { rows: [], fields: [], errors: ['Formato de archivo no soportado. Usa CSV o Excel (.xlsx).'] };
+  };
+
   const processCSV = async () => {
   if (!fileData) return;
     
@@ -47,31 +89,17 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
     setUploadResult(null);
     
     try {
-      // Parsear el archivo CSV
-      const parseResult = await new Promise<Papa.ParseResult<any>>((resolve, reject) => {
-        Papa.parse(fileData, {
-          header: true,
-          skipEmptyLines: true,
-          complete: (results) => resolve(results),
-          error: (error) => reject(error)
-        });
-      });
+  const { rows, fields, errors: parseErrors } = await parseFile(fileData);
       
-      const parseErrors = (parseResult.errors || []).map((err) => {
-        const rowInfo = typeof err.row === 'number' ? ` (fila aproximada ${err.row + 1})` : '';
-        return `Error al leer el CSV${rowInfo}: ${err.message}`;
-      }).filter(Boolean) as string[];
-
-      const csvFields = parseResult.meta?.fields || [];
-      const missingRequired = REQUIRED_COLUMNS.filter((column) => !csvFields.includes(column));
-      const unknownColumns = csvFields.filter((column) => column && !SUPPORTED_COLUMNS.includes(column));
+      const missingRequired = REQUIRED_COLUMNS.filter((column) => !fields.includes(column));
+      const unknownColumns = fields.filter((column) => column && !SUPPORTED_COLUMNS.includes(column));
 
       const errors: string[] = [];
       if (missingRequired.length > 0) {
         errors.push(`Faltan columnas obligatorias: ${missingRequired.join(', ')}`);
       }
       if (unknownColumns.length > 0) {
-        errors.push(`Columnas desconocidas en el CSV: ${unknownColumns.join(', ')}. Verifica que los encabezados coincidan con la plantilla.`);
+        errors.push(`Columnas desconocidas en el archivo: ${unknownColumns.join(', ')}. Verifica que los encabezados coincidan con la plantilla.`);
       }
       if (parseErrors.length > 0) {
         errors.push(...parseErrors);
@@ -82,18 +110,27 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
         return;
       }
 
-      // Obtener SKUs ya existentes en la base de datos
-      const existingProducts = await productService.getAll();
-      // Cargar ubicaciones para mapear por nombre -> id si el archivo trae 'location'
-      const allLocations = await locationsService.getAll();
+      // Obtener todos los SKUs ya existentes en la base de datos (en lotes)
+      const existingProducts = await (productService.getAllAll ? productService.getAllAll() : productService.getAll());
+      // Cargar categorías y ubicaciones para mapear por nombre
+      const [allCategories, allLocations] = await Promise.all([
+        categoriesService.getAll(),
+        locationsService.getAll()
+      ]);
+      const categoryById = new Set((allCategories as any[]).map((c: any) => c.id));
+      const categoryByName = new Map<string, string>();
+      (allCategories as any[]).forEach((c: any) => {
+        if (c?.name) categoryByName.set(String(c.name).toLowerCase().trim(), c.id);
+      });
       const locationByName = new Map<string, string>();
       (allLocations as any[]).forEach((l: any) => {
         if (l?.name) locationByName.set(String(l.name).toLowerCase().trim(), l.id);
       });
+      const locationIds = new Set((allLocations as any[]).map((l: any) => l.id));
       const existingSkus = new Set((existingProducts as any[]).map((p: any) => (p.sku || '').trim()).filter(Boolean));
       
       // Validar y procesar los datos
-      const products = parseResult.data;
+      const products = rows;
   const validProducts: Array<{ rowNumber: number; data: any; sku?: string }> = [];
       let successCount = 0;
   const seenSkus = new Set<string>();
@@ -123,11 +160,45 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
           }
           
           // Transformar los datos al formato esperado
+          const rawCategoryId = (row.category_id || '').trim();
+          const rawCategoryName = (row.category || '').toString().trim();
+          let category_id: string | null = null;
+          if (rawCategoryId) {
+            if (UUID_REGEX.test(rawCategoryId)) {
+              if (!categoryById.has(rawCategoryId)) {
+                errors.push(`Fila ${rowNumber}: La categoría con id ${rawCategoryId} no existe en el sistema.`);
+                continue;
+              }
+              category_id = rawCategoryId;
+            } else {
+              const match = categoryByName.get(rawCategoryId.toLowerCase());
+              if (match) {
+                category_id = match;
+              } else {
+                errors.push(`Fila ${rowNumber}: La categoría "${rawCategoryId}" no existe en el sistema.`);
+                continue;
+              }
+            }
+          } else if (rawCategoryName) {
+            const match = categoryByName.get(rawCategoryName.toLowerCase());
+            if (match) {
+              category_id = match;
+            } else {
+              errors.push(`Fila ${rowNumber}: La categoría "${rawCategoryName}" no existe en el sistema.`);
+              continue;
+            }
+          }
+
           let location_id: string | null = (row.location_id || '').trim() || null;
           const locationName = row.location ? String(row.location).trim() : '';
 
           if (location_id && !UUID_REGEX.test(location_id)) {
             errors.push(`Fila ${rowNumber}: El valor de location_id no es un UUID válido.`);
+            continue;
+          }
+
+          if (location_id && !locationIds.has(location_id)) {
+            errors.push(`Fila ${rowNumber}: La ubicación con id ${location_id} no existe en el sistema.`);
             continue;
           }
 
@@ -184,7 +255,7 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
             description: row.description || '',
             sku: sku,
             barcode: row.barcode || '',
-            category_id: row.category_id || null,
+            category_id,
             location_id,
             min_stock: numericValues.min_stock ?? 0,
             max_stock: numericValues.max_stock,
@@ -244,17 +315,52 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
   };
 
   const downloadTemplate = () => {
-  const headers = "name,description,sku,barcode,category_id,location_id,location,min_stock,max_stock,purchase_price,sale_price,tax_rate,status\n";
-  const sampleData = "Producto 1,Descripción del producto 1,ABC123,123456789,9e91d103-7c4c-472d-9566-981274a13ff4,,Pasillo A - Estante 1,10,100,15000,20000,19,active\n" +
-            "Producto 2,Descripción del producto 2,DEF456,987654321,,,Bodega - Rack 2,5,50,25000,35000,19,active\n";
-    
-    const csvContent = headers + sampleData;
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const headers = ['name', 'description', 'sku', 'barcode', 'category', 'category_id', 'location', 'location_id', 'min_stock', 'max_stock', 'purchase_price', 'sale_price', 'tax_rate', 'status'];
+    const rows = [
+      {
+        name: 'Producto 1',
+        description: 'Descripción del producto 1',
+        sku: 'ABC123',
+        barcode: '123456789',
+        category: 'Categoría Principal',
+        category_id: '9e91d103-7c4c-472d-9566-981274a13ff4',
+        location: 'Pasillo A - Estante 1',
+        location_id: '',
+        min_stock: 10,
+        max_stock: 100,
+        purchase_price: 15000,
+        sale_price: 20000,
+        tax_rate: 19,
+        status: 'active'
+      },
+      {
+        name: 'Producto 2',
+        description: 'Descripción del producto 2',
+        sku: 'DEF456',
+        barcode: '987654321',
+        category: 'Otra Categoría',
+        category_id: '',
+        location: 'Bodega - Rack 2',
+        location_id: '',
+        min_stock: 5,
+        max_stock: 50,
+        purchase_price: 25000,
+        sale_price: 35000,
+        tax_rate: 19,
+        status: 'active'
+      }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(rows, { header: headers });
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Productos');
+  const arrayBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([arrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
-    
+
     const link = document.createElement('a');
     link.href = url;
-  link.setAttribute('download', 'plantilla_productos.csv');
+    link.setAttribute('download', 'plantilla_productos.xlsx');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -296,7 +402,7 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
             <input
               id="file-upload"
               type="file"
-              accept=".csv"
+              accept=".csv,.xlsx,.xls"
               onChange={handleFileChange}
               className="border border-gray-300 rounded-md p-2 text-sm"
             />
@@ -310,10 +416,23 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
                 <p>Errores: {uploadResult.errors}</p>
                 
                 {uploadResult.errorMessages.length > 0 && (
-                  <div className="mt-2">
+                  <div className="mt-2 space-y-2">
+                    <div>
+                      <p className="text-xs font-medium text-red-600 dark:text-red-300">Detalles del error:</p>
+                      <ul className="mt-1 text-xs pl-5 list-disc space-y-1">
+                        {uploadResult.errorMessages.slice(0, 5).map((error, index) => (
+                          <li key={index}>{error}</li>
+                        ))}
+                      </ul>
+                      {uploadResult.errorMessages.length > 5 && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Mostrando 5 de {uploadResult.errorMessages.length} errores. Usa el desplegable para ver todos.
+                        </p>
+                      )}
+                    </div>
                     <details>
-                      <summary className="cursor-pointer font-medium">Ver detalles de errores</summary>
-                      <ul className="mt-2 text-xs pl-5 list-disc">
+                      <summary className="cursor-pointer font-medium">Ver lista completa de errores</summary>
+                      <ul className="mt-2 text-xs pl-5 list-disc space-y-1 max-h-48 overflow-auto">
                         {uploadResult.errorMessages.map((error, index) => (
                           <li key={index}>{error}</li>
                         ))}
