@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, stockMovementService } from '../lib/supabase';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useCurrency } from '../hooks/useCurrency';
@@ -52,6 +52,12 @@ const InvoiceForm: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
+  const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
+  const [editingItemDraft, setEditingItemDraft] = useState<{
+    quantity: string;
+    unit_price: string;
+    discount_percent: string;
+  } | null>(null);
   
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -113,6 +119,12 @@ const InvoiceForm: React.FC = () => {
       setFilteredProducts([]);
     }
   }, [productSearchTerm, products]);
+
+  useEffect(() => {
+    if (editingItemIndex === null) {
+      setEditingItemDraft(null);
+    }
+  }, [editingItemIndex]);
   
   const fetchCustomers = async () => {
     try {
@@ -355,6 +367,92 @@ const InvoiceForm: React.FC = () => {
   
   const removeItemFromInvoice = (index: number) => {
     setInvoiceItems(prev => prev.filter((_, i) => i !== index));
+    setEditingItemIndex((current) => {
+      if (current === null) return current;
+      if (current === index) {
+        return null;
+      }
+      return current > index ? current - 1 : current;
+    });
+  };
+
+  const startEditingInvoiceItem = (index: number) => {
+    const item = invoiceItems[index];
+    if (!item) return;
+    setEditingItemIndex(index);
+    setEditingItemDraft({
+      quantity: item.quantity.toString(),
+      unit_price: item.unit_price.toString(),
+      discount_percent: (item.discount_percent ?? 0).toString(),
+    });
+  };
+
+  const cancelEditingInvoiceItem = () => {
+    setEditingItemIndex(null);
+    setEditingItemDraft(null);
+  };
+
+  const updateEditingDraft = (field: 'quantity' | 'unit_price' | 'discount_percent', value: string) => {
+    setEditingItemDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
+  };
+
+  const saveEditingInvoiceItem = (index: number) => {
+    if (editingItemIndex !== index || !editingItemDraft) return;
+
+    const normalizeNumber = (input: string) => {
+      if (typeof input !== 'string') return Number.NaN;
+      const trimmed = input.trim();
+      if (!trimmed) return Number.NaN;
+      const normalized = trimmed.replace(/\s+/g, '').replace(/,/g, '.');
+      return Number(normalized);
+    };
+
+    const quantityValue = normalizeNumber(editingItemDraft.quantity);
+    if (!Number.isFinite(quantityValue) || quantityValue <= 0) {
+      toast.error('La cantidad debe ser un número mayor a 0.');
+      return;
+    }
+
+    const unitPriceDisplay = normalizeNumber(editingItemDraft.unit_price);
+    if (!Number.isFinite(unitPriceDisplay) || unitPriceDisplay < 0) {
+      toast.error('El precio unitario debe ser un número mayor o igual a 0.');
+      return;
+    }
+    const unitPriceBase = currency.toBase(unitPriceDisplay);
+
+    const discountPercentValue = normalizeNumber(editingItemDraft.discount_percent || '0');
+    if (!Number.isFinite(discountPercentValue) || discountPercentValue < 0 || discountPercentValue > 100) {
+      toast.error('El descuento debe estar entre 0 y 100%.');
+      return;
+    }
+
+    setInvoiceItems((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+        const quantity = Number(quantityValue);
+        const unit_price = Number(Number(unitPriceBase).toFixed(6));
+        const discount_percent = Number(discountPercentValue);
+        const { discountAmount, taxAmount, totalPrice } = calculateItemTotals(
+          quantity,
+          unit_price,
+          item.tax_rate,
+          discount_percent
+        );
+        return {
+          ...item,
+          quantity,
+          unit_price,
+          discount_percent,
+          discount_amount: discountAmount,
+          tax_amount: taxAmount,
+          total_price: totalPrice,
+        };
+      })
+    );
+
+    setEditingItemIndex(null);
+    setEditingItemDraft(null);
+    toast.success('Producto actualizado en la cotización.');
   };
   
   const calculateInvoiceTotals = () => {
@@ -394,9 +492,17 @@ const InvoiceForm: React.FC = () => {
     try {
       setIsSaving(true);
       const { subtotal, taxAmount, discountAmount, total } = calculateInvoiceTotals();
-      
+
       const status = saveAsDraft ? 'borrador' : 'emitida';
-      
+      const movementDateISO = invoiceDate
+        ? new Date(`${invoiceDate}T00:00:00`).toISOString()
+        : new Date().toISOString();
+
+      let outboundMovementTypeId: number | null = null;
+      if (status === 'emitida') {
+        outboundMovementTypeId = await stockMovementService.getOutboundSaleTypeId();
+      }
+
       if (isEditing) {
   // Actualizar cotización existente
         const { error: invoiceError } = await supabase
@@ -441,6 +547,33 @@ const InvoiceForm: React.FC = () => {
           .insert(itemsToInsert);
           
         if (itemsError) throw itemsError;
+
+        // Sincronizar movimientos de stock según el estado actual
+        const { error: purgeMovementsError } = await supabase
+          .from('stock_movements')
+          .delete()
+          .eq('related_id', id);
+        if (purgeMovementsError) throw purgeMovementsError;
+
+        if (status === 'emitida' && outboundMovementTypeId !== null) {
+          const stockMovements = invoiceItems.map(item => ({
+            product_id: item.product_id,
+            warehouse_id: formData.warehouse_id,
+            quantity: item.quantity,
+            movement_type_id: outboundMovementTypeId!,
+            reference: `Cotización ${formData.invoice_number}`,
+            related_id: id,
+            movement_date: movementDateISO,
+            notes: `Venta a cliente, cotización #${formData.invoice_number}`
+          }));
+
+          if (stockMovements.length) {
+            const { error: movementError } = await supabase
+              .from('stock_movements')
+              .insert(stockMovements);
+            if (movementError) throw movementError;
+          }
+        }
         
         toast.success(`Factura ${status === 'borrador' ? 'guardada como borrador' : 'emitida'} correctamente`);
       } else {
@@ -489,27 +622,25 @@ const InvoiceForm: React.FC = () => {
           if (itemsError) throw itemsError;
           
           // Si la cotización se emite, registrar los movimientos de inventario
-          if (status === 'emitida') {
+          if (status === 'emitida' && outboundMovementTypeId !== null) {
             // Nota: Para productos serializados, en próximas iteraciones se deben insertar N movimientos por serial con quantity=1 y serial_id.
             // Por ahora mantenemos el comportamiento existente para productos por cantidad.
             const stockMovements = invoiceItems.map(item => ({
               product_id: item.product_id,
               warehouse_id: formData.warehouse_id,
               quantity: item.quantity,
-              movement_type_id: 2, // OUT_SALE
+              movement_type_id: outboundMovementTypeId!,
               reference: `Cotización ${invoiceData.invoice_number}`,
               related_id: invoiceData.id,
-              movement_date: new Date().toISOString(),
+              movement_date: movementDateISO,
               notes: `Venta a cliente, cotización #${invoiceData.invoice_number}`
             }));
 
-            const { error: movementError } = await supabase
-              .from('stock_movements')
-              .insert(stockMovements);
-              
-            if (movementError) {
-              
-              // No interrumpimos el proceso por errores en los movimientos
+            if (stockMovements.length) {
+              const { error: movementError } = await supabase
+                .from('stock_movements')
+                .insert(stockMovements);
+              if (movementError) throw movementError;
             }
           }
           
@@ -665,6 +796,16 @@ const InvoiceForm: React.FC = () => {
                     placeholder="Buscar producto..."
                     value={productSearchTerm}
                     onChange={(e) => setProductSearchTerm(e.target.value)}
+                    onKeyDownCapture={(event) => {
+                      event.stopPropagation();
+                    }}
+                    onKeyDown={(event) => {
+                      event.stopPropagation();
+                    }}
+                    onBeforeInput={(event) => {
+                      event.stopPropagation();
+                    }}
+                    autoComplete="off"
                     className="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   />
                   {filteredProducts.length > 0 && (
@@ -769,40 +910,113 @@ const InvoiceForm: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {invoiceItems.map((item, index) => (
-                      <tr key={index}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="font-medium">{item.product_name}</div>
-                          <div className="text-sm text-gray-500">SKU: {item.product_sku}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">{item.quantity}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">{formatCurrency(item.unit_price)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {item.discount_percent > 0 ? (
-                            <>
-                              <div>{item.discount_percent}%</div>
-                              <div className="text-sm text-gray-500">{formatCurrency(item.discount_amount)}</div>
-                            </>
-                          ) : (
-                            '-'
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div>{item.tax_rate}%</div>
-                          <div className="text-sm text-gray-500">{formatCurrency(item.tax_amount)}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap font-medium">{formatCurrency(item.total_price)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => removeItemFromInvoice(index)}
-                            className="text-red-600 hover:text-red-900"
-                          >
-                            <i className="fas fa-trash-alt"></i>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {invoiceItems.map((item, index) => {
+                      const isEditingRow = editingItemIndex === index;
+                      return (
+                        <tr key={`${item.product_id}-${index}`}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="font-medium">{item.product_name}</div>
+                            <div className="text-sm text-gray-500">SKU: {item.product_sku}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {isEditingRow ? (
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={editingItemDraft?.quantity ?? ''}
+                                onChange={(e) => updateEditingDraft('quantity', e.target.value)}
+                                className="w-24 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                              />
+                            ) : (
+                              item.quantity
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {isEditingRow ? (
+                              <div className="space-y-1">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={editingItemDraft?.unit_price ?? ''}
+                                  onChange={(e) => updateEditingDraft('unit_price', e.target.value)}
+                                  className="w-28 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                />
+                                <div className="text-xs text-gray-500">Actual: {formatCurrency(item.unit_price)}</div>
+                              </div>
+                            ) : (
+                              formatCurrency(item.unit_price)
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {isEditingRow ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.01"
+                                  value={editingItemDraft?.discount_percent ?? ''}
+                                  onChange={(e) => updateEditingDraft('discount_percent', e.target.value)}
+                                  className="w-24 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                />
+                                <span className="text-xs text-gray-500">{formatCurrency(item.discount_amount)}</span>
+                              </div>
+                            ) : item.discount_percent > 0 ? (
+                              <>
+                                <div>{item.discount_percent}%</div>
+                                <div className="text-sm text-gray-500">{formatCurrency(item.discount_amount)}</div>
+                              </>
+                            ) : (
+                              '-'
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div>{item.tax_rate}%</div>
+                            <div className="text-sm text-gray-500">{formatCurrency(item.tax_amount)}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap font-medium">{formatCurrency(item.total_price)}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {isEditingRow ? (
+                              <div className="flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => saveEditingInvoiceItem(index)}
+                                  className="text-green-600 hover:text-green-800"
+                                >
+                                  <i className="fas fa-check"></i>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={cancelEditingInvoiceItem}
+                                  className="text-gray-500 hover:text-gray-700"
+                                >
+                                  <i className="fas fa-times"></i>
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => startEditingInvoiceItem(index)}
+                                  className="text-blue-600 hover:text-blue-800"
+                                >
+                                  <i className="fas fa-pen"></i>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removeItemFromInvoice(index)}
+                                  className="text-red-600 hover:text-red-900"
+                                >
+                                  <i className="fas fa-trash-alt"></i>
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

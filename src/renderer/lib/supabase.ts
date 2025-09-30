@@ -67,6 +67,8 @@ export const supabase = {
   }
 };
 
+const movementTypeCache = new Map<string, number>();
+
 // Tipos basados en el esquema de la base de datos
 export interface Product {
   id: string;
@@ -822,6 +824,31 @@ export const stockMovementService = {
     throw new Error('No hay tipos de movimiento configurados');
   },
   
+  getMovementTypeIdByCode: async (code: string): Promise<number> => {
+    const normalized = (code || '').trim().toUpperCase();
+    if (!normalized) {
+      throw new Error('Código de tipo de movimiento inválido');
+    }
+    const cacheKey = normalized;
+    if (movementTypeCache.has(cacheKey)) {
+      return movementTypeCache.get(cacheKey)!;
+    }
+    const supabaseClient = await getSupabaseClient();
+    const { data, error } = await supabaseClient
+      .from('movement_types')
+      .select('id, code')
+      .eq('code', normalized)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data?.id) {
+      throw new Error(`No se encontró movement_type con código ${normalized}`);
+    }
+    movementTypeCache.set(cacheKey, data.id);
+    return data.id;
+  },
+
+  getOutboundSaleTypeId: async (): Promise<number> => stockMovementService.getMovementTypeIdByCode('OUT_SALE'),
+
   // Obtener el stock actual de un producto en un almacén específico
   getCurrentStock: async (product_id: string, warehouse_id: string): Promise<number> => {
     const supabase = await getSupabaseClient();

@@ -35,6 +35,18 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  const keyboardIsolationHandlers = {
+    onKeyDownCapture: (event: React.KeyboardEvent<HTMLElement>) => {
+      event.stopPropagation();
+    },
+    onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {
+      event.stopPropagation();
+    },
+    onBeforeInput: (event: React.FormEvent<HTMLElement>) => {
+      event.stopPropagation();
+    },
+  } as const;
+
   // Cargar categorías y ubicaciones
   useEffect(() => {
     async function loadData() {
@@ -159,6 +171,7 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
             <div className="grid gap-2">
               <Label htmlFor="name">Nombre *</Label>
               <Input
+                {...keyboardIsolationHandlers}
                 id="name"
                 name="name"
                 value={formData.name}
@@ -231,6 +244,7 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
             <div className="grid gap-2">
               <Label htmlFor="sku">SKU</Label>
               <Input
+                {...keyboardIsolationHandlers}
                 id="sku"
                 name="sku"
                 value={formData.sku || ""}
@@ -243,6 +257,7 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
             <div className="grid gap-2">
               <Label htmlFor="barcode">Código de barras</Label>
               <Input
+                {...keyboardIsolationHandlers}
                 id="barcode"
                 name="barcode"
                 value={formData.barcode || ""}
@@ -255,6 +270,7 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
             <div className="grid gap-2">
               <Label htmlFor="purchase_price">Precio de compra</Label>
               <Input
+                {...keyboardIsolationHandlers}
                 id="purchase_price"
                 name="purchase_price"
                 type="number"
@@ -268,6 +284,7 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
             <div className="grid gap-2">
               <Label htmlFor="sale_price">Precio de venta</Label>
               <Input
+                {...keyboardIsolationHandlers}
                 id="sale_price"
                 name="sale_price"
                 type="number"
@@ -282,6 +299,7 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
               <div className="grid gap-2">
                 <Label htmlFor="min_stock">Stock mínimo</Label>
                 <Input
+                  {...keyboardIsolationHandlers}
                   id="min_stock"
                   name="min_stock"
                   type="number"
@@ -297,6 +315,7 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
               <div className="grid gap-2">
                 <Label htmlFor="max_stock">Stock máximo</Label>
                 <Input
+                  {...keyboardIsolationHandlers}
                   id="max_stock"
                   name="max_stock"
                   type="number"
@@ -311,6 +330,7 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
             <div className="grid gap-2">
               <Label htmlFor="tax_rate">Tasa de IVA (%)</Label>
               <Input
+                {...keyboardIsolationHandlers}
                 id="tax_rate"
                 name="tax_rate"
                 type="number"
@@ -342,6 +362,7 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
             <div className="grid gap-2 col-span-2">
               <Label htmlFor="image_url">URL de imagen</Label>
               <Input
+                {...keyboardIsolationHandlers}
                 id="image_url"
                 name="image_url"
                 value={formData.image_url || ""}
@@ -354,6 +375,7 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
             <div className="grid gap-2 col-span-2">
               <Label htmlFor="description">Descripción</Label>
               <Input
+                {...keyboardIsolationHandlers}
                 id="description"
                 name="description"
                 value={formData.description || ""}
