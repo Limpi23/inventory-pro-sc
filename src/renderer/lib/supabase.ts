@@ -434,11 +434,27 @@ export const serialsService = {
     if (error) throw error;
     return data as any[];
   },
-  createMany: async (serials: Partial<ProductSerial>[]) => {
+  createMany: async (
+    serials: Partial<ProductSerial>[],
+    opts?: { chunkSize?: number; onProgress?: (processed: number, total: number) => void }
+  ) => {
+    if (!serials.length) return [];
     const supabase = await getSupabaseClient();
-    const { data, error } = await supabase.from('product_serials').insert(serials).select();
-    if (error) throw error;
-    return data as ProductSerial[];
+    const batchSize = opts?.chunkSize ?? 100;
+    const results: ProductSerial[] = [];
+    for (let i = 0; i < serials.length; i += batchSize) {
+      const batch = serials.slice(i, i + batchSize);
+      const { data, error } = await supabase.from('product_serials').insert(batch).select();
+      if (error) throw error;
+      if (data) {
+        results.push(...(data as ProductSerial[]));
+      }
+      const processed = Math.min(i + batch.length, serials.length);
+      opts?.onProgress?.(processed, serials.length);
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    return results;
   }
 };
 
@@ -756,16 +772,21 @@ export const stockMovementService = {
   },
   
   // Crear movimientos en lote (para importaciones)
-  createBatch: async (movements: Array<Omit<StockMovement, 'id' | 'created_at'>>): Promise<number> => {
+  createBatch: async (
+    movements: Array<Omit<StockMovement, 'id' | 'created_at'>>,
+    opts?: { chunkSize?: number; onProgress?: (processed: number, total: number) => void }
+  ): Promise<number> => {
     if (!movements.length) return 0;
     const supa = await getSupabaseClient();
-    const batchSize = 100;
+    const batchSize = opts?.chunkSize ?? 100;
     let created = 0;
     for (let i = 0; i < movements.length; i += batchSize) {
       const batch = movements.slice(i, i + batchSize);
       const { data, error } = await supa.from('stock_movements').insert(batch as any).select('id');
       if (error) throw error;
       created += data?.length || 0;
+      const processed = Math.min(i + batch.length, movements.length);
+      opts?.onProgress?.(processed, movements.length);
       // Ceder control al event loop para no bloquear UI en lotes grandes
       // eslint-disable-next-line no-await-in-loop
       await new Promise((r) => setTimeout(r, 0));

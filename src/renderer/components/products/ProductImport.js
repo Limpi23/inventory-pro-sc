@@ -21,10 +21,12 @@ const ProductImport = ({ onImportComplete, className, size = 'default' }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [fileData, setFileData] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
+    const [progress, setProgress] = useState(0);
     const [uploadResult, setUploadResult] = useState(null);
     const handleFileChange = (e) => {
         if (e.target.files && e.target.files.length > 0) {
             setFileData(e.target.files[0]);
+            setProgress(0);
             setUploadResult(null);
         }
     };
@@ -67,9 +69,11 @@ const ProductImport = ({ onImportComplete, className, size = 'default' }) => {
         if (!fileData)
             return;
         setIsUploading(true);
+        setProgress(0);
         setUploadResult(null);
         try {
             const { rows, fields, errors: parseErrors } = await parseFile(fileData);
+            const totalRows = rows.length;
             const missingRequired = REQUIRED_COLUMNS.filter((column) => !fields.includes(column));
             const unknownColumns = fields.filter((column) => column && !SUPPORTED_COLUMNS.includes(column));
             const errors = [];
@@ -84,6 +88,7 @@ const ProductImport = ({ onImportComplete, className, size = 'default' }) => {
             }
             if (errors.length > 0) {
                 setUploadResult({ success: 0, errors: errors.length, errorMessages: errors });
+                setProgress(0);
                 return;
             }
             // Obtener todos los SKUs ya existentes en la base de datos (en lotes)
@@ -111,7 +116,11 @@ const ProductImport = ({ onImportComplete, className, size = 'default' }) => {
             const validProducts = [];
             let successCount = 0;
             const seenSkus = new Set();
+            let processedRows = 0;
             for (let i = 0; i < products.length; i++) {
+                if (i % 25 === 0) {
+                    await new Promise((resolve) => setTimeout(resolve, 0));
+                }
                 try {
                     const row = products[i];
                     const sku = (row.sku || '').trim();
@@ -240,9 +249,15 @@ const ProductImport = ({ onImportComplete, className, size = 'default' }) => {
                 catch (error) {
                     errors.push(`Fila ${i + 2}: ${error?.message || 'Error desconocido procesando la fila.'}`);
                 }
+                processedRows += 1;
+                if (totalRows > 0) {
+                    const validationProgress = Math.min(50, Math.round((processedRows / totalRows) * 50));
+                    setProgress(validationProgress);
+                }
             }
             // Intentar crear todos los productos en lote
             if (validProducts.length > 0) {
+                let processedCreations = 0;
                 for (const entry of validProducts) {
                     try {
                         await productService.create(entry.data);
@@ -259,7 +274,18 @@ const ProductImport = ({ onImportComplete, className, size = 'default' }) => {
                         const skuInfo = entry.sku ? ` (SKU ${entry.sku})` : '';
                         errors.push(`Fila ${entry.rowNumber}${skuInfo}: ${formatted}`);
                     }
+                    processedCreations += 1;
+                    const creationProgress = validProducts.length > 0
+                        ? Math.round((processedCreations / validProducts.length) * 50)
+                        : 50;
+                    setProgress(50 + Math.min(creationProgress, 50));
                 }
+            }
+            if (validProducts.length === 0) {
+                setProgress(totalRows > 0 ? 50 : 100);
+            }
+            else {
+                setProgress(100);
             }
             setUploadResult({
                 success: successCount,
@@ -276,6 +302,7 @@ const ProductImport = ({ onImportComplete, className, size = 'default' }) => {
                 errors: 1,
                 errorMessages: [error.message || 'Error al procesar el archivo']
             });
+            setProgress(0);
         }
         finally {
             setIsUploading(false);
@@ -330,6 +357,6 @@ const ProductImport = ({ onImportComplete, className, size = 'default' }) => {
         link.click();
         document.body.removeChild(link);
     };
-    return (_jsxs(Dialog, { open: isOpen, onOpenChange: setIsOpen, children: [_jsx(DialogTrigger, { asChild: true, children: _jsxs(Button, { variant: "outline", size: size, className: className, children: [_jsxs("svg", { xmlns: "http://www.w3.org/2000/svg", width: "16", height: "16", fill: "currentColor", className: "mr-2", viewBox: "0 0 16 16", children: [_jsx("path", { d: "M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z" }), _jsx("path", { d: "M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z" })] }), "Importar Productos"] }) }), _jsxs(DialogContent, { className: "sm:max-w-md", children: [_jsx(DialogHeader, { children: _jsx(DialogTitle, { children: "Importar Productos Masivamente" }) }), _jsxs("div", { className: "space-y-4 py-4", children: [_jsx("p", { className: "text-sm text-gray-500", children: "Sube un archivo CSV con los productos que deseas importar. Aseg\u00FArate de que el archivo tenga las columnas correctas." }), _jsx(Button, { variant: "outline", onClick: downloadTemplate, className: "w-full", children: "Descargar Plantilla CSV" }), _jsxs("div", { className: "flex flex-col space-y-2", children: [_jsx("label", { htmlFor: "file-upload", className: "text-sm font-medium", children: "Seleccionar archivo CSV" }), _jsx("input", { id: "file-upload", type: "file", accept: ".csv,.xlsx,.xls", onChange: handleFileChange, className: "border border-gray-300 rounded-md p-2 text-sm" })] }), uploadResult && (_jsxs(Alert, { variant: uploadResult.success > 0 ? "default" : "destructive", children: [_jsx(AlertTitle, { children: "Resultado de la importaci\u00F3n" }), _jsxs(AlertDescription, { children: [_jsxs("p", { children: ["Productos importados: ", uploadResult.success] }), _jsxs("p", { children: ["Errores: ", uploadResult.errors] }), uploadResult.errorMessages.length > 0 && (_jsxs("div", { className: "mt-2 space-y-2", children: [_jsxs("div", { children: [_jsx("p", { className: "text-xs font-medium text-red-600 dark:text-red-300", children: "Detalles del error:" }), _jsx("ul", { className: "mt-1 text-xs pl-5 list-disc space-y-1", children: uploadResult.errorMessages.slice(0, 5).map((error, index) => (_jsx("li", { children: error }, index))) }), uploadResult.errorMessages.length > 5 && (_jsxs("p", { className: "text-xs text-muted-foreground mt-1", children: ["Mostrando 5 de ", uploadResult.errorMessages.length, " errores. Usa el desplegable para ver todos."] }))] }), _jsxs("details", { children: [_jsx("summary", { className: "cursor-pointer font-medium", children: "Ver lista completa de errores" }), _jsx("ul", { className: "mt-2 text-xs pl-5 list-disc space-y-1 max-h-48 overflow-auto", children: uploadResult.errorMessages.map((error, index) => (_jsx("li", { children: error }, index))) })] })] }))] })] }))] }), _jsxs("div", { className: "flex justify-end space-x-2", children: [_jsx(Button, { variant: "outline", onClick: () => setIsOpen(false), children: "Cancelar" }), _jsx(Button, { onClick: processCSV, disabled: !fileData || isUploading, children: isUploading ? 'Importando...' : 'Importar Productos' })] })] })] }));
+    return (_jsxs(Dialog, { open: isOpen, onOpenChange: setIsOpen, children: [_jsx(DialogTrigger, { asChild: true, children: _jsxs(Button, { variant: "outline", size: size, className: className, children: [_jsxs("svg", { xmlns: "http://www.w3.org/2000/svg", width: "16", height: "16", fill: "currentColor", className: "mr-2", viewBox: "0 0 16 16", children: [_jsx("path", { d: "M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z" }), _jsx("path", { d: "M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z" })] }), "Importar Productos"] }) }), _jsxs(DialogContent, { className: "sm:max-w-md", children: [_jsx(DialogHeader, { children: _jsx(DialogTitle, { children: "Importar Productos Masivamente" }) }), _jsxs("div", { className: "space-y-4 py-4", children: [_jsx("p", { className: "text-sm text-gray-500", children: "Sube un archivo CSV con los productos que deseas importar. Aseg\u00FArate de que el archivo tenga las columnas correctas." }), _jsx(Button, { variant: "outline", onClick: downloadTemplate, className: "w-full", children: "Descargar Plantilla CSV" }), _jsxs("div", { className: "flex flex-col space-y-2", children: [_jsx("label", { htmlFor: "file-upload", className: "text-sm font-medium", children: "Seleccionar archivo CSV" }), _jsx("input", { id: "file-upload", type: "file", accept: ".csv,.xlsx,.xls", onChange: handleFileChange, className: "border border-gray-300 rounded-md p-2 text-sm" })] }), isUploading && (_jsxs("div", { className: "space-y-2", children: [_jsxs("div", { className: "flex items-center justify-between text-xs text-muted-foreground", children: [_jsx("span", { children: "Progreso de importaci\u00F3n" }), _jsxs("span", { children: [progress, "%"] })] }), _jsx("div", { className: "h-2 w-full rounded-full bg-muted", children: _jsx("div", { className: "h-2 rounded-full bg-primary transition-all", style: { width: `${progress}%` } }) })] })), uploadResult && (_jsxs(Alert, { variant: uploadResult.success > 0 ? "default" : "destructive", children: [_jsx(AlertTitle, { children: "Resultado de la importaci\u00F3n" }), _jsxs(AlertDescription, { children: [_jsxs("p", { children: ["Productos importados: ", uploadResult.success] }), _jsxs("p", { children: ["Errores: ", uploadResult.errors] }), uploadResult.errorMessages.length > 0 && (_jsxs("div", { className: "mt-2 space-y-2", children: [_jsxs("div", { children: [_jsx("p", { className: "text-xs font-medium text-red-600 dark:text-red-300", children: "Detalles del error:" }), _jsx("ul", { className: "mt-1 text-xs pl-5 list-disc space-y-1", children: uploadResult.errorMessages.slice(0, 5).map((error, index) => (_jsx("li", { children: error }, index))) }), uploadResult.errorMessages.length > 5 && (_jsxs("p", { className: "text-xs text-muted-foreground mt-1", children: ["Mostrando 5 de ", uploadResult.errorMessages.length, " errores. Usa el desplegable para ver todos."] }))] }), _jsxs("details", { children: [_jsx("summary", { className: "cursor-pointer font-medium", children: "Ver lista completa de errores" }), _jsx("ul", { className: "mt-2 text-xs pl-5 list-disc space-y-1 max-h-48 overflow-auto", children: uploadResult.errorMessages.map((error, index) => (_jsx("li", { children: error }, index))) })] })] }))] })] }))] }), _jsxs("div", { className: "flex justify-end space-x-2", children: [_jsx(Button, { variant: "outline", onClick: () => setIsOpen(false), children: "Cancelar" }), _jsx(Button, { onClick: processCSV, disabled: !fileData || isUploading, children: isUploading ? `Importando... ${progress}%` : 'Importar Productos' })] })] })] }));
 };
 export default ProductImport;

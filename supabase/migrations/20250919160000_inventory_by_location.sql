@@ -17,11 +17,17 @@ SELECT
   w.name AS warehouse_name,
   sm.location_id,
   l.name AS location_name,
-  COALESCE(SUM(sm.quantity), 0) AS current_quantity
+  COALESCE(SUM(
+    CASE
+      WHEN mt.code LIKE 'IN%' THEN sm.quantity
+      ELSE -sm.quantity
+    END
+  ), 0) AS current_quantity
 FROM public.stock_movements sm
 JOIN public.products p ON p.id = sm.product_id
 JOIN public.warehouses w ON w.id = sm.warehouse_id
 LEFT JOIN public.locations l ON l.id = sm.location_id
+JOIN public.movement_types mt ON mt.id = sm.movement_type_id
 GROUP BY sm.product_id, p.name, p.sku, sm.warehouse_id, w.name, sm.location_id, l.name;
 
 -- 3) Keep existing view for current_stock (by product + warehouse), summing across locations

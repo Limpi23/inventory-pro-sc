@@ -28,6 +28,7 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
   const [isOpen, setIsOpen] = useState(false);
   const [fileData, setFileData] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [uploadResult, setUploadResult] = useState<{
     success: number;
     errors: number;
@@ -37,6 +38,7 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       setFileData(e.target.files[0]);
+      setProgress(0);
       setUploadResult(null);
     }
   };
@@ -86,10 +88,12 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
   if (!fileData) return;
     
     setIsUploading(true);
+    setProgress(0);
     setUploadResult(null);
     
     try {
   const { rows, fields, errors: parseErrors } = await parseFile(fileData);
+      const totalRows = rows.length;
       
       const missingRequired = REQUIRED_COLUMNS.filter((column) => !fields.includes(column));
       const unknownColumns = fields.filter((column) => column && !SUPPORTED_COLUMNS.includes(column));
@@ -107,6 +111,7 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
 
       if (errors.length > 0) {
         setUploadResult({ success: 0, errors: errors.length, errorMessages: errors });
+        setProgress(0);
         return;
       }
 
@@ -134,8 +139,12 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
   const validProducts: Array<{ rowNumber: number; data: any; sku?: string }> = [];
       let successCount = 0;
   const seenSkus = new Set<string>();
+      let processedRows = 0;
       
       for (let i = 0; i < products.length; i++) {
+        if (i % 25 === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
         try {
           const row = products[i];
           const sku = (row.sku || '').trim();
@@ -272,10 +281,17 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
         } catch (error: any) {
           errors.push(`Fila ${i + 2}: ${error?.message || 'Error desconocido procesando la fila.'}`);
         }
+
+        processedRows += 1;
+        if (totalRows > 0) {
+          const validationProgress = Math.min(50, Math.round((processedRows / totalRows) * 50));
+          setProgress(validationProgress);
+        }
       }
       
       // Intentar crear todos los productos en lote
       if (validProducts.length > 0) {
+        let processedCreations = 0;
         for (const entry of validProducts) {
           try {
             await productService.create(entry.data as any);
@@ -291,7 +307,19 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
             const skuInfo = entry.sku ? ` (SKU ${entry.sku})` : '';
             errors.push(`Fila ${entry.rowNumber}${skuInfo}: ${formatted}`);
           }
+
+          processedCreations += 1;
+          const creationProgress = validProducts.length > 0
+            ? Math.round((processedCreations / validProducts.length) * 50)
+            : 50;
+          setProgress(50 + Math.min(creationProgress, 50));
         }
+      }
+
+      if (validProducts.length === 0) {
+        setProgress(totalRows > 0 ? 50 : 100);
+      } else {
+        setProgress(100);
       }
       
       setUploadResult({
@@ -309,6 +337,7 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
         errors: 1,
         errorMessages: [error.message || 'Error al procesar el archivo']
       });
+      setProgress(0);
     } finally {
       setIsUploading(false);
     }
@@ -408,6 +437,21 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
             />
           </div>
           
+          {isUploading && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Progreso de importación</span>
+                <span>{progress}%</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-muted">
+                <div
+                  className="h-2 rounded-full bg-primary transition-all"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           {uploadResult && (
             <Alert variant={uploadResult.success > 0 ? "default" : "destructive"}>
               <AlertTitle>Resultado de la importación</AlertTitle>
@@ -457,7 +501,7 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
             onClick={processCSV} 
             disabled={!fileData || isUploading}
           >
-            {isUploading ? 'Importando...' : 'Importar Productos'}
+            {isUploading ? `Importando... ${progress}%` : 'Importar Productos'}
           </Button>
         </div>
       </DialogContent>

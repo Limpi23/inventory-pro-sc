@@ -15,6 +15,8 @@ const InventoryInitialImport: React.FC<Props> = ({ onImported, trigger }) => {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressMessage, setProgressMessage] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [preview, setPreview] = useState<any[]>([]);
   const [mode, setMode] = useState<'standard' | 'serialized'>('standard');
@@ -62,6 +64,8 @@ const InventoryInitialImport: React.FC<Props> = ({ onImported, trigger }) => {
 
   const parseFile = async () => {
     if (!file) return;
+    setProgress(0);
+    setProgressMessage(null);
     setIsProcessing(true);
     setErrors([]);
     setPreview([]);
@@ -325,17 +329,21 @@ const InventoryInitialImport: React.FC<Props> = ({ onImported, trigger }) => {
     setFile(nextFile);
     setPreview([]);
     setErrors([]);
+    setProgress(0);
+    setProgressMessage(null);
   };
 
   const doImport = async () => {
     if (!preview.length) return;
+    setProgress(0);
+    setProgressMessage('Preparando importación...');
     setIsProcessing(true);
+    setErrors([]);
     try {
       const typeId = await stockMovementService.getInboundInitialTypeId();
       let created = 0;
       if (mode === 'serialized') {
-        // Create serials then movements of quantity 1 linked to serial_id
-        // 1) insert serials
+        setProgressMessage('Creando seriales...');
         const serials = preview.map((r) => ({
           product_id: r.product_id,
           serial_code: r.serial_code,
@@ -346,11 +354,20 @@ const InventoryInitialImport: React.FC<Props> = ({ onImported, trigger }) => {
           warehouse_id: r.warehouse_id || null,
           location_id: r.location_id || null,
           status: 'in_stock' as const,
-            acquired_at: r.acquired_at || new Date().toISOString(),
+          acquired_at: r.acquired_at || new Date().toISOString(),
         }));
-        const inserted = await serialsService.createMany(serials);
-        // Index by serial_code
+        const inserted = await serialsService.createMany(serials, {
+          onProgress: (processed, total) => {
+            if (total > 0) {
+              const percent = Math.round((processed / total) * 50);
+              setProgress(percent);
+            } else {
+              setProgress(50);
+            }
+          },
+        });
         const byCode = new Map(inserted.map((s) => [s.serial_code, s]));
+        setProgressMessage('Generando movimientos...');
         const moves = preview.map((r) => ({
           product_id: r.product_id,
           warehouse_id: r.warehouse_id,
@@ -363,8 +380,18 @@ const InventoryInitialImport: React.FC<Props> = ({ onImported, trigger }) => {
           movement_date: r.acquired_at || new Date().toISOString(),
           notes: 'Importación inicial serializada',
         }));
-        created = await stockMovementService.createBatch(moves);
+        created = await stockMovementService.createBatch(moves, {
+          onProgress: (processed, total) => {
+            if (total > 0) {
+              const percent = 50 + Math.round((processed / total) * 50);
+              setProgress(Math.min(100, percent));
+            } else {
+              setProgress(100);
+            }
+          },
+        });
       } else {
+        setProgressMessage('Generando movimientos...');
         const moves = preview.map((r) => ({
           product_id: r.product_id,
           warehouse_id: r.warehouse_id,
@@ -376,14 +403,32 @@ const InventoryInitialImport: React.FC<Props> = ({ onImported, trigger }) => {
           movement_date: r.movement_date || new Date().toISOString().slice(0, 10),
           notes: 'Importación inicial',
         }));
-        created = await stockMovementService.createBatch(moves);
+        created = await stockMovementService.createBatch(moves, {
+          onProgress: (processed, total) => {
+            if (total > 0) {
+              const percent = Math.round((processed / total) * 100);
+              setProgress(percent);
+            } else {
+              setProgress(100);
+            }
+          },
+        });
       }
+      setProgress(100);
+      setProgressMessage('Importación completada');
       onImported?.({ created, errors: [] });
+      setFile(null);
+      setPreview([]);
+      setErrors([]);
       setOpen(false);
     } catch (e: any) {
       setErrors([e.message || 'Error al importar inventario']);
     } finally {
       setIsProcessing(false);
+      setTimeout(() => {
+        setProgress(0);
+        setProgressMessage(null);
+      }, 300);
     }
   };
 
@@ -431,6 +476,21 @@ const InventoryInitialImport: React.FC<Props> = ({ onImported, trigger }) => {
                   ? 'En la columna “acquired_at” usa la fecha en la que se recibió cada unidad (formato YYYY-MM-DD o dd/mm/aaaa). Si la dejas vacía registraremos la fecha de hoy.'
                   : 'En la columna “movement_date” usa la fecha en la que el stock entró al inventario (formato YYYY-MM-DD o dd/mm/aaaa). Si la dejas vacía registraremos la fecha de hoy.'}
               </p>
+
+              {isProcessing && progressMessage && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span>{progressMessage}</span>
+                    <span>{`${Math.min(progress, 100)}%`}</span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-gray-100">
+                    <div
+                      className="h-2 rounded-full bg-indigo-600 transition-all"
+                      style={{ width: `${Math.min(progress, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
 
               {!!errors.length && (
                 <div className="bg-red-50 border border-red-200 text-red-700 rounded p-3 text-sm">
