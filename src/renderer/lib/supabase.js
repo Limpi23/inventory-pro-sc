@@ -63,6 +63,7 @@ export const supabase = {
         return supabaseInstance.from(table);
     }
 };
+const movementTypeCache = new Map();
 // Helper centralizado para registrar eventos de aplicación sin romper el flujo si falla
 export const logAppEvent = async (action, entity, entity_id, details) => {
     try {
@@ -247,12 +248,26 @@ export const serialsService = {
             throw error;
         return data;
     },
-    createMany: async (serials) => {
+    createMany: async (serials, opts) => {
+        if (!serials.length)
+            return [];
         const supabase = await getSupabaseClient();
-        const { data, error } = await supabase.from('product_serials').insert(serials).select();
-        if (error)
-            throw error;
-        return data;
+        const batchSize = opts?.chunkSize ?? 100;
+        const results = [];
+        for (let i = 0; i < serials.length; i += batchSize) {
+            const batch = serials.slice(i, i + batchSize);
+            const { data, error } = await supabase.from('product_serials').insert(batch).select();
+            if (error)
+                throw error;
+            if (data) {
+                results.push(...data);
+            }
+            const processed = Math.min(i + batch.length, serials.length);
+            opts?.onProgress?.(processed, serials.length);
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        return results;
     }
 };
 // Servicio de categorías
@@ -571,11 +586,11 @@ export const stockMovementService = {
         return data;
     },
     // Crear movimientos en lote (para importaciones)
-    createBatch: async (movements) => {
+    createBatch: async (movements, opts) => {
         if (!movements.length)
             return 0;
         const supa = await getSupabaseClient();
-        const batchSize = 100;
+        const batchSize = opts?.chunkSize ?? 100;
         let created = 0;
         for (let i = 0; i < movements.length; i += batchSize) {
             const batch = movements.slice(i, i + batchSize);
@@ -583,6 +598,8 @@ export const stockMovementService = {
             if (error)
                 throw error;
             created += data?.length || 0;
+            const processed = Math.min(i + batch.length, movements.length);
+            opts?.onProgress?.(processed, movements.length);
             // Ceder control al event loop para no bloquear UI en lotes grandes
             // eslint-disable-next-line no-await-in-loop
             await new Promise((r) => setTimeout(r, 0));
@@ -619,6 +636,30 @@ export const stockMovementService = {
             return types[0].id;
         throw new Error('No hay tipos de movimiento configurados');
     },
+    getMovementTypeIdByCode: async (code) => {
+        const normalized = (code || '').trim().toUpperCase();
+        if (!normalized) {
+            throw new Error('Código de tipo de movimiento inválido');
+        }
+        const cacheKey = normalized;
+        if (movementTypeCache.has(cacheKey)) {
+            return movementTypeCache.get(cacheKey);
+        }
+        const supabaseClient = await getSupabaseClient();
+        const { data, error } = await supabaseClient
+            .from('movement_types')
+            .select('id, code')
+            .eq('code', normalized)
+            .maybeSingle();
+        if (error)
+            throw error;
+        if (!data?.id) {
+            throw new Error(`No se encontró movement_type con código ${normalized}`);
+        }
+        movementTypeCache.set(cacheKey, data.id);
+        return data.id;
+    },
+    getOutboundSaleTypeId: async () => stockMovementService.getMovementTypeIdByCode('OUT_SALE'),
     // Obtener el stock actual de un producto en un almacén específico
     getCurrentStock: async (product_id, warehouse_id) => {
         const supabase = await getSupabaseClient();

@@ -110,10 +110,12 @@ const InvoiceForm: React.FC = () => {
   useEffect(() => {
     // Filtrar productos basados en el término de búsqueda
     if (productSearchTerm) {
-      const filtered = products.filter(product => 
-        product.name.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
-        product.sku.toLowerCase().includes(productSearchTerm.toLowerCase())
-      );
+      const searchLower = productSearchTerm.toLowerCase().trim();
+      const filtered = products.filter(product => {
+        const nameMatch = product.name?.toLowerCase().includes(searchLower);
+        const skuMatch = product.sku?.toLowerCase().includes(searchLower);
+        return nameMatch || skuMatch;
+      });
       setFilteredProducts(filtered);
     } else {
       setFilteredProducts([]);
@@ -501,6 +503,7 @@ const InvoiceForm: React.FC = () => {
       let outboundMovementTypeId: number | null = null;
       if (status === 'emitida') {
         outboundMovementTypeId = await stockMovementService.getOutboundSaleTypeId();
+        console.log('[DEBUG] outboundMovementTypeId:', outboundMovementTypeId);
       }
 
       if (isEditing) {
@@ -636,11 +639,14 @@ const InvoiceForm: React.FC = () => {
               notes: `Venta a cliente, cotización #${invoiceData.invoice_number}`
             }));
 
+            console.log('[DEBUG] Stock movements to insert:', JSON.stringify(stockMovements, null, 2));
+
             if (stockMovements.length) {
               const { error: movementError } = await supabase
                 .from('stock_movements')
                 .insert(stockMovements);
               if (movementError) throw movementError;
+              console.log('[DEBUG] Stock movements inserted successfully');
             }
           }
           
@@ -793,7 +799,7 @@ const InvoiceForm: React.FC = () => {
                 <div className="relative">
                   <input
                     type="text"
-                    placeholder="Buscar producto..."
+                    placeholder="Buscar por nombre o SKU..."
                     value={productSearchTerm}
                     onChange={(e) => setProductSearchTerm(e.target.value)}
                     onKeyDownCapture={(event) => {
@@ -809,27 +815,34 @@ const InvoiceForm: React.FC = () => {
                     className="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   />
                   {filteredProducts.length > 0 && (
-                    <div className="absolute z-10 mt-1 w-full bg-white shadow-lg rounded-md overflow-auto max-h-60">
-                      {filteredProducts.map(product => (
-                        <div
-                          key={product.id}
-                          className="p-2 hover:bg-gray-100 cursor-pointer"
-                          onClick={() => {
-                            const displayPrice = currency.toDisplay(product.sale_price);
-                            setCurrentItem(prev => ({
-                              ...prev,
-                              product_id: product.id,
-                              unit_price: product.sale_price,
-                              unit_price_display: Number.isFinite(displayPrice) ? `${displayPrice}` : '',
-                              tax_rate: product.tax_rate || 0
-                            }));
-                            setProductSearchTerm(product.name);
-                          }}
-                        >
-                          <div className="font-medium">{product.name}</div>
-                          <div className="text-sm text-gray-500">SKU: {product.sku}</div>
-                        </div>
-                      ))}
+                    <div className="absolute z-10 mt-1 w-full bg-white shadow-lg rounded-md overflow-auto max-h-60 border border-gray-200">
+                      {filteredProducts.map(product => {
+                        const searchLower = productSearchTerm.toLowerCase().trim();
+                        const matchesSku = product.sku?.toLowerCase().includes(searchLower);
+                        
+                        return (
+                          <div
+                            key={product.id}
+                            className="p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors"
+                            onClick={() => {
+                              const displayPrice = currency.toDisplay(product.sale_price);
+                              setCurrentItem(prev => ({
+                                ...prev,
+                                product_id: product.id,
+                                unit_price: product.sale_price,
+                                unit_price_display: Number.isFinite(displayPrice) ? `${displayPrice}` : '',
+                                tax_rate: product.tax_rate || 0
+                              }));
+                              setProductSearchTerm(product.name);
+                            }}
+                          >
+                            <div className="font-medium text-gray-900">{product.name}</div>
+                            <div className={`text-sm ${matchesSku ? 'text-blue-600 font-medium' : 'text-gray-500'}`}>
+                              SKU: {product.sku || 'Sin SKU'}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

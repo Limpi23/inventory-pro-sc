@@ -1,15 +1,15 @@
 {
   "name": "inventory-suit",
   "private": true,
-  "version": "1.6.8",
+  "version": "1.6.9",
   "type": "module",
   "main": "electron.cjs",
   "scripts": {
-  "dev": "cross-env NODE_ENV=development concurrently -k \"vite --port 8080\" \"wait-on http://localhost:8080 && nodemon\"",
-  "build:preload": "tsc src/main/preload.ts --outDir dist --esModuleInterop --module commonjs",
+    "dev": "cross-env NODE_ENV=development concurrently -k \"vite --port 8080\" \"wait-on http://localhost:8080 && nodemon\"",
+    "build:preload": "tsc src/main/preload.ts --outDir dist --esModuleInterop --module commonjs",
     "clean:out": "powershell -NoLogo -NoProfile -Command \"if (Test-Path out) { Write-Host 'Eliminando carpeta out...'; Remove-Item -Recurse -Force out; Start-Sleep -Milliseconds 300 }\"",
     "kill:app": "powershell -NoLogo -NoProfile -Command \"Get-Process -Name 'Inventario Pro' -ErrorAction SilentlyContinue | Stop-Process -Force\"",
-  "dev:electron": "cross-env NODE_ENV=development concurrently -k \"vite --port 8080\" \"wait-on http://localhost:8080 && nodemon\"",
+    "dev:electron": "cross-env NODE_ENV=development concurrently -k \"vite --port 8080\" \"wait-on http://localhost:8080 && nodemon\"",
     "dev:main": "cross-env NODE_ENV=development nodemon",
     "build": "tsc --skipLibCheck --noEmit false && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
@@ -65,8 +65,8 @@
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
     "node-pg-migrate": "^7.9.1",
-  "postcss": "^8.5.3",
-  "nodemon": "^3.1.4",
+    "nodemon": "^3.1.4",
+    "postcss": "^8.5.3",
     "supabase": "^2.22.6",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.2.2",
@@ -75,6 +75,7 @@
     "wait-on": "^8.0.3"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-free": "^7.1.0",
     "@fortawesome/fontawesome-svg-core": "^6.7.2",
     "@fortawesome/free-solid-svg-icons": "^6.7.2",
     "@fortawesome/react-fontawesome": "^0.2.2",
@@ -113,8 +114,7 @@
     "winreg": "^1.2.4",
     "xlsx": "^0.18.5",
     "zod": "^3.24.3"
-  }
-  ,
+  },
   "nodemonConfig": {
     "watch": [
       "electron.cjs",

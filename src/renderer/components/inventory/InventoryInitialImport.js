@@ -9,6 +9,8 @@ const InventoryInitialImport = ({ onImported, trigger }) => {
     const [open, setOpen] = useState(false);
     const [file, setFile] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const [progressMessage, setProgressMessage] = useState(null);
     const [errors, setErrors] = useState([]);
     const [preview, setPreview] = useState([]);
     const [mode, setMode] = useState('standard');
@@ -54,6 +56,8 @@ const InventoryInitialImport = ({ onImported, trigger }) => {
     const parseFile = async () => {
         if (!file)
             return;
+        setProgress(0);
+        setProgressMessage(null);
         setIsProcessing(true);
         setErrors([]);
         setPreview([]);
@@ -334,17 +338,21 @@ const InventoryInitialImport = ({ onImported, trigger }) => {
         setFile(nextFile);
         setPreview([]);
         setErrors([]);
+        setProgress(0);
+        setProgressMessage(null);
     };
     const doImport = async () => {
         if (!preview.length)
             return;
+        setProgress(0);
+        setProgressMessage('Preparando importación...');
         setIsProcessing(true);
+        setErrors([]);
         try {
             const typeId = await stockMovementService.getInboundInitialTypeId();
             let created = 0;
             if (mode === 'serialized') {
-                // Create serials then movements of quantity 1 linked to serial_id
-                // 1) insert serials
+                setProgressMessage('Creando seriales...');
                 const serials = preview.map((r) => ({
                     product_id: r.product_id,
                     serial_code: r.serial_code,
@@ -357,9 +365,19 @@ const InventoryInitialImport = ({ onImported, trigger }) => {
                     status: 'in_stock',
                     acquired_at: r.acquired_at || new Date().toISOString(),
                 }));
-                const inserted = await serialsService.createMany(serials);
-                // Index by serial_code
+                const inserted = await serialsService.createMany(serials, {
+                    onProgress: (processed, total) => {
+                        if (total > 0) {
+                            const percent = Math.round((processed / total) * 50);
+                            setProgress(percent);
+                        }
+                        else {
+                            setProgress(50);
+                        }
+                    },
+                });
                 const byCode = new Map(inserted.map((s) => [s.serial_code, s]));
+                setProgressMessage('Generando movimientos...');
                 const moves = preview.map((r) => ({
                     product_id: r.product_id,
                     warehouse_id: r.warehouse_id,
@@ -372,9 +390,20 @@ const InventoryInitialImport = ({ onImported, trigger }) => {
                     movement_date: r.acquired_at || new Date().toISOString(),
                     notes: 'Importación inicial serializada',
                 }));
-                created = await stockMovementService.createBatch(moves);
+                created = await stockMovementService.createBatch(moves, {
+                    onProgress: (processed, total) => {
+                        if (total > 0) {
+                            const percent = 50 + Math.round((processed / total) * 50);
+                            setProgress(Math.min(100, percent));
+                        }
+                        else {
+                            setProgress(100);
+                        }
+                    },
+                });
             }
             else {
+                setProgressMessage('Generando movimientos...');
                 const moves = preview.map((r) => ({
                     product_id: r.product_id,
                     warehouse_id: r.warehouse_id,
@@ -386,9 +415,24 @@ const InventoryInitialImport = ({ onImported, trigger }) => {
                     movement_date: r.movement_date || new Date().toISOString().slice(0, 10),
                     notes: 'Importación inicial',
                 }));
-                created = await stockMovementService.createBatch(moves);
+                created = await stockMovementService.createBatch(moves, {
+                    onProgress: (processed, total) => {
+                        if (total > 0) {
+                            const percent = Math.round((processed / total) * 100);
+                            setProgress(percent);
+                        }
+                        else {
+                            setProgress(100);
+                        }
+                    },
+                });
             }
+            setProgress(100);
+            setProgressMessage('Importación completada');
             onImported?.({ created, errors: [] });
+            setFile(null);
+            setPreview([]);
+            setErrors([]);
             setOpen(false);
         }
         catch (e) {
@@ -396,10 +440,14 @@ const InventoryInitialImport = ({ onImported, trigger }) => {
         }
         finally {
             setIsProcessing(false);
+            setTimeout(() => {
+                setProgress(0);
+                setProgressMessage(null);
+            }, 300);
         }
     };
     return (_jsxs("div", { children: [trigger ? (_jsx("div", { onClick: () => setOpen(true), children: trigger })) : (_jsx("button", { onClick: () => setOpen(true), className: "px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700", children: "Importar Inventario Inicial" })), open && (_jsx("div", { className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50", role: "dialog", "aria-modal": "true", children: _jsxs("div", { className: "bg-white rounded-lg p-6 w-full max-w-2xl shadow-xl", children: [_jsxs("div", { className: "flex items-center justify-between mb-4", children: [_jsx("h3", { className: "text-lg font-semibold", children: "Importar Inventario Inicial" }), _jsx("button", { className: "text-gray-500 hover:text-gray-700", onClick: () => setOpen(false), children: "\u00D7" })] }), _jsxs("div", { className: "space-y-4", children: [_jsxs("div", { className: "flex items-center gap-4", children: [_jsx("label", { className: "text-sm font-medium", children: "Modo:" }), _jsxs("label", { className: "inline-flex items-center gap-2", children: [_jsx("input", { type: "radio", name: "mode", checked: mode === 'standard', onChange: () => setMode('standard') }), _jsx("span", { children: "Est\u00E1ndar (por cantidad)" })] }), _jsxs("label", { className: "inline-flex items-center gap-2", children: [_jsx("input", { type: "radio", name: "mode", checked: mode === 'serialized', onChange: () => setMode('serialized') }), _jsx("span", { children: "Serializado (por unidad)" })] })] }), _jsxs("div", { className: "flex gap-2", children: [_jsx("button", { className: "px-3 py-2 bg-gray-100 rounded-md hover:bg-gray-200", onClick: downloadTemplate, children: "Descargar plantilla Excel" }), _jsxs("label", { className: "px-3 py-2 bg-white border rounded-md cursor-pointer hover:bg-gray-50", children: [_jsx("input", { type: "file", accept: ".xlsx,.xls,.csv", className: "hidden", onChange: handleFileChange }), "Seleccionar archivo (.xlsx / .xls / .csv)"] }), _jsx("button", { disabled: !file || isProcessing, onClick: parseFile, className: "px-3 py-2 bg-blue-600 text-white rounded-md disabled:opacity-50", children: "Validar" })] }), _jsx("p", { className: "text-xs text-gray-500", children: mode === 'serialized'
                                         ? 'En la columna “acquired_at” usa la fecha en la que se recibió cada unidad (formato YYYY-MM-DD o dd/mm/aaaa). Si la dejas vacía registraremos la fecha de hoy.'
-                                        : 'En la columna “movement_date” usa la fecha en la que el stock entró al inventario (formato YYYY-MM-DD o dd/mm/aaaa). Si la dejas vacía registraremos la fecha de hoy.' }), !!errors.length && (_jsxs("div", { className: "bg-red-50 border border-red-200 text-red-700 rounded p-3 text-sm", children: [_jsx("p", { className: "font-medium mb-1", children: "Errores de validaci\u00F3n:" }), _jsx("ul", { className: "list-disc pl-5 space-y-1 max-h-40 overflow-auto", children: errors.map((e, i) => _jsx("li", { children: e }, i)) })] })), !!preview.length && (_jsxs("div", { className: "border rounded p-3 max-h-60 overflow-auto text-sm", children: [_jsxs("p", { className: "font-medium mb-2", children: ["Vista previa (", preview.length, " filas)"] }), _jsxs("table", { className: "min-w-full", children: [_jsx("thead", { children: _jsx("tr", { children: Object.keys(preview[0]).map((k) => (_jsx("th", { className: "text-left text-xs font-semibold text-gray-500 pr-4 py-1", children: k }, k))) }) }), _jsx("tbody", { children: preview.slice(0, 50).map((row, idx) => (_jsx("tr", { className: "border-t", children: Object.keys(preview[0]).map((k) => (_jsx("td", { className: "pr-4 py-1", children: String(row[k] ?? '') }, k))) }, idx))) })] }), preview.length > 50 && (_jsx("p", { className: "text-xs text-gray-500 mt-1", children: "Mostrando primeras 50 filas." }))] }))] }), _jsxs("div", { className: "mt-4 flex justify-end gap-2", children: [_jsx("button", { className: "px-3 py-2 bg-gray-200 rounded-md", onClick: () => setOpen(false), children: "Cancelar" }), _jsx("button", { disabled: !preview.length || isProcessing, onClick: doImport, className: "px-3 py-2 bg-green-600 text-white rounded-md disabled:opacity-50", children: isProcessing ? 'Importando...' : 'Importar' })] })] }) }))] }));
+                                        : 'En la columna “movement_date” usa la fecha en la que el stock entró al inventario (formato YYYY-MM-DD o dd/mm/aaaa). Si la dejas vacía registraremos la fecha de hoy.' }), isProcessing && progressMessage && (_jsxs("div", { className: "space-y-2", children: [_jsxs("div", { className: "flex items-center justify-between text-xs text-gray-500", children: [_jsx("span", { children: progressMessage }), _jsx("span", { children: `${Math.min(progress, 100)}%` })] }), _jsx("div", { className: "h-2 w-full rounded-full bg-gray-100", children: _jsx("div", { className: "h-2 rounded-full bg-indigo-600 transition-all", style: { width: `${Math.min(progress, 100)}%` } }) })] })), !!errors.length && (_jsxs("div", { className: "bg-red-50 border border-red-200 text-red-700 rounded p-3 text-sm", children: [_jsx("p", { className: "font-medium mb-1", children: "Errores de validaci\u00F3n:" }), _jsx("ul", { className: "list-disc pl-5 space-y-1 max-h-40 overflow-auto", children: errors.map((e, i) => _jsx("li", { children: e }, i)) })] })), !!preview.length && (_jsxs("div", { className: "border rounded p-3 max-h-60 overflow-auto text-sm", children: [_jsxs("p", { className: "font-medium mb-2", children: ["Vista previa (", preview.length, " filas)"] }), _jsxs("table", { className: "min-w-full", children: [_jsx("thead", { children: _jsx("tr", { children: Object.keys(preview[0]).map((k) => (_jsx("th", { className: "text-left text-xs font-semibold text-gray-500 pr-4 py-1", children: k }, k))) }) }), _jsx("tbody", { children: preview.slice(0, 50).map((row, idx) => (_jsx("tr", { className: "border-t", children: Object.keys(preview[0]).map((k) => (_jsx("td", { className: "pr-4 py-1", children: String(row[k] ?? '') }, k))) }, idx))) })] }), preview.length > 50 && (_jsx("p", { className: "text-xs text-gray-500 mt-1", children: "Mostrando primeras 50 filas." }))] }))] }), _jsxs("div", { className: "mt-4 flex justify-end gap-2", children: [_jsx("button", { className: "px-3 py-2 bg-gray-200 rounded-md", onClick: () => setOpen(false), children: "Cancelar" }), _jsx("button", { disabled: !preview.length || isProcessing, onClick: doImport, className: "px-3 py-2 bg-green-600 text-white rounded-md disabled:opacity-50", children: isProcessing ? 'Importando...' : 'Importar' })] })] }) }))] }));
 };
 export default InventoryInitialImport;

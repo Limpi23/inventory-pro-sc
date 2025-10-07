@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter, HashRouter } from 'react-router-dom';
 import App from './App';
 import './index.css';
+import '@fortawesome/fontawesome-free/css/all.css';
 import { AuthProvider } from './lib/auth';
 
 // En producción (protocolo file://) usamos HashRouter para evitar problemas de rutas con file system
