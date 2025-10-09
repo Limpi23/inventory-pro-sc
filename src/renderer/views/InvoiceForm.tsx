@@ -21,6 +21,7 @@ interface Product {
   sku: string;
   sale_price: number;
   tax_rate: number;
+  tracking_method?: string;
 }
 
 interface InvoiceItem {
@@ -35,6 +36,17 @@ interface InvoiceItem {
   discount_percent: number;
   discount_amount: number;
   total_price: number;
+  serial_id?: string;
+}
+
+interface ProductSerial {
+  id: string;
+  serial_code: string;
+  vin?: string;
+  engine_number?: string;
+  year?: number;
+  color?: string;
+  status: string;
 }
 
 const InvoiceForm: React.FC = () => {
@@ -51,6 +63,7 @@ const InvoiceForm: React.FC = () => {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [productStock, setProductStock] = useState<Record<string, number>>({});
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
   const [editingItemDraft, setEditingItemDraft] = useState<{
@@ -91,6 +104,8 @@ const InvoiceForm: React.FC = () => {
   });
   
   const [productSearchTerm, setProductSearchTerm] = useState('');
+  const [availableSerials, setAvailableSerials] = useState<Record<string, ProductSerial[]>>({});
+  const [selectedSerialId, setSelectedSerialId] = useState<string>('');
   
   useEffect(() => {
     fetchCustomers();
@@ -127,6 +142,13 @@ const InvoiceForm: React.FC = () => {
       setEditingItemDraft(null);
     }
   }, [editingItemIndex]);
+
+  useEffect(() => {
+    // Cargar stock cuando cambie el almacén
+    if (formData.warehouse_id) {
+      fetchProductStock(formData.warehouse_id);
+    }
+  }, [formData.warehouse_id]);
   
   const fetchCustomers = async () => {
     try {
@@ -163,7 +185,7 @@ const InvoiceForm: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('products')
-        .select('id, name, sku, sale_price, tax_rate')
+        .select('id, name, sku, sale_price, tax_rate, tracking_method')
         .order('name');
       
       if (error) throw error;
@@ -173,6 +195,57 @@ const InvoiceForm: React.FC = () => {
       setError(err.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchProductStock = async (warehouseId: string) => {
+    if (!warehouseId) {
+      setProductStock({});
+      return;
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from('current_stock')
+        .select('product_id, current_quantity')
+        .eq('warehouse_id', warehouseId);
+      
+      if (error) throw error;
+      
+      const stockMap: Record<string, number> = {};
+      data?.forEach(item => {
+        stockMap[item.product_id] = Number(item.current_quantity) || 0;
+      });
+      
+      setProductStock(stockMap);
+    } catch (err: any) {
+      console.error('Error fetching stock:', err);
+    }
+  };
+
+  const fetchAvailableSerials = async (productId: string, warehouseId: string) => {
+    if (!productId || !warehouseId) {
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('product_serials')
+        .select('id, serial_code, vin, engine_number, year, color, status')
+        .eq('product_id', productId)
+        .eq('warehouse_id', warehouseId)
+        .eq('status', 'in_stock')
+        .order('serial_code');
+
+      if (error) throw error;
+
+      setAvailableSerials(prev => ({
+        ...prev,
+        [productId]: data || []
+      }));
+    } catch (err: any) {
+      console.error('Error fetching serials:', err);
+      toast.error('Error al cargar seriales disponibles');
     }
   };
   
@@ -321,15 +394,23 @@ const InvoiceForm: React.FC = () => {
       return;
     }
     
-    if (currentItem.quantity <= 0) {
-      toast.error('La cantidad debe ser mayor a 0');
-      return;
-    }
-    
     const selectedProduct = products.find(p => p.id === currentItem.product_id);
     if (!selectedProduct) {
       toast.error('Producto no encontrado');
       return;
+    }
+
+    // Validación especial para productos serializados
+    if (selectedProduct.tracking_method === 'serialized') {
+      if (!selectedSerialId) {
+        toast.error('Debe seleccionar un serial para este producto');
+        return;
+      }
+    } else {
+      if (currentItem.quantity <= 0) {
+        toast.error('La cantidad debe ser mayor a 0');
+        return;
+      }
     }
     
     const { discountAmount, taxAmount, totalPrice } = calculateItemTotals(
@@ -349,7 +430,8 @@ const InvoiceForm: React.FC = () => {
       tax_amount: taxAmount,
       discount_percent: currentItem.discount_percent,
       discount_amount: discountAmount,
-      total_price: totalPrice
+      total_price: totalPrice,
+      serial_id: selectedProduct.tracking_method === 'serialized' ? selectedSerialId : undefined
     };
     
     setInvoiceItems(prev => [...prev, newItem]);
@@ -365,6 +447,7 @@ const InvoiceForm: React.FC = () => {
     });
     
     setProductSearchTerm('');
+    setSelectedSerialId('');
   };
   
   const removeItemFromInvoice = (index: number) => {
@@ -542,7 +625,8 @@ const InvoiceForm: React.FC = () => {
           tax_amount: item.tax_amount,
           discount_percent: item.discount_percent,
           discount_amount: item.discount_amount,
-          total_price: item.total_price
+          total_price: item.total_price,
+          serial_id: item.serial_id || null
         }));
         
         const { error: itemsError } = await supabase
@@ -567,7 +651,8 @@ const InvoiceForm: React.FC = () => {
             reference: `Cotización ${formData.invoice_number}`,
             related_id: id,
             movement_date: movementDateISO,
-            notes: `Venta a cliente, cotización #${formData.invoice_number}`
+            notes: `Venta a cliente, cotización #${formData.invoice_number}`,
+            serial_id: item.serial_id || null
           }));
 
           if (stockMovements.length) {
@@ -575,6 +660,20 @@ const InvoiceForm: React.FC = () => {
               .from('stock_movements')
               .insert(stockMovements);
             if (movementError) throw movementError;
+          }
+
+          // Actualizar status de seriales a 'sold'
+          const serialIds = invoiceItems
+            .filter(item => item.serial_id)
+            .map(item => item.serial_id!);
+
+          if (serialIds.length > 0) {
+            const { error: serialUpdateError } = await supabase
+              .from('product_serials')
+              .update({ status: 'sold' })
+              .in('id', serialIds);
+
+            if (serialUpdateError) throw serialUpdateError;
           }
         }
         
@@ -615,7 +714,8 @@ const InvoiceForm: React.FC = () => {
             tax_amount: item.tax_amount,
             discount_percent: item.discount_percent,
             discount_amount: item.discount_amount,
-            total_price: item.total_price
+            total_price: item.total_price,
+            serial_id: item.serial_id || null
           }));
           
           const { error: itemsError } = await supabase
@@ -626,8 +726,6 @@ const InvoiceForm: React.FC = () => {
           
           // Si la cotización se emite, registrar los movimientos de inventario
           if (status === 'emitida' && outboundMovementTypeId !== null) {
-            // Nota: Para productos serializados, en próximas iteraciones se deben insertar N movimientos por serial con quantity=1 y serial_id.
-            // Por ahora mantenemos el comportamiento existente para productos por cantidad.
             const stockMovements = invoiceItems.map(item => ({
               product_id: item.product_id,
               warehouse_id: formData.warehouse_id,
@@ -636,7 +734,8 @@ const InvoiceForm: React.FC = () => {
               reference: `Cotización ${invoiceData.invoice_number}`,
               related_id: invoiceData.id,
               movement_date: movementDateISO,
-              notes: `Venta a cliente, cotización #${invoiceData.invoice_number}`
+              notes: `Venta a cliente, cotización #${invoiceData.invoice_number}`,
+              serial_id: item.serial_id || null
             }));
 
             console.log('[DEBUG] Stock movements to insert:', JSON.stringify(stockMovements, null, 2));
@@ -647,6 +746,20 @@ const InvoiceForm: React.FC = () => {
                 .insert(stockMovements);
               if (movementError) throw movementError;
               console.log('[DEBUG] Stock movements inserted successfully');
+            }
+
+            // Actualizar status de seriales a 'sold'
+            const serialIds = invoiceItems
+              .filter(item => item.serial_id)
+              .map(item => item.serial_id!);
+
+            if (serialIds.length > 0) {
+              const { error: serialUpdateError } = await supabase
+                .from('product_serials')
+                .update({ status: 'sold' })
+                .in('id', serialIds);
+
+              if (serialUpdateError) throw serialUpdateError;
             }
           }
           
@@ -819,6 +932,8 @@ const InvoiceForm: React.FC = () => {
                       {filteredProducts.map(product => {
                         const searchLower = productSearchTerm.toLowerCase().trim();
                         const matchesSku = product.sku?.toLowerCase().includes(searchLower);
+                        const availableStock = productStock[product.id] || 0;
+                        const stockColor = availableStock > 0 ? 'text-green-600' : 'text-red-600';
                         
                         return (
                           <div
@@ -831,14 +946,28 @@ const InvoiceForm: React.FC = () => {
                                 product_id: product.id,
                                 unit_price: product.sale_price,
                                 unit_price_display: Number.isFinite(displayPrice) ? `${displayPrice}` : '',
-                                tax_rate: product.tax_rate || 0
+                                tax_rate: product.tax_rate || 0,
+                                quantity: product.tracking_method === 'serialized' ? 1 : prev.quantity
                               }));
                               setProductSearchTerm(product.name);
+                              setSelectedSerialId('');
+                              
+                              // Cargar seriales si es un producto serializado
+                              if (product.tracking_method === 'serialized' && formData.warehouse_id) {
+                                fetchAvailableSerials(product.id, formData.warehouse_id);
+                              }
                             }}
                           >
-                            <div className="font-medium text-gray-900">{product.name}</div>
-                            <div className={`text-sm ${matchesSku ? 'text-blue-600 font-medium' : 'text-gray-500'}`}>
-                              SKU: {product.sku || 'Sin SKU'}
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="font-medium text-gray-900">{product.name}</div>
+                                <div className={`text-sm ${matchesSku ? 'text-blue-600 font-medium' : 'text-gray-500'}`}>
+                                  SKU: {product.sku || 'Sin SKU'}
+                                </div>
+                              </div>
+                              <div className={`text-sm font-semibold ${stockColor} ml-2`}>
+                                Stock: {availableStock}
+                              </div>
                             </div>
                           </div>
                         );
@@ -848,18 +977,50 @@ const InvoiceForm: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad <span className="text-red-500">*</span></label>
-                <input
-                  type="number"
-                  name="quantity"
-                  min="1"
-                  step="1"
-                  value={currentItem.quantity}
-                  onChange={handleItemInputChange}
-                  className="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
+              {/* Selector de Serial o Cantidad */}
+              {currentItem.product_id && products.find(p => p.id === currentItem.product_id)?.tracking_method === 'serialized' ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Serial <span className="text-red-500">*</span>
+                    <span className="ml-2 text-xs text-purple-600 font-medium">Producto Serializado</span>
+                  </label>
+                  <select
+                    value={selectedSerialId}
+                    onChange={(e) => {
+                      setSelectedSerialId(e.target.value);
+                      setCurrentItem(prev => ({ ...prev, quantity: e.target.value ? 1 : 0 }));
+                    }}
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  >
+                    <option value="">Seleccionar serial...</option>
+                    {availableSerials[currentItem.product_id]?.map(serial => (
+                      <option key={serial.id} value={serial.id}>
+                        {serial.serial_code}
+                        {serial.vin && ` - VIN: ${serial.vin}`}
+                        {serial.engine_number && ` - Motor: ${serial.engine_number}`}
+                        {serial.year && ` - ${serial.year}`}
+                        {serial.color && ` - ${serial.color}`}
+                      </option>
+                    ))}
+                  </select>
+                  {currentItem.product_id && (!availableSerials[currentItem.product_id] || availableSerials[currentItem.product_id].length === 0) && (
+                    <p className="mt-1 text-sm text-red-600">No hay seriales disponibles para este producto en la bodega seleccionada</p>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad <span className="text-red-500">*</span></label>
+                  <input
+                    type="number"
+                    name="quantity"
+                    min="1"
+                    step="1"
+                    value={currentItem.quantity}
+                    onChange={handleItemInputChange}
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Precio Unitario <span className="text-red-500">*</span></label>
@@ -915,6 +1076,7 @@ const InvoiceForm: React.FC = () => {
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Disponible</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Precio Unit.</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descuento</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IVA</th>
@@ -925,11 +1087,19 @@ const InvoiceForm: React.FC = () => {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {invoiceItems.map((item, index) => {
                       const isEditingRow = editingItemIndex === index;
+                      const availableStock = productStock[item.product_id] || 0;
+                      const stockWarning = item.quantity > availableStock;
+                      
                       return (
-                        <tr key={`${item.product_id}-${index}`}>
+                        <tr key={`${item.product_id}-${index}`} className={stockWarning ? 'bg-red-50' : ''}>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="font-medium">{item.product_name}</div>
                             <div className="text-sm text-gray-500">SKU: {item.product_sku}</div>
+                            {item.serial_id && (
+                              <div className="text-xs text-purple-600 font-medium mt-1">
+                                Serial: {availableSerials[item.product_id]?.find(s => s.id === item.serial_id)?.serial_code || item.serial_id}
+                              </div>
+                            )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             {isEditingRow ? (
@@ -943,6 +1113,14 @@ const InvoiceForm: React.FC = () => {
                               />
                             ) : (
                               item.quantity
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className={`font-semibold ${stockWarning ? 'text-red-600' : 'text-green-600'}`}>
+                              {availableStock}
+                            </div>
+                            {stockWarning && (
+                              <div className="text-xs text-red-500">¡Stock insuficiente!</div>
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">

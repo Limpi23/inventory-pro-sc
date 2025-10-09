@@ -7,13 +7,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Input } from "../ui/input";
 import { Checkbox } from "../ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
-import { MoreHorizontal, Pencil, Trash2, Ban } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Ban, Hash } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import * as XLSX from "xlsx";
 import ProductModal from "./ProductModal";
 import ProductImport from "./ProductImport";
 import ProductPriceUpdate from './ProductPriceUpdate';
 import ProductBulkAssignLocation from './ProductBulkAssignLocation';
+import SerialManagementModal from '../inventory/SerialManagementModal';
 import { useAuth } from "../../lib/auth";
 import { useCurrency } from "../../hooks/useCurrency";
 import { toast } from "react-hot-toast";
@@ -49,6 +50,8 @@ export default function ProductList() {
   const [locationFilter, setLocationFilter] = useState<string>('');
   const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([]);
   const [locations, setLocations] = useState<{ id: string; name: string; warehouse_id?: string }[]>([]);
+  const [serialModalOpen, setSerialModalOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   useEffect(() => {
     fetchProducts();
@@ -384,6 +387,7 @@ export default function ProductList() {
                   </TableHead>
                   <TableHead>Nombre</TableHead>
                   <TableHead className="hidden md:table-cell">SKU</TableHead>
+                  <TableHead className="hidden lg:table-cell">Tipo</TableHead>
                   <TableHead className="hidden lg:table-cell">Categoría</TableHead>
                   <TableHead className="hidden xl:table-cell">Ubicación</TableHead>
                   <TableHead className="hidden xl:table-cell">Precio Compra</TableHead>
@@ -411,6 +415,15 @@ export default function ProductList() {
                       </TableCell>
                       <TableCell>{product.name}</TableCell>
                       <TableCell className="hidden md:table-cell">{product.sku || "-"}</TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          product.tracking_method === 'serialized' 
+                            ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' 
+                            : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
+                        }`}>
+                          {product.tracking_method === 'serialized' ? 'Serializado' : 'Estándar'}
+                        </span>
+                      </TableCell>
                       <TableCell className="hidden lg:table-cell">{product.category?.name || "-"}</TableCell>
                       <TableCell className="hidden xl:table-cell">{product.location?.name || '-'}</TableCell>
                       <TableCell className="hidden xl:table-cell">{formatCurrency(product.purchase_price ?? 0)}</TableCell>
@@ -444,6 +457,17 @@ export default function ProductList() {
                             <DropdownMenuItem onClick={() => handleEdit(product)} className="gap-2">
                               <Pencil className="h-4 w-4" /> Editar
                             </DropdownMenuItem>
+                            {product.tracking_method === 'serialized' && (
+                              <DropdownMenuItem 
+                                onClick={() => {
+                                  setSelectedProduct(product);
+                                  setSerialModalOpen(true);
+                                }} 
+                                className="gap-2"
+                              >
+                                <Hash className="h-4 w-4" /> Gestionar Seriales
+                              </DropdownMenuItem>
+                            )}
                               <DropdownMenuItem
                                 onClick={() => {
                                   if (!canUpdateProducts) {
@@ -539,6 +563,19 @@ export default function ProductList() {
         onClose={() => setIsPriceUpdateOpen(false)}
         onUpdateComplete={fetchProducts}
       />
+
+      {selectedProduct && (
+        <SerialManagementModal
+          productId={selectedProduct.id}
+          productName={selectedProduct.name}
+          productSku={selectedProduct.sku}
+          onClose={() => {
+            setSerialModalOpen(false);
+            setSelectedProduct(null);
+          }}
+          onUpdate={fetchProducts}
+        />
+      )}
     </Card>
   );
 }

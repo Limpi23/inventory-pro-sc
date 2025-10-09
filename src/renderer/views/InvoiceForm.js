@@ -16,6 +16,7 @@ const InvoiceForm = () => {
     const [warehouses, setWarehouses] = useState([]);
     const [products, setProducts] = useState([]);
     const [filteredProducts, setFilteredProducts] = useState([]);
+    const [productStock, setProductStock] = useState({});
     const [invoiceItems, setInvoiceItems] = useState([]);
     const [editingItemIndex, setEditingItemIndex] = useState(null);
     const [editingItemDraft, setEditingItemDraft] = useState(null);
@@ -41,6 +42,8 @@ const InvoiceForm = () => {
         discount_percent: 0
     });
     const [productSearchTerm, setProductSearchTerm] = useState('');
+    const [availableSerials, setAvailableSerials] = useState({});
+    const [selectedSerialId, setSelectedSerialId] = useState('');
     useEffect(() => {
         fetchCustomers();
         fetchWarehouses();
@@ -58,8 +61,12 @@ const InvoiceForm = () => {
     useEffect(() => {
         // Filtrar productos basados en el término de búsqueda
         if (productSearchTerm) {
-            const filtered = products.filter(product => product.name.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
-                product.sku.toLowerCase().includes(productSearchTerm.toLowerCase()));
+            const searchLower = productSearchTerm.toLowerCase().trim();
+            const filtered = products.filter(product => {
+                const nameMatch = product.name?.toLowerCase().includes(searchLower);
+                const skuMatch = product.sku?.toLowerCase().includes(searchLower);
+                return nameMatch || skuMatch;
+            });
             setFilteredProducts(filtered);
         }
         else {
@@ -71,6 +78,12 @@ const InvoiceForm = () => {
             setEditingItemDraft(null);
         }
     }, [editingItemIndex]);
+    useEffect(() => {
+        // Cargar stock cuando cambie el almacén
+        if (formData.warehouse_id) {
+            fetchProductStock(formData.warehouse_id);
+        }
+    }, [formData.warehouse_id]);
     const fetchCustomers = async () => {
         try {
             const { data, error } = await supabase
@@ -104,7 +117,7 @@ const InvoiceForm = () => {
         try {
             const { data, error } = await supabase
                 .from('products')
-                .select('id, name, sku, sale_price, tax_rate')
+                .select('id, name, sku, sale_price, tax_rate, tracking_method')
                 .order('name');
             if (error)
                 throw error;
@@ -115,6 +128,52 @@ const InvoiceForm = () => {
         }
         finally {
             setIsLoading(false);
+        }
+    };
+    const fetchProductStock = async (warehouseId) => {
+        if (!warehouseId) {
+            setProductStock({});
+            return;
+        }
+        try {
+            const { data, error } = await supabase
+                .from('current_stock')
+                .select('product_id, current_quantity')
+                .eq('warehouse_id', warehouseId);
+            if (error)
+                throw error;
+            const stockMap = {};
+            data?.forEach(item => {
+                stockMap[item.product_id] = Number(item.current_quantity) || 0;
+            });
+            setProductStock(stockMap);
+        }
+        catch (err) {
+            console.error('Error fetching stock:', err);
+        }
+    };
+    const fetchAvailableSerials = async (productId, warehouseId) => {
+        if (!productId || !warehouseId) {
+            return;
+        }
+        try {
+            const { data, error } = await supabase
+                .from('product_serials')
+                .select('id, serial_code, vin, engine_number, year, color, status')
+                .eq('product_id', productId)
+                .eq('warehouse_id', warehouseId)
+                .eq('status', 'in_stock')
+                .order('serial_code');
+            if (error)
+                throw error;
+            setAvailableSerials(prev => ({
+                ...prev,
+                [productId]: data || []
+            }));
+        }
+        catch (err) {
+            console.error('Error fetching serials:', err);
+            toast.error('Error al cargar seriales disponibles');
         }
     };
     const fetchInvoiceDetails = async () => {
@@ -251,14 +310,23 @@ const InvoiceForm = () => {
             toast.error('Por favor seleccione un producto');
             return;
         }
-        if (currentItem.quantity <= 0) {
-            toast.error('La cantidad debe ser mayor a 0');
-            return;
-        }
         const selectedProduct = products.find(p => p.id === currentItem.product_id);
         if (!selectedProduct) {
             toast.error('Producto no encontrado');
             return;
+        }
+        // Validación especial para productos serializados
+        if (selectedProduct.tracking_method === 'serialized') {
+            if (!selectedSerialId) {
+                toast.error('Debe seleccionar un serial para este producto');
+                return;
+            }
+        }
+        else {
+            if (currentItem.quantity <= 0) {
+                toast.error('La cantidad debe ser mayor a 0');
+                return;
+            }
         }
         const { discountAmount, taxAmount, totalPrice } = calculateItemTotals(currentItem.quantity, currentItem.unit_price, currentItem.tax_rate, currentItem.discount_percent);
         const newItem = {
@@ -271,7 +339,8 @@ const InvoiceForm = () => {
             tax_amount: taxAmount,
             discount_percent: currentItem.discount_percent,
             discount_amount: discountAmount,
-            total_price: totalPrice
+            total_price: totalPrice,
+            serial_id: selectedProduct.tracking_method === 'serialized' ? selectedSerialId : undefined
         };
         setInvoiceItems(prev => [...prev, newItem]);
         // Limpiar el formulario de item
@@ -284,6 +353,7 @@ const InvoiceForm = () => {
             discount_percent: 0
         });
         setProductSearchTerm('');
+        setSelectedSerialId('');
     };
     const removeItemFromInvoice = (index) => {
         setInvoiceItems(prev => prev.filter((_, i) => i !== index));
@@ -400,6 +470,7 @@ const InvoiceForm = () => {
             let outboundMovementTypeId = null;
             if (status === 'emitida') {
                 outboundMovementTypeId = await stockMovementService.getOutboundSaleTypeId();
+                console.log('[DEBUG] outboundMovementTypeId:', outboundMovementTypeId);
             }
             if (isEditing) {
                 // Actualizar cotización existente
@@ -435,7 +506,8 @@ const InvoiceForm = () => {
                     tax_amount: item.tax_amount,
                     discount_percent: item.discount_percent,
                     discount_amount: item.discount_amount,
-                    total_price: item.total_price
+                    total_price: item.total_price,
+                    serial_id: item.serial_id || null
                 }));
                 const { error: itemsError } = await supabase
                     .from('invoice_items')
@@ -458,7 +530,8 @@ const InvoiceForm = () => {
                         reference: `Cotización ${formData.invoice_number}`,
                         related_id: id,
                         movement_date: movementDateISO,
-                        notes: `Venta a cliente, cotización #${formData.invoice_number}`
+                        notes: `Venta a cliente, cotización #${formData.invoice_number}`,
+                        serial_id: item.serial_id || null
                     }));
                     if (stockMovements.length) {
                         const { error: movementError } = await supabase
@@ -466,6 +539,18 @@ const InvoiceForm = () => {
                             .insert(stockMovements);
                         if (movementError)
                             throw movementError;
+                    }
+                    // Actualizar status de seriales a 'sold'
+                    const serialIds = invoiceItems
+                        .filter(item => item.serial_id)
+                        .map(item => item.serial_id);
+                    if (serialIds.length > 0) {
+                        const { error: serialUpdateError } = await supabase
+                            .from('product_serials')
+                            .update({ status: 'sold' })
+                            .in('id', serialIds);
+                        if (serialUpdateError)
+                            throw serialUpdateError;
                     }
                 }
                 toast.success(`Factura ${status === 'borrador' ? 'guardada como borrador' : 'emitida'} correctamente`);
@@ -505,7 +590,8 @@ const InvoiceForm = () => {
                         tax_amount: item.tax_amount,
                         discount_percent: item.discount_percent,
                         discount_amount: item.discount_amount,
-                        total_price: item.total_price
+                        total_price: item.total_price,
+                        serial_id: item.serial_id || null
                     }));
                     const { error: itemsError } = await supabase
                         .from('invoice_items')
@@ -514,8 +600,6 @@ const InvoiceForm = () => {
                         throw itemsError;
                     // Si la cotización se emite, registrar los movimientos de inventario
                     if (status === 'emitida' && outboundMovementTypeId !== null) {
-                        // Nota: Para productos serializados, en próximas iteraciones se deben insertar N movimientos por serial con quantity=1 y serial_id.
-                        // Por ahora mantenemos el comportamiento existente para productos por cantidad.
                         const stockMovements = invoiceItems.map(item => ({
                             product_id: item.product_id,
                             warehouse_id: formData.warehouse_id,
@@ -524,14 +608,29 @@ const InvoiceForm = () => {
                             reference: `Cotización ${invoiceData.invoice_number}`,
                             related_id: invoiceData.id,
                             movement_date: movementDateISO,
-                            notes: `Venta a cliente, cotización #${invoiceData.invoice_number}`
+                            notes: `Venta a cliente, cotización #${invoiceData.invoice_number}`,
+                            serial_id: item.serial_id || null
                         }));
+                        console.log('[DEBUG] Stock movements to insert:', JSON.stringify(stockMovements, null, 2));
                         if (stockMovements.length) {
                             const { error: movementError } = await supabase
                                 .from('stock_movements')
                                 .insert(stockMovements);
                             if (movementError)
                                 throw movementError;
+                            console.log('[DEBUG] Stock movements inserted successfully');
+                        }
+                        // Actualizar status de seriales a 'sold'
+                        const serialIds = invoiceItems
+                            .filter(item => item.serial_id)
+                            .map(item => item.serial_id);
+                        if (serialIds.length > 0) {
+                            const { error: serialUpdateError } = await supabase
+                                .from('product_serials')
+                                .update({ status: 'sold' })
+                                .in('id', serialIds);
+                            if (serialUpdateError)
+                                throw serialUpdateError;
                         }
                     }
                     toast.success(`Cotización ${status === 'borrador' ? 'guardada como borrador' : 'emitida'} correctamente`);
@@ -552,25 +651,42 @@ const InvoiceForm = () => {
         return (_jsx("div", { className: "flex justify-center items-center py-20", children: _jsx("div", { className: "animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500" }) }));
     }
     const { subtotal, taxAmount, discountAmount, total } = calculateInvoiceTotals();
-    return (_jsxs("div", { className: "space-y-6", children: [_jsx("div", { className: "flex flex-col md:flex-row md:items-center md:justify-between", children: _jsxs("div", { children: [_jsxs(Link, { to: "/ventas/facturas", className: "text-blue-600 hover:text-blue-800 flex items-center mb-2", children: [_jsx("i", { className: "fas fa-arrow-left mr-2" }), "Volver a Cotizaciones"] }), _jsx("h1", { className: "text-2xl font-semibold", children: isEditing ? 'Editar Cotización' : 'Nueva Cotización' })] }) }), error && (_jsx("div", { className: "bg-red-50 border-l-4 border-red-500 p-4 mb-4", children: _jsx("p", { className: "text-red-700", children: error }) })), _jsxs("form", { onSubmit: (e) => handleSubmit(e, true), className: "bg-white rounded-lg shadow-md overflow-hidden", children: [_jsxs("div", { className: "p-6 space-y-6", children: [_jsxs("div", { className: "grid grid-cols-1 md:grid-cols-3 gap-6", children: [_jsxs("div", { children: [_jsxs("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: ["Cliente ", _jsx("span", { className: "text-red-500", children: "*" })] }), _jsxs("select", { name: "customer_id", value: formData.customer_id, onChange: handleInputChange, required: true, className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500", children: [_jsx("option", { value: "", children: "-- Seleccione cliente --" }), customers.map(customer => (_jsxs("option", { value: customer.id, children: [customer.name, " ", customer.identification_number ? `(${customer.identification_number})` : ''] }, customer.id)))] })] }), _jsxs("div", { children: [_jsxs("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: ["Almac\u00E9n ", _jsx("span", { className: "text-red-500", children: "*" })] }), _jsxs("select", { name: "warehouse_id", value: formData.warehouse_id, onChange: handleInputChange, required: true, className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500", children: [_jsx("option", { value: "", children: "-- Seleccione almac\u00E9n --" }), warehouses.map(warehouse => (_jsx("option", { value: warehouse.id, children: warehouse.name }, warehouse.id)))] })] }), _jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "N\u00FAmero de Cotizaci\u00F3n" }), _jsx("input", { type: "text", name: "invoice_number", value: formData.invoice_number, onChange: handleInputChange, className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500", readOnly: isEditing }), !isEditing && (_jsx("p", { className: "text-xs text-gray-500 mt-1", children: "Generado autom\u00E1ticamente. Puede cambiarlo si lo desea." }))] })] }), _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-3 gap-6", children: [_jsxs("div", { children: [_jsxs("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: ["Fecha de Cotizaci\u00F3n ", _jsx("span", { className: "text-red-500", children: "*" })] }), _jsx("input", { type: "date", value: invoiceDate, onChange: (e) => setInvoiceDate(e.target.value), required: true, className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" })] }), _jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Fecha de Vencimiento" }), _jsx("input", { type: "date", value: dueDate, onChange: (e) => setDueDate(e.target.value), className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" })] }), _jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "M\u00E9todo de Pago" }), _jsxs("select", { name: "payment_method", value: formData.payment_method, onChange: handleInputChange, className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500", children: [_jsx("option", { value: "efectivo", children: "Efectivo" }), _jsx("option", { value: "tarjeta", children: "Tarjeta" }), _jsx("option", { value: "transferencia", children: "Transferencia" }), _jsx("option", { value: "cheque", children: "Cheque" }), _jsx("option", { value: "credito", children: "Cr\u00E9dito" })] })] })] }), _jsxs("div", { className: "border rounded-lg p-4 bg-gray-50", children: [_jsx("h2", { className: "text-lg font-medium mb-4", children: "Agregar Productos" }), _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-5 gap-4 mb-4", children: [_jsxs("div", { className: "md:col-span-2", children: [_jsxs("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: ["Producto ", _jsx("span", { className: "text-red-500", children: "*" })] }), _jsxs("div", { className: "relative", children: [_jsx("input", { type: "text", placeholder: "Buscar producto...", value: productSearchTerm, onChange: (e) => setProductSearchTerm(e.target.value), onKeyDownCapture: (event) => {
+    return (_jsxs("div", { className: "space-y-6", children: [_jsx("div", { className: "flex flex-col md:flex-row md:items-center md:justify-between", children: _jsxs("div", { children: [_jsxs(Link, { to: "/ventas/facturas", className: "text-blue-600 hover:text-blue-800 flex items-center mb-2", children: [_jsx("i", { className: "fas fa-arrow-left mr-2" }), "Volver a Cotizaciones"] }), _jsx("h1", { className: "text-2xl font-semibold", children: isEditing ? 'Editar Cotización' : 'Nueva Cotización' })] }) }), error && (_jsx("div", { className: "bg-red-50 border-l-4 border-red-500 p-4 mb-4", children: _jsx("p", { className: "text-red-700", children: error }) })), _jsxs("form", { onSubmit: (e) => handleSubmit(e, true), className: "bg-white rounded-lg shadow-md overflow-hidden", children: [_jsxs("div", { className: "p-6 space-y-6", children: [_jsxs("div", { className: "grid grid-cols-1 md:grid-cols-3 gap-6", children: [_jsxs("div", { children: [_jsxs("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: ["Cliente ", _jsx("span", { className: "text-red-500", children: "*" })] }), _jsxs("select", { name: "customer_id", value: formData.customer_id, onChange: handleInputChange, required: true, className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500", children: [_jsx("option", { value: "", children: "-- Seleccione cliente --" }), customers.map(customer => (_jsxs("option", { value: customer.id, children: [customer.name, " ", customer.identification_number ? `(${customer.identification_number})` : ''] }, customer.id)))] })] }), _jsxs("div", { children: [_jsxs("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: ["Almac\u00E9n ", _jsx("span", { className: "text-red-500", children: "*" })] }), _jsxs("select", { name: "warehouse_id", value: formData.warehouse_id, onChange: handleInputChange, required: true, className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500", children: [_jsx("option", { value: "", children: "-- Seleccione almac\u00E9n --" }), warehouses.map(warehouse => (_jsx("option", { value: warehouse.id, children: warehouse.name }, warehouse.id)))] })] }), _jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "N\u00FAmero de Cotizaci\u00F3n" }), _jsx("input", { type: "text", name: "invoice_number", value: formData.invoice_number, onChange: handleInputChange, className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500", readOnly: isEditing }), !isEditing && (_jsx("p", { className: "text-xs text-gray-500 mt-1", children: "Generado autom\u00E1ticamente. Puede cambiarlo si lo desea." }))] })] }), _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-3 gap-6", children: [_jsxs("div", { children: [_jsxs("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: ["Fecha de Cotizaci\u00F3n ", _jsx("span", { className: "text-red-500", children: "*" })] }), _jsx("input", { type: "date", value: invoiceDate, onChange: (e) => setInvoiceDate(e.target.value), required: true, className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" })] }), _jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Fecha de Vencimiento" }), _jsx("input", { type: "date", value: dueDate, onChange: (e) => setDueDate(e.target.value), className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" })] }), _jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "M\u00E9todo de Pago" }), _jsxs("select", { name: "payment_method", value: formData.payment_method, onChange: handleInputChange, className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500", children: [_jsx("option", { value: "efectivo", children: "Efectivo" }), _jsx("option", { value: "tarjeta", children: "Tarjeta" }), _jsx("option", { value: "transferencia", children: "Transferencia" }), _jsx("option", { value: "cheque", children: "Cheque" }), _jsx("option", { value: "credito", children: "Cr\u00E9dito" })] })] })] }), _jsxs("div", { className: "border rounded-lg p-4 bg-gray-50", children: [_jsx("h2", { className: "text-lg font-medium mb-4", children: "Agregar Productos" }), _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-5 gap-4 mb-4", children: [_jsxs("div", { className: "md:col-span-2", children: [_jsxs("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: ["Producto ", _jsx("span", { className: "text-red-500", children: "*" })] }), _jsxs("div", { className: "relative", children: [_jsx("input", { type: "text", placeholder: "Buscar por nombre o SKU...", value: productSearchTerm, onChange: (e) => setProductSearchTerm(e.target.value), onKeyDownCapture: (event) => {
                                                                     event.stopPropagation();
                                                                 }, onKeyDown: (event) => {
                                                                     event.stopPropagation();
                                                                 }, onBeforeInput: (event) => {
                                                                     event.stopPropagation();
-                                                                }, autoComplete: "off", className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" }), filteredProducts.length > 0 && (_jsx("div", { className: "absolute z-10 mt-1 w-full bg-white shadow-lg rounded-md overflow-auto max-h-60", children: filteredProducts.map(product => (_jsxs("div", { className: "p-2 hover:bg-gray-100 cursor-pointer", onClick: () => {
-                                                                        const displayPrice = currency.toDisplay(product.sale_price);
-                                                                        setCurrentItem(prev => ({
-                                                                            ...prev,
-                                                                            product_id: product.id,
-                                                                            unit_price: product.sale_price,
-                                                                            unit_price_display: Number.isFinite(displayPrice) ? `${displayPrice}` : '',
-                                                                            tax_rate: product.tax_rate || 0
-                                                                        }));
-                                                                        setProductSearchTerm(product.name);
-                                                                    }, children: [_jsx("div", { className: "font-medium", children: product.name }), _jsxs("div", { className: "text-sm text-gray-500", children: ["SKU: ", product.sku] })] }, product.id))) }))] })] }), _jsxs("div", { children: [_jsxs("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: ["Cantidad ", _jsx("span", { className: "text-red-500", children: "*" })] }), _jsx("input", { type: "number", name: "quantity", min: "1", step: "1", value: currentItem.quantity, onChange: handleItemInputChange, className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" })] }), _jsxs("div", { children: [_jsxs("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: ["Precio Unitario ", _jsx("span", { className: "text-red-500", children: "*" })] }), _jsx("input", { type: "number", name: "unit_price", min: "0", step: "0.01", value: currentItem.unit_price_display, onChange: handleItemInputChange, className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" })] }), _jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Descuento (%)" }), _jsx("input", { type: "number", name: "discount_percent", min: "0", max: "100", step: "0.01", value: currentItem.discount_percent, onChange: handleItemInputChange, className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" })] })] }), _jsx("div", { className: "flex justify-end", children: _jsxs("button", { type: "button", onClick: addItemToInvoice, className: "px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700", children: [_jsx("i", { className: "fas fa-plus mr-2" }), "Agregar Producto"] }) })] }), _jsxs("div", { children: [_jsx("h2", { className: "text-lg font-medium mb-4", children: "Productos en la Cotizaci\u00F3n" }), invoiceItems.length === 0 ? (_jsx("div", { className: "text-center py-8 border rounded-lg", children: _jsx("p", { className: "text-gray-500", children: "No hay productos agregados a la cotizaci\u00F3n" }) })) : (_jsx("div", { className: "overflow-x-auto", children: _jsxs("table", { className: "min-w-full divide-y divide-gray-200", children: [_jsx("thead", { className: "bg-gray-50", children: _jsxs("tr", { children: [_jsx("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", children: "Producto" }), _jsx("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", children: "Cantidad" }), _jsx("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", children: "Precio Unit." }), _jsx("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", children: "Descuento" }), _jsx("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", children: "IVA" }), _jsx("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", children: "Total" }), _jsx("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", children: "Acciones" })] }) }), _jsx("tbody", { className: "bg-white divide-y divide-gray-200", children: invoiceItems.map((item, index) => {
+                                                                }, autoComplete: "off", className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" }), filteredProducts.length > 0 && (_jsx("div", { className: "absolute z-10 mt-1 w-full bg-white shadow-lg rounded-md overflow-auto max-h-60 border border-gray-200", children: filteredProducts.map(product => {
+                                                                    const searchLower = productSearchTerm.toLowerCase().trim();
+                                                                    const matchesSku = product.sku?.toLowerCase().includes(searchLower);
+                                                                    const availableStock = productStock[product.id] || 0;
+                                                                    const stockColor = availableStock > 0 ? 'text-green-600' : 'text-red-600';
+                                                                    return (_jsx("div", { className: "p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors", onClick: () => {
+                                                                            const displayPrice = currency.toDisplay(product.sale_price);
+                                                                            setCurrentItem(prev => ({
+                                                                                ...prev,
+                                                                                product_id: product.id,
+                                                                                unit_price: product.sale_price,
+                                                                                unit_price_display: Number.isFinite(displayPrice) ? `${displayPrice}` : '',
+                                                                                tax_rate: product.tax_rate || 0,
+                                                                                quantity: product.tracking_method === 'serialized' ? 1 : prev.quantity
+                                                                            }));
+                                                                            setProductSearchTerm(product.name);
+                                                                            setSelectedSerialId('');
+                                                                            // Cargar seriales si es un producto serializado
+                                                                            if (product.tracking_method === 'serialized' && formData.warehouse_id) {
+                                                                                fetchAvailableSerials(product.id, formData.warehouse_id);
+                                                                            }
+                                                                        }, children: _jsxs("div", { className: "flex justify-between items-start", children: [_jsxs("div", { className: "flex-1", children: [_jsx("div", { className: "font-medium text-gray-900", children: product.name }), _jsxs("div", { className: `text-sm ${matchesSku ? 'text-blue-600 font-medium' : 'text-gray-500'}`, children: ["SKU: ", product.sku || 'Sin SKU'] })] }), _jsxs("div", { className: `text-sm font-semibold ${stockColor} ml-2`, children: ["Stock: ", availableStock] })] }) }, product.id));
+                                                                }) }))] })] }), currentItem.product_id && products.find(p => p.id === currentItem.product_id)?.tracking_method === 'serialized' ? (_jsxs("div", { children: [_jsxs("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: ["Serial ", _jsx("span", { className: "text-red-500", children: "*" }), _jsx("span", { className: "ml-2 text-xs text-purple-600 font-medium", children: "Producto Serializado" })] }), _jsxs("select", { value: selectedSerialId, onChange: (e) => {
+                                                            setSelectedSerialId(e.target.value);
+                                                            setCurrentItem(prev => ({ ...prev, quantity: e.target.value ? 1 : 0 }));
+                                                        }, className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500", children: [_jsx("option", { value: "", children: "Seleccionar serial..." }), availableSerials[currentItem.product_id]?.map(serial => (_jsxs("option", { value: serial.id, children: [serial.serial_code, serial.vin && ` - VIN: ${serial.vin}`, serial.engine_number && ` - Motor: ${serial.engine_number}`, serial.year && ` - ${serial.year}`, serial.color && ` - ${serial.color}`] }, serial.id)))] }), currentItem.product_id && (!availableSerials[currentItem.product_id] || availableSerials[currentItem.product_id].length === 0) && (_jsx("p", { className: "mt-1 text-sm text-red-600", children: "No hay seriales disponibles para este producto en la bodega seleccionada" }))] })) : (_jsxs("div", { children: [_jsxs("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: ["Cantidad ", _jsx("span", { className: "text-red-500", children: "*" })] }), _jsx("input", { type: "number", name: "quantity", min: "1", step: "1", value: currentItem.quantity, onChange: handleItemInputChange, className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" })] })), _jsxs("div", { children: [_jsxs("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: ["Precio Unitario ", _jsx("span", { className: "text-red-500", children: "*" })] }), _jsx("input", { type: "number", name: "unit_price", min: "0", step: "0.01", value: currentItem.unit_price_display, onChange: handleItemInputChange, className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" })] }), _jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Descuento (%)" }), _jsx("input", { type: "number", name: "discount_percent", min: "0", max: "100", step: "0.01", value: currentItem.discount_percent, onChange: handleItemInputChange, className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" })] })] }), _jsx("div", { className: "flex justify-end", children: _jsxs("button", { type: "button", onClick: addItemToInvoice, className: "px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700", children: [_jsx("i", { className: "fas fa-plus mr-2" }), "Agregar Producto"] }) })] }), _jsxs("div", { children: [_jsx("h2", { className: "text-lg font-medium mb-4", children: "Productos en la Cotizaci\u00F3n" }), invoiceItems.length === 0 ? (_jsx("div", { className: "text-center py-8 border rounded-lg", children: _jsx("p", { className: "text-gray-500", children: "No hay productos agregados a la cotizaci\u00F3n" }) })) : (_jsx("div", { className: "overflow-x-auto", children: _jsxs("table", { className: "min-w-full divide-y divide-gray-200", children: [_jsx("thead", { className: "bg-gray-50", children: _jsxs("tr", { children: [_jsx("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", children: "Producto" }), _jsx("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", children: "Cantidad" }), _jsx("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", children: "Disponible" }), _jsx("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", children: "Precio Unit." }), _jsx("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", children: "Descuento" }), _jsx("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", children: "IVA" }), _jsx("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", children: "Total" }), _jsx("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", children: "Acciones" })] }) }), _jsx("tbody", { className: "bg-white divide-y divide-gray-200", children: invoiceItems.map((item, index) => {
                                                         const isEditingRow = editingItemIndex === index;
-                                                        return (_jsxs("tr", { children: [_jsxs("td", { className: "px-6 py-4 whitespace-nowrap", children: [_jsx("div", { className: "font-medium", children: item.product_name }), _jsxs("div", { className: "text-sm text-gray-500", children: ["SKU: ", item.product_sku] })] }), _jsx("td", { className: "px-6 py-4 whitespace-nowrap", children: isEditingRow ? (_jsx("input", { type: "number", min: "0", step: "0.01", value: editingItemDraft?.quantity ?? '', onChange: (e) => updateEditingDraft('quantity', e.target.value), className: "w-24 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" })) : (item.quantity) }), _jsx("td", { className: "px-6 py-4 whitespace-nowrap", children: isEditingRow ? (_jsxs("div", { className: "space-y-1", children: [_jsx("input", { type: "number", min: "0", step: "0.01", value: editingItemDraft?.unit_price ?? '', onChange: (e) => updateEditingDraft('unit_price', e.target.value), className: "w-28 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" }), _jsxs("div", { className: "text-xs text-gray-500", children: ["Actual: ", formatCurrency(item.unit_price)] })] })) : (formatCurrency(item.unit_price)) }), _jsx("td", { className: "px-6 py-4 whitespace-nowrap", children: isEditingRow ? (_jsxs("div", { className: "flex items-center gap-2", children: [_jsx("input", { type: "number", min: "0", max: "100", step: "0.01", value: editingItemDraft?.discount_percent ?? '', onChange: (e) => updateEditingDraft('discount_percent', e.target.value), className: "w-24 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" }), _jsx("span", { className: "text-xs text-gray-500", children: formatCurrency(item.discount_amount) })] })) : item.discount_percent > 0 ? (_jsxs(_Fragment, { children: [_jsxs("div", { children: [item.discount_percent, "%"] }), _jsx("div", { className: "text-sm text-gray-500", children: formatCurrency(item.discount_amount) })] })) : ('-') }), _jsxs("td", { className: "px-6 py-4 whitespace-nowrap", children: [_jsxs("div", { children: [item.tax_rate, "%"] }), _jsx("div", { className: "text-sm text-gray-500", children: formatCurrency(item.tax_amount) })] }), _jsx("td", { className: "px-6 py-4 whitespace-nowrap font-medium", children: formatCurrency(item.total_price) }), _jsx("td", { className: "px-6 py-4 whitespace-nowrap", children: isEditingRow ? (_jsxs("div", { className: "flex items-center gap-3", children: [_jsx("button", { type: "button", onClick: () => saveEditingInvoiceItem(index), className: "text-green-600 hover:text-green-800", children: _jsx("i", { className: "fas fa-check" }) }), _jsx("button", { type: "button", onClick: cancelEditingInvoiceItem, className: "text-gray-500 hover:text-gray-700", children: _jsx("i", { className: "fas fa-times" }) })] })) : (_jsxs("div", { className: "flex items-center gap-3", children: [_jsx("button", { type: "button", onClick: () => startEditingInvoiceItem(index), className: "text-blue-600 hover:text-blue-800", children: _jsx("i", { className: "fas fa-pen" }) }), _jsx("button", { type: "button", onClick: () => removeItemFromInvoice(index), className: "text-red-600 hover:text-red-900", children: _jsx("i", { className: "fas fa-trash-alt" }) })] })) })] }, `${item.product_id}-${index}`));
+                                                        const availableStock = productStock[item.product_id] || 0;
+                                                        const stockWarning = item.quantity > availableStock;
+                                                        return (_jsxs("tr", { className: stockWarning ? 'bg-red-50' : '', children: [_jsxs("td", { className: "px-6 py-4 whitespace-nowrap", children: [_jsx("div", { className: "font-medium", children: item.product_name }), _jsxs("div", { className: "text-sm text-gray-500", children: ["SKU: ", item.product_sku] }), item.serial_id && (_jsxs("div", { className: "text-xs text-purple-600 font-medium mt-1", children: ["Serial: ", availableSerials[item.product_id]?.find(s => s.id === item.serial_id)?.serial_code || item.serial_id] }))] }), _jsx("td", { className: "px-6 py-4 whitespace-nowrap", children: isEditingRow ? (_jsx("input", { type: "number", min: "0", step: "0.01", value: editingItemDraft?.quantity ?? '', onChange: (e) => updateEditingDraft('quantity', e.target.value), className: "w-24 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" })) : (item.quantity) }), _jsxs("td", { className: "px-6 py-4 whitespace-nowrap", children: [_jsx("div", { className: `font-semibold ${stockWarning ? 'text-red-600' : 'text-green-600'}`, children: availableStock }), stockWarning && (_jsx("div", { className: "text-xs text-red-500", children: "\u00A1Stock insuficiente!" }))] }), _jsx("td", { className: "px-6 py-4 whitespace-nowrap", children: isEditingRow ? (_jsxs("div", { className: "space-y-1", children: [_jsx("input", { type: "number", min: "0", step: "0.01", value: editingItemDraft?.unit_price ?? '', onChange: (e) => updateEditingDraft('unit_price', e.target.value), className: "w-28 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" }), _jsxs("div", { className: "text-xs text-gray-500", children: ["Actual: ", formatCurrency(item.unit_price)] })] })) : (formatCurrency(item.unit_price)) }), _jsx("td", { className: "px-6 py-4 whitespace-nowrap", children: isEditingRow ? (_jsxs("div", { className: "flex items-center gap-2", children: [_jsx("input", { type: "number", min: "0", max: "100", step: "0.01", value: editingItemDraft?.discount_percent ?? '', onChange: (e) => updateEditingDraft('discount_percent', e.target.value), className: "w-24 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" }), _jsx("span", { className: "text-xs text-gray-500", children: formatCurrency(item.discount_amount) })] })) : item.discount_percent > 0 ? (_jsxs(_Fragment, { children: [_jsxs("div", { children: [item.discount_percent, "%"] }), _jsx("div", { className: "text-sm text-gray-500", children: formatCurrency(item.discount_amount) })] })) : ('-') }), _jsxs("td", { className: "px-6 py-4 whitespace-nowrap", children: [_jsxs("div", { children: [item.tax_rate, "%"] }), _jsx("div", { className: "text-sm text-gray-500", children: formatCurrency(item.tax_amount) })] }), _jsx("td", { className: "px-6 py-4 whitespace-nowrap font-medium", children: formatCurrency(item.total_price) }), _jsx("td", { className: "px-6 py-4 whitespace-nowrap", children: isEditingRow ? (_jsxs("div", { className: "flex items-center gap-3", children: [_jsx("button", { type: "button", onClick: () => saveEditingInvoiceItem(index), className: "text-green-600 hover:text-green-800", children: _jsx("i", { className: "fas fa-check" }) }), _jsx("button", { type: "button", onClick: cancelEditingInvoiceItem, className: "text-gray-500 hover:text-gray-700", children: _jsx("i", { className: "fas fa-times" }) })] })) : (_jsxs("div", { className: "flex items-center gap-3", children: [_jsx("button", { type: "button", onClick: () => startEditingInvoiceItem(index), className: "text-blue-600 hover:text-blue-800", children: _jsx("i", { className: "fas fa-pen" }) }), _jsx("button", { type: "button", onClick: () => removeItemFromInvoice(index), className: "text-red-600 hover:text-red-900", children: _jsx("i", { className: "fas fa-trash-alt" }) })] })) })] }, `${item.product_id}-${index}`));
                                                     }) })] }) }))] }), invoiceItems.length > 0 && (_jsx("div", { className: "flex justify-end", children: _jsxs("div", { className: "w-full md:w-1/3 space-y-2", children: [_jsxs("div", { className: "flex justify-between", children: [_jsx("span", { children: "Subtotal:" }), _jsx("span", { children: formatCurrency(subtotal) })] }), _jsxs("div", { className: "flex justify-between", children: [_jsx("span", { children: "Descuentos:" }), _jsx("span", { children: formatCurrency(discountAmount) })] }), _jsxs("div", { className: "flex justify-between", children: [_jsx("span", { children: "IVA:" }), _jsx("span", { children: formatCurrency(taxAmount) })] }), _jsxs("div", { className: "flex justify-between font-bold text-lg", children: [_jsx("span", { children: "Total:" }), _jsx("span", { children: formatCurrency(total) })] })] }) })), _jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Notas" }), _jsx("textarea", { name: "notes", value: formData.notes, onChange: handleInputChange, rows: 3, className: "w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500", placeholder: "Agregar notas o comentarios adicionales..." })] })] }), _jsxs("div", { className: "px-6 py-4 bg-gray-50 flex justify-end space-x-3", children: [_jsx(Link, { to: "/ventas/facturas", className: "px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50", children: "Cancelar" }), _jsx("button", { type: "submit", className: "px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700", disabled: isSaving, children: isSaving ? (_jsxs(_Fragment, { children: [_jsx("i", { className: "fas fa-spinner fa-spin mr-2" }), isEditing ? 'Actualizando...' : 'Guardando...'] })) : (_jsx(_Fragment, { children: "Guardar como Borrador" })) }), _jsx("button", { type: "button", onClick: (e) => handleSubmit(e, false), className: "px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700", disabled: isSaving, children: isSaving ? (_jsxs(_Fragment, { children: [_jsx("i", { className: "fas fa-spinner fa-spin mr-2" }), "Emitiendo..."] })) : (_jsx(_Fragment, { children: "Emitir Cotizaci\u00F3n" })) })] })] })] }));
 };
 export default InvoiceForm;

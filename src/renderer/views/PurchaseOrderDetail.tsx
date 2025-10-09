@@ -42,12 +42,21 @@ interface OrderItem {
     id: string;
     name: string;
     sku: string;
+    tracking_method?: string;
   };
 }
 
 interface PrintFormat {
   value: 'letter' | 'roll';
   label: string;
+}
+
+interface SerialInput {
+  serial_code: string;
+  vin?: string;
+  engine_number?: string;
+  year?: number;
+  color?: string;
 }
 
 const PurchaseOrderDetail: React.FC = () => {
@@ -67,6 +76,9 @@ const PurchaseOrderDetail: React.FC = () => {
   // Selección de ubicación para recepción
   const [receiveLocations, setReceiveLocations] = useState<Array<{id: string; name: string}>>([]);
   const [receiveLocationId, setReceiveLocationId] = useState<string>('');
+  
+  // Estados para gestión de seriales
+  const [serializedItems, setSerializedItems] = useState<{[itemId: string]: SerialInput[]}>({});
   
   const printRef = useRef<HTMLDivElement>(null);
   
@@ -193,7 +205,7 @@ const PurchaseOrderDetail: React.FC = () => {
       const { data: itemsData, error: itemsError } = await client.from('purchase_order_items')
         .select(`
           *,
-          product:products(id, name, sku)
+          product:products(id, name, sku, tracking_method)
         `)
         .eq('purchase_order_id', id);
       
@@ -297,6 +309,38 @@ const PurchaseOrderDetail: React.FC = () => {
       });
     }
   };
+
+  // Funciones para manejar seriales
+  const handleAddSerial = (itemId: string) => {
+    setSerializedItems(prev => ({
+      ...prev,
+      [itemId]: [
+        ...(prev[itemId] || []),
+        { serial_code: '', vin: '', engine_number: '', year: undefined, color: '' }
+      ]
+    }));
+  };
+
+  const handleRemoveSerial = (itemId: string, index: number) => {
+    setSerializedItems(prev => ({
+      ...prev,
+      [itemId]: (prev[itemId] || []).filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleSerialChange = (itemId: string, index: number, field: keyof SerialInput, value: string | number) => {
+    setSerializedItems(prev => {
+      const serials = [...(prev[itemId] || [])];
+      serials[index] = {
+        ...serials[index],
+        [field]: value
+      };
+      return {
+        ...prev,
+        [itemId]: serials
+      };
+    });
+  };
   
   const handleSaveReceived = async () => {
     // Validar que al menos un ítem haya sido recibido
@@ -305,6 +349,41 @@ const PurchaseOrderDetail: React.FC = () => {
       toast.error('Debe ingresar al menos una cantidad recibida');
       return;
     }
+
+    // Validar seriales para productos serializados
+    for (const [itemId, qty] of Object.entries(receivedItems)) {
+      if (qty <= 0) continue;
+      
+      const item = orderItems.find(i => i.id === itemId);
+      if (!item) continue;
+
+      if (item.product.tracking_method === 'serialized') {
+        const serials = serializedItems[itemId] || [];
+        
+        // Validar que haya el número correcto de seriales
+        if (serials.length !== qty) {
+          toast.error(`El producto "${item.product.name}" requiere ${qty} seriales, pero solo has ingresado ${serials.length}`);
+          return;
+        }
+
+        // Validar que todos los seriales tengan serial_code
+        for (let i = 0; i < serials.length; i++) {
+          if (!serials[i].serial_code || serials[i].serial_code.trim() === '') {
+            toast.error(`El serial #${i + 1} del producto "${item.product.name}" requiere un código de serie`);
+            return;
+          }
+        }
+
+        // Validar que no haya códigos duplicados dentro del mismo producto
+        const serialCodes = serials.map(s => s.serial_code.trim());
+        const uniqueCodes = new Set(serialCodes);
+        if (uniqueCodes.size !== serialCodes.length) {
+          toast.error(`Hay códigos de serie duplicados para el producto "${item.product.name}"`);
+          return;
+        }
+      }
+    }
+
     // Validar ubicación
     if (!receiveLocationId) {
       toast.error('Selecciona una ubicación de destino');
@@ -368,6 +447,33 @@ const PurchaseOrderDetail: React.FC = () => {
           .from('stock_movements')
           .insert(stockMovements);
         if (smError) throw smError as any;
+      }
+
+      // Insertar seriales para productos serializados
+      for (const [itemId, serials] of Object.entries(serializedItems)) {
+        const item = orderItems.find(i => i.id === itemId);
+        if (!item || item.product.tracking_method !== 'serialized') continue;
+
+        const serialRecords = serials.map(serial => ({
+          product_id: item.product_id,
+          serial_code: serial.serial_code,
+          vin: serial.vin || null,
+          engine_number: serial.engine_number || null,
+          year: serial.year || null,
+          color: serial.color || null,
+          warehouse_id: order?.warehouse_id,
+          location_id: receiveLocationId,
+          status: 'in_stock',
+          purchase_order_id: id
+        }));
+
+        if (serialRecords.length > 0) {
+          const { error: serialError } = await client
+            .from('product_serials')
+            .insert(serialRecords);
+          
+          if (serialError) throw serialError as any;
+        }
       }
       
       // Actualizar cantidades recibidas en los ítems de la orden
@@ -651,56 +757,181 @@ const PurchaseOrderDetail: React.FC = () => {
                     </thead>
                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                       {orderItems.map(item => {
+                        const isSerializedProduct = item.product.tracking_method === 'serialized';
+                        const receivedQty = receivedItems[item.id] || 0;
+                        const itemSerials = serializedItems[item.id] || [];
+                        
                         return (
-                          <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                            <td className="py-3 px-4 text-sm dark:text-gray-300">
-                              <div className="font-medium">{item.product.name}</div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400">SKU: {item.product.sku}</div>
-                            </td>
-                            <td className="py-3 px-4 text-sm text-center dark:text-gray-300">
-                              {item.quantity}
-                            </td>
-                            <td className="py-3 px-4 text-sm text-center dark:text-gray-300">
-                              {item.received_quantity || 0}
-                            </td>
-                            <td className="py-3 px-4 text-sm text-center dark:text-gray-300">
-                              {calculateRemainingItems(item)}
-                            </td>
-                            <td className="py-3 px-4 text-sm text-center">
-                              <div className="flex flex-col items-center">
-                                <div className="flex items-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleReceiveQuantityChange(item.id, (receivedItems[item.id] || 0) - 1, calculateRemainingItems(item))}
-                                    className="px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded-l-md hover:bg-gray-300 dark:hover:bg-gray-500"
-                                    disabled={calculateRemainingItems(item) === 0}
-                                  >
-                                    <i className="fas fa-minus"></i>
-                                  </button>
-                                  <input
-                                    type="number"
-                                    value={receivedItems[item.id] || 0}
-                                    onChange={(e) => handleReceiveQuantityChange(item.id, parseInt(e.target.value) || 0, calculateRemainingItems(item))}
-                                    className="w-16 text-center border-t border-b border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 py-1"
-                                    min="0"
-                                    max={calculateRemainingItems(item)}
-                                    disabled={calculateRemainingItems(item) === 0}
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => handleReceiveQuantityChange(item.id, (receivedItems[item.id] || 0) + 1, calculateRemainingItems(item))}
-                                    className="px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded-r-md hover:bg-gray-300 dark:hover:bg-gray-500"
-                                    disabled={calculateRemainingItems(item) === 0 || (receivedItems[item.id] || 0) >= calculateRemainingItems(item)}
-                                  >
-                                    <i className="fas fa-plus"></i>
-                                  </button>
-                                </div>
-                                {receivingError[item.id] && (
-                                  <p className="text-xs text-red-500 mt-1">{receivingError[item.id]}</p>
+                          <React.Fragment key={item.id}>
+                            <tr className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                              <td className="py-3 px-4 text-sm dark:text-gray-300">
+                                <div className="font-medium">{item.product.name}</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">SKU: {item.product.sku}</div>
+                                {isSerializedProduct && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 mt-1">
+                                    Serializado
+                                  </span>
                                 )}
-                              </div>
-                            </td>
-                          </tr>
+                              </td>
+                              <td className="py-3 px-4 text-sm text-center dark:text-gray-300">
+                                {item.quantity}
+                              </td>
+                              <td className="py-3 px-4 text-sm text-center dark:text-gray-300">
+                                {item.received_quantity || 0}
+                              </td>
+                              <td className="py-3 px-4 text-sm text-center dark:text-gray-300">
+                                {calculateRemainingItems(item)}
+                              </td>
+                              <td className="py-3 px-4 text-sm text-center">
+                                <div className="flex flex-col items-center">
+                                  <div className="flex items-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const newQty = receivedQty - 1;
+                                        handleReceiveQuantityChange(item.id, newQty, calculateRemainingItems(item));
+                                        // Ajustar seriales si es necesario
+                                        if (isSerializedProduct && itemSerials.length > newQty) {
+                                          handleRemoveSerial(item.id, itemSerials.length - 1);
+                                        }
+                                      }}
+                                      className="px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded-l-md hover:bg-gray-300 dark:hover:bg-gray-500"
+                                      disabled={calculateRemainingItems(item) === 0}
+                                    >
+                                      <i className="fas fa-minus"></i>
+                                    </button>
+                                    <input
+                                      type="number"
+                                      value={receivedQty}
+                                      onChange={(e) => {
+                                        const newQty = parseInt(e.target.value) || 0;
+                                        handleReceiveQuantityChange(item.id, newQty, calculateRemainingItems(item));
+                                        // Ajustar seriales automáticamente
+                                        if (isSerializedProduct) {
+                                          const currentSerialCount = itemSerials.length;
+                                          if (newQty > currentSerialCount) {
+                                            // Agregar seriales faltantes
+                                            for (let i = currentSerialCount; i < newQty; i++) {
+                                              handleAddSerial(item.id);
+                                            }
+                                          } else if (newQty < currentSerialCount) {
+                                            // Remover seriales sobrantes
+                                            for (let i = currentSerialCount - 1; i >= newQty; i--) {
+                                              handleRemoveSerial(item.id, i);
+                                            }
+                                          }
+                                        }
+                                      }}
+                                      className="w-16 text-center border-t border-b border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 py-1"
+                                      min="0"
+                                      max={calculateRemainingItems(item)}
+                                      disabled={calculateRemainingItems(item) === 0}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const newQty = receivedQty + 1;
+                                        handleReceiveQuantityChange(item.id, newQty, calculateRemainingItems(item));
+                                        // Agregar serial automáticamente si es serializado
+                                        if (isSerializedProduct) {
+                                          handleAddSerial(item.id);
+                                        }
+                                      }}
+                                      className="px-2 py-1 bg-gray-200 dark:bg-gray-600 rounded-r-md hover:bg-gray-300 dark:hover:bg-gray-500"
+                                      disabled={calculateRemainingItems(item) === 0 || receivedQty >= calculateRemainingItems(item)}
+                                    >
+                                      <i className="fas fa-plus"></i>
+                                    </button>
+                                  </div>
+                                  {receivingError[item.id] && (
+                                    <p className="text-xs text-red-500 mt-1">{receivingError[item.id]}</p>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                            
+                            {/* Formulario de seriales para productos serializados */}
+                            {isSerializedProduct && receivedQty > 0 && (
+                              <tr className="bg-gray-50 dark:bg-gray-900">
+                                <td colSpan={5} className="py-3 px-4">
+                                  <div className="space-y-2">
+                                    <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                      Información de Seriales ({itemSerials.length} de {receivedQty} requeridos)
+                                    </h4>
+                                    {itemSerials.map((serial, idx) => (
+                                      <div key={idx} className="grid grid-cols-6 gap-2 p-2 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
+                                        <div className="col-span-6 sm:col-span-1">
+                                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Serial #{idx + 1} *</label>
+                                          <input
+                                            type="text"
+                                            value={serial.serial_code}
+                                            onChange={(e) => handleSerialChange(item.id, idx, 'serial_code', e.target.value)}
+                                            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                                            placeholder="Código"
+                                            required
+                                          />
+                                        </div>
+                                        <div className="col-span-6 sm:col-span-1">
+                                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">VIN</label>
+                                          <input
+                                            type="text"
+                                            value={serial.vin || ''}
+                                            onChange={(e) => handleSerialChange(item.id, idx, 'vin', e.target.value)}
+                                            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                                            placeholder="VIN"
+                                          />
+                                        </div>
+                                        <div className="col-span-6 sm:col-span-1">
+                                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Motor</label>
+                                          <input
+                                            type="text"
+                                            value={serial.engine_number || ''}
+                                            onChange={(e) => handleSerialChange(item.id, idx, 'engine_number', e.target.value)}
+                                            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                                            placeholder="Motor"
+                                          />
+                                        </div>
+                                        <div className="col-span-6 sm:col-span-1">
+                                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Año</label>
+                                          <input
+                                            type="number"
+                                            value={serial.year || ''}
+                                            onChange={(e) => handleSerialChange(item.id, idx, 'year', parseInt(e.target.value) || 0)}
+                                            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                                            placeholder="Año"
+                                            min="1900"
+                                            max="2100"
+                                          />
+                                        </div>
+                                        <div className="col-span-6 sm:col-span-1">
+                                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Color</label>
+                                          <input
+                                            type="text"
+                                            value={serial.color || ''}
+                                            onChange={(e) => handleSerialChange(item.id, idx, 'color', e.target.value)}
+                                            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                                            placeholder="Color"
+                                          />
+                                        </div>
+                                        <div className="col-span-6 sm:col-span-1 flex items-end">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              handleRemoveSerial(item.id, idx);
+                                              handleReceiveQuantityChange(item.id, receivedQty - 1, calculateRemainingItems(item));
+                                            }}
+                                            className="w-full px-2 py-1.5 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 dark:hover:bg-red-900/20 rounded border border-red-300 dark:border-red-700"
+                                          >
+                                            Eliminar
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
                         );
                       })}
                     </tbody>

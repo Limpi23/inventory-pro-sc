@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import InventoryInitialImport from '../components/inventory/InventoryInitialImport';
+import SerializedInventory from '../components/inventory/SerializedInventory';
 import { supabase } from '../lib/supabase';
 import Papa from 'papaparse';
 import { useReactToPrint } from 'react-to-print';
@@ -30,7 +31,7 @@ const InventoryGeneral: React.FC = () => {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
+  const [activeTab, setActiveTab] = useState<'current' | 'history' | 'serialized'>('current');
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
   const [selectedWarehouse, setSelectedWarehouse] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -370,6 +371,16 @@ const InventoryGeneral: React.FC = () => {
             >
               Historial de Movimientos
             </button>
+            <button
+              onClick={() => setActiveTab('serialized')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                activeTab === 'serialized'
+                  ? 'bg-blue-500 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Inventario Serializado
+            </button>
           </div>
           
           <div className="relative flex-grow">
@@ -403,6 +414,8 @@ const InventoryGeneral: React.FC = () => {
           <div className="flex justify-center items-center py-20">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
           </div>
+        ) : activeTab === 'serialized' ? (
+          <SerializedInventory />
         ) : activeTab === 'current' ? (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
