@@ -27,20 +27,6 @@ module.exports = {
         loadingGif: './src/assets/installer.gif'
       },
       platforms: ['win32']
-    },
-    {
-      name: '@electron-forge/maker-zip',
-      platforms: ['darwin']
-    },
-    {
-      name: '@electron-forge/maker-dmg',
-      config: {
-        name: 'Inventario Pro - SC',
-        icon: './src/assets/app-icon.icns',
-        background: './src/assets/dmg-background.png',
-        format: 'ULFO'
-      },
-      platforms: ['darwin']
     }
   ],
   plugins: [
