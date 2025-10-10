@@ -43,17 +43,67 @@ app.whenReady().then(() => {
     createWindow();
     // Configurar actualizaciones automáticas solo en producción
     if (process.env.NODE_ENV !== 'development') {
-        autoUpdater.checkForUpdatesAndNotify();
-        autoUpdater.on('update-available', () => {
+        // Configurar el proveedor de actualizaciones (GitHub Releases)
+        try {
+            const FEED_URL = process.env.UPDATE_FEED_URL;
+            if (FEED_URL) {
+                autoUpdater.setFeedURL({ provider: 'generic', url: FEED_URL });
+                console.log('Update feed configurado (GENERIC)');
+            }
+            else {
+                // Por defecto usamos GitHub Releases del repo público
+                autoUpdater.setFeedURL({
+                    provider: 'github',
+                    owner: 'Limpi23',
+                    repo: 'inventory-pro-sc'
+                });
+                console.log('Update feed configurado (GITHUB)');
+            }
+        }
+        catch (e) {
+            console.warn('No se pudo configurar el feed de actualizaciones:', e);
+        }
+        // Configurar eventos del auto-updater
+        autoUpdater.on('checking-for-update', () => {
+            console.log('Verificando actualizaciones...');
             if (mainWindow) {
-                mainWindow.webContents.send('update-available');
+                mainWindow.webContents.send('update-checking');
             }
         });
-        autoUpdater.on('update-downloaded', () => {
+        autoUpdater.on('update-available', (info) => {
+            console.log('Actualización disponible:', info);
             if (mainWindow) {
-                mainWindow.webContents.send('update-downloaded');
+                mainWindow.webContents.send('update-available', info);
             }
         });
+        autoUpdater.on('update-not-available', (info) => {
+            console.log('No hay actualizaciones disponibles:', info);
+            if (mainWindow) {
+                mainWindow.webContents.send('update-not-available', info);
+            }
+        });
+        autoUpdater.on('error', (err) => {
+            console.error('Error en actualización:', err);
+            if (mainWindow) {
+                mainWindow.webContents.send('update-error', err);
+            }
+        });
+        autoUpdater.on('download-progress', (progressObj) => {
+            console.log(`Descargando: ${progressObj.percent}%`);
+            if (mainWindow) {
+                mainWindow.webContents.send('update-download-progress', progressObj);
+            }
+        });
+        autoUpdater.on('update-downloaded', (info) => {
+            console.log('Actualización descargada:', info);
+            if (mainWindow) {
+                mainWindow.webContents.send('update-downloaded', info);
+            }
+        });
+        // Verificar actualizaciones después de 3 segundos
+        setTimeout(() => {
+            autoUpdater.checkForUpdates();
+        }, 3000);
     }
     app.on('activate', () => {
         // En macOS es común recrear una ventana cuando
@@ -65,6 +115,21 @@ app.whenReady().then(() => {
 // Permitir que el renderer solicite la instalación de la actualización
 ipcMain.on('install-update', () => {
     autoUpdater.quitAndInstall();
+});
+// Permitir que el renderer solicite verificar actualizaciones manualmente
+ipcMain.on('check-for-updates', () => {
+    if (process.env.NODE_ENV !== 'development') {
+        console.log('Verificación manual de actualizaciones solicitada');
+        autoUpdater.checkForUpdates();
+    }
+    else {
+        console.log('Actualizaciones deshabilitadas en desarrollo');
+        if (mainWindow) {
+            mainWindow.webContents.send('update-error', {
+                message: 'Las actualizaciones están deshabilitadas en modo desarrollo'
+            });
+        }
+    }
 });
 // Salir cuando todas las ventanas estén cerradas, excepto en macOS
 app.on('window-all-closed', () => {

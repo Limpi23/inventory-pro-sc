@@ -70,12 +70,12 @@ export default function ProductList() {
   async function fetchProducts(opts?: { keepPage?: boolean }) {
     try {
       setIsLoading(true);
-  const data = await productService.getAll();
-  const list = (data as unknown as UIProduct[]) || [];
-  setProducts(list);
-  // Si los IDs seleccionados ya no están, límpialos
-  setSelectedIds(prev => new Set([...prev].filter(id => list.some(p => p.id === id))));
-  if (!opts?.keepPage) setPage(1);
+      const data = await productService.getAll();
+      const list = (data as unknown as UIProduct[]) || [];
+      setProducts(list);
+      // Si los IDs seleccionados ya no están, límpialos
+      setSelectedIds(prev => new Set([...prev].filter(id => list.some(p => p.id === id))));
+      if (!opts?.keepPage) setPage(1);
     } catch (error) {
       
     } finally {

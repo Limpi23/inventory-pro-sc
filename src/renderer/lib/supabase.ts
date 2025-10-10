@@ -277,13 +277,8 @@ export const logAppEvent = async (
 // Servicios para interactuar con Supabase
 export const productService = {
   getAll: async (): Promise<Product[]> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
-  .from('products')
-  .select(`*, category:categories(id, name), location:locations(id, name, warehouse_id)`) 
-	.order('name');
-    if (error) throw error;
-    return data || [];
+    // Usar getAllAll para evitar el límite de 1000 filas de Supabase
+    return productService.getAllAll();
   },
   // Paginado para superar el límite de 1000 filas del API
   getRange: async (from: number, to: number): Promise<Product[]> => {

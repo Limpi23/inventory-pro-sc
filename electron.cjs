@@ -277,26 +277,50 @@ app.whenReady().then(async () => {
   createWindow();
   // Configurar feed de actualizaciones (GitHub Releases público)
   try {
-    // Permitir sobreescribir vía variable de entorno si se desea apuntar a un feed genérico
-    const FEED_URL = process.env.UPDATE_FEED_URL;
-    if (FEED_URL) {
-      autoUpdater.setFeedURL({ provider: 'generic', url: FEED_URL });
-      sendStatusToWindow('Update feed configurado (GENERIC)');
+    // Solo configurar actualizaciones en Windows (plataforma objetivo)
+    if (process.platform === 'win32') {
+      const FEED_URL = process.env.UPDATE_FEED_URL;
+      if (FEED_URL) {
+        autoUpdater.setFeedURL({ provider: 'generic', url: FEED_URL });
+        sendStatusToWindow('Update feed configurado (GENERIC)');
+      } else {
+        // Para Squirrel.Windows con GitHub público
+        // El token no es necesario para repos públicos, pero ayuda a evitar rate limits
+        autoUpdater.setFeedURL({ 
+          provider: 'github',
+          owner: 'Limpi23',
+          repo: 'inventory-pro-sc',
+          // Si hay un token disponible, usarlo
+          ...(process.env.GH_TOKEN && { token: process.env.GH_TOKEN })
+        });
+        sendStatusToWindow('Update feed configurado (GITHUB)');
+      }
     } else {
-      // Por defecto usamos GitHub Releases del repo público
-      autoUpdater.setFeedURL({ provider: 'github', owner: 'Limpi23', repo: 'inventory-pro-sc' });
-      sendStatusToWindow('Update feed configurado (GITHUB)');
+      console.log('Auto-updater solo está configurado para Windows');
     }
   } catch (e) {
     console.warn('No se pudo configurar el feed de actualizaciones:', e);
   }
-  if (process.env.NODE_ENV !== 'development') {
+  // Solo buscar actualizaciones automáticamente en Windows y en producción
+  if (process.env.NODE_ENV !== 'development' && process.platform === 'win32') {
     setTimeout(() => {
       autoUpdater.checkForUpdates();
     }, 3000);
   }
 });
 ipcMain.on('check-for-updates', () => {
+  // Solo permitir búsqueda manual de actualizaciones en Windows
+  if (process.platform !== 'win32') {
+    if (mainWindow) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Actualizaciones no disponibles',
+        message: 'Las actualizaciones automáticas solo están disponibles en Windows.',
+      });
+    }
+    return;
+  }
+  manualUpdateRequested = true;
   autoUpdater.checkForUpdates();
 });
 ipcMain.on('install-update', () => {
@@ -392,6 +416,7 @@ function setupApplicationMenu() {
         },
         {
           label: 'Buscar actualizaciones',
+          enabled: process.platform === 'win32',
           click: async () => {
             try {
               manualUpdateRequested = true;

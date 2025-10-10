@@ -78,6 +78,10 @@ const InvoiceForm: React.FC = () => {
   const [invoiceDate, setInvoiceDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [dueDate, setDueDate] = useState<string>('');
   
+  // Estados para descuento global
+  const [discountMode, setDiscountMode] = useState<'product' | 'global'>('product');
+  const [globalDiscountPercent, setGlobalDiscountPercent] = useState<number>(0);
+  
   const [formData, setFormData] = useState({
     customer_id: '',
     warehouse_id: '',
@@ -144,11 +148,31 @@ const InvoiceForm: React.FC = () => {
   }, [editingItemIndex]);
 
   useEffect(() => {
-    // Cargar stock cuando cambie el almacén
-    if (formData.warehouse_id) {
-      fetchProductStock(formData.warehouse_id);
-    }
+    // Cargar stock cuando cambie el almacén (o al inicio sin almacén)
+    fetchProductStock(formData.warehouse_id);
   }, [formData.warehouse_id]);
+
+  // Recalcular items cuando cambie el descuento global
+  useEffect(() => {
+    if (discountMode === 'global' && invoiceItems.length > 0) {
+      const updatedItems = invoiceItems.map(item => {
+        const { discountAmount, taxAmount, totalPrice } = calculateItemTotals(
+          item.quantity,
+          item.unit_price,
+          item.tax_rate,
+          globalDiscountPercent
+        );
+        return {
+          ...item,
+          discount_percent: globalDiscountPercent,
+          discount_amount: discountAmount,
+          tax_amount: taxAmount,
+          total_price: totalPrice
+        };
+      });
+      setInvoiceItems(updatedItems);
+    }
+  }, [globalDiscountPercent, discountMode]);
   
   const fetchCustomers = async () => {
     try {
@@ -199,23 +223,34 @@ const InvoiceForm: React.FC = () => {
   };
 
   const fetchProductStock = async (warehouseId: string) => {
-    if (!warehouseId) {
-      setProductStock({});
-      return;
-    }
-    
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('current_stock')
-        .select('product_id, current_quantity')
-        .eq('warehouse_id', warehouseId);
+        .select('product_id, current_quantity, warehouse_id');
+      
+      // Si hay almacén seleccionado, filtrar por ese almacén
+      if (warehouseId) {
+        query = query.eq('warehouse_id', warehouseId);
+      }
+      
+      const { data, error } = await query;
       
       if (error) throw error;
       
       const stockMap: Record<string, number> = {};
-      data?.forEach(item => {
-        stockMap[item.product_id] = Number(item.current_quantity) || 0;
-      });
+      
+      if (warehouseId) {
+        // Stock específico del almacén seleccionado
+        data?.forEach(item => {
+          stockMap[item.product_id] = Number(item.current_quantity) || 0;
+        });
+      } else {
+        // Stock total de todos los almacenes (sumar cantidades por producto)
+        data?.forEach(item => {
+          const currentQty = stockMap[item.product_id] || 0;
+          stockMap[item.product_id] = currentQty + (Number(item.current_quantity) || 0);
+        });
+      }
       
       setProductStock(stockMap);
     } catch (err: any) {
@@ -413,11 +448,14 @@ const InvoiceForm: React.FC = () => {
       }
     }
     
+    // Usar descuento global o por producto según el modo
+    const effectiveDiscount = discountMode === 'global' ? globalDiscountPercent : currentItem.discount_percent;
+    
     const { discountAmount, taxAmount, totalPrice } = calculateItemTotals(
       currentItem.quantity,
       currentItem.unit_price,
       currentItem.tax_rate,
-      currentItem.discount_percent
+      effectiveDiscount
     );
     
     const newItem: InvoiceItem = {
@@ -428,7 +466,7 @@ const InvoiceForm: React.FC = () => {
       unit_price: currentItem.unit_price,
       tax_rate: currentItem.tax_rate,
       tax_amount: taxAmount,
-      discount_percent: currentItem.discount_percent,
+      discount_percent: effectiveDiscount,
       discount_amount: discountAmount,
       total_price: totalPrice,
       serial_id: selectedProduct.tracking_method === 'serialized' ? selectedSerialId : undefined
@@ -896,7 +934,7 @@ const InvoiceForm: React.FC = () => {
                 <option value="efectivo">Efectivo</option>
                 <option value="tarjeta">Tarjeta</option>
                 <option value="transferencia">Transferencia</option>
-                <option value="cheque">Cheque</option>
+                <option value="qr">QR</option>
                 <option value="credito">Crédito</option>
               </select>
             </div>
@@ -904,9 +942,51 @@ const InvoiceForm: React.FC = () => {
 
           {/* Agregar productos */}
           <div className="border rounded-lg p-4 bg-gray-50">
-            <h2 className="text-lg font-medium mb-4">Agregar Productos</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-medium">Agregar Productos</h2>
+              
+              {/* Toggle para modo de descuento */}
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700">Descuento:</label>
+                  <button
+                    type="button"
+                    onClick={() => setDiscountMode(discountMode === 'product' ? 'global' : 'product')}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      discountMode === 'global' ? 'bg-blue-600' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        discountMode === 'global' ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    {discountMode === 'product' ? 'Por Producto' : 'Global'}
+                  </span>
+                </div>
+                
+                {/* Campo de descuento global */}
+                {discountMode === 'global' && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={globalDiscountPercent}
+                      onChange={(e) => setGlobalDiscountPercent(Number(e.target.value) || 0)}
+                      className="w-20 border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                      placeholder="0"
+                    />
+                    <span className="text-sm text-gray-600">%</span>
+                  </div>
+                )}
+              </div>
+            </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
+            <div className={`grid grid-cols-1 gap-4 mb-4 ${discountMode === 'product' ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Producto <span className="text-red-500">*</span></label>
                 <div className="relative">
@@ -965,8 +1045,15 @@ const InvoiceForm: React.FC = () => {
                                   SKU: {product.sku || 'Sin SKU'}
                                 </div>
                               </div>
-                              <div className={`text-sm font-semibold ${stockColor} ml-2`}>
-                                Stock: {availableStock}
+                              <div className="text-right ml-2">
+                                <div className={`text-sm font-semibold ${stockColor}`}>
+                                  Stock: {availableStock}
+                                </div>
+                                {!formData.warehouse_id && availableStock > 0 && (
+                                  <div className="text-xs text-gray-400">
+                                    (Total)
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1035,19 +1122,22 @@ const InvoiceForm: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Descuento (%)</label>
-                <input
-                  type="number"
-                  name="discount_percent"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  value={currentItem.discount_percent}
-                  onChange={handleItemInputChange}
-                  className="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
+              {/* Campo de descuento individual - solo en modo "product" */}
+              {discountMode === 'product' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Descuento (%)</label>
+                  <input
+                    type="number"
+                    name="discount_percent"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={currentItem.discount_percent}
+                    onChange={handleItemInputChange}
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end">
@@ -1078,7 +1168,9 @@ const InvoiceForm: React.FC = () => {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Disponible</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Precio Unit.</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descuento</th>
+                      {discountMode === 'product' && (
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descuento</th>
+                      )}
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IVA</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
@@ -1140,29 +1232,31 @@ const InvoiceForm: React.FC = () => {
                               formatCurrency(item.unit_price)
                             )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {isEditingRow ? (
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="100"
-                                  step="0.01"
-                                  value={editingItemDraft?.discount_percent ?? ''}
-                                  onChange={(e) => updateEditingDraft('discount_percent', e.target.value)}
-                                  className="w-24 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                />
-                                <span className="text-xs text-gray-500">{formatCurrency(item.discount_amount)}</span>
-                              </div>
-                            ) : item.discount_percent > 0 ? (
-                              <>
-                                <div>{item.discount_percent}%</div>
-                                <div className="text-sm text-gray-500">{formatCurrency(item.discount_amount)}</div>
-                              </>
-                            ) : (
-                              '-'
-                            )}
-                          </td>
+                          {discountMode === 'product' && (
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {isEditingRow ? (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    step="0.01"
+                                    value={editingItemDraft?.discount_percent ?? ''}
+                                    onChange={(e) => updateEditingDraft('discount_percent', e.target.value)}
+                                    className="w-24 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-500">{formatCurrency(item.discount_amount)}</span>
+                                </div>
+                              ) : item.discount_percent > 0 ? (
+                                <>
+                                  <div>{item.discount_percent}%</div>
+                                  <div className="text-sm text-gray-500">{formatCurrency(item.discount_amount)}</div>
+                                </>
+                              ) : (
+                                '-'
+                              )}
+                            </td>
+                          )}
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div>{item.tax_rate}%</div>
                             <div className="text-sm text-gray-500">{formatCurrency(item.tax_amount)}</div>
@@ -1223,7 +1317,12 @@ const InvoiceForm: React.FC = () => {
                   <span>{formatCurrency(subtotal)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Descuentos:</span>
+                  <span>
+                    Descuentos:
+                    {discountMode === 'global' && globalDiscountPercent > 0 && (
+                      <span className="ml-1 text-xs text-blue-600">({globalDiscountPercent}% global)</span>
+                    )}
+                  </span>
                   <span>{formatCurrency(discountAmount)}</span>
                 </div>
                 <div className="flex justify-between">
