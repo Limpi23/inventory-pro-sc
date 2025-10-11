@@ -312,13 +312,10 @@ app.whenReady().then(async () => {
         console.log(`   URL: ${updateUrl}`);
       }
       
-      // IMPORTANTE: Forzar actualizaciones en desarrollo
-      // Esto permite probar el sistema de actualizaciones sin empaquetar
-      if (process.env.NODE_ENV === 'development') {
-        autoUpdater.forceDevUpdateConfig = true;
-        console.log('⚠️ Actualizaciones forzadas en desarrollo - Solo para pruebas');
-        sendStatusToWindow('Modo desarrollo: actualizaciones habilitadas para pruebas');
-      }
+      // IMPORTANTE: Solo forzar dev config en desarrollo real, NO en producción
+      // forceDevUpdateConfig = true causa que busque archivos locales en lugar de GitHub
+      // Removemos esta opción para que funcione correctamente en producción
+      
     } else {
       console.log('Auto-updater solo está configurado para Windows');
     }
