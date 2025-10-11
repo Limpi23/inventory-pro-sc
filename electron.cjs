@@ -2,6 +2,12 @@
 // Cambiaremos los require por import.
 // ... el resto del código se migrará en el siguiente paso ... 
 
+// Manejar eventos de instalación de Squirrel.Windows
+// Esto es CRÍTICO para que la app se instale correctamente en el sistema
+if (require('electron-squirrel-startup')) {
+  app.quit();
+}
+
 const { app, BrowserWindow, session, ipcMain, dialog, Menu, shell } = require('electron');
 const path = require('path');
 const url = require('url');
