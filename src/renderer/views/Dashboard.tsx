@@ -404,8 +404,10 @@ const Dashboard: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-semibold">📊 Dashboard</h1>
-        <span className="text-sm text-gray-500">Panel de Control</span>
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+          📊 Dashboard
+        </h1>
+        <span className="text-sm text-gray-500 bg-blue-50 px-3 py-1 rounded-full">Panel de Control</span>
       </div>
       
       {loading ? (
