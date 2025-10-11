@@ -275,25 +275,41 @@ app.whenReady().then(async () => {
     await ses.clearCache();
   }
   createWindow();
-  // Configurar feed de actualizaciones (GitHub Releases público)
+  // Configurar feed de actualizaciones para Squirrel.Windows
   try {
     // Solo configurar actualizaciones en Windows (plataforma objetivo)
     if (process.platform === 'win32') {
-      const FEED_URL = process.env.UPDATE_FEED_URL;
-      if (FEED_URL) {
-        autoUpdater.setFeedURL({ provider: 'generic', url: FEED_URL });
-        sendStatusToWindow('Update feed configurado (GENERIC)');
+      const CUSTOM_FEED_URL = process.env.UPDATE_FEED_URL;
+      
+      if (CUSTOM_FEED_URL) {
+        // Opción: URL personalizada
+        autoUpdater.setFeedURL({ provider: 'generic', url: CUSTOM_FEED_URL });
+        sendStatusToWindow('Update feed configurado (CUSTOM)');
+        console.log('✓ Usando feed de actualizaciones personalizado');
       } else {
-        // Para Squirrel.Windows con GitHub público
-        // El token no es necesario para repos públicos, pero ayuda a evitar rate limits
+        // Para Squirrel.Windows con GitHub Releases
+        // Usamos provider 'generic' y apuntamos directamente a la URL del RELEASES
+        const owner = 'Limpi23';
+        const repo = 'inventory-pro-sc';
+        // La URL base apunta a la carpeta de releases latest
+        const updateUrl = `https://github.com/${owner}/${repo}/releases/latest/download`;
+        
         autoUpdater.setFeedURL({ 
-          provider: 'github',
-          owner: 'Limpi23',
-          repo: 'inventory-pro-sc',
-          // Si hay un token disponible, usarlo
-          ...(process.env.GH_TOKEN && { token: process.env.GH_TOKEN })
+          provider: 'generic',
+          url: updateUrl,
+          // Para Squirrel.Windows, NO usar 'channel'
         });
-        sendStatusToWindow('Update feed configurado (GITHUB)');
+        sendStatusToWindow('Update feed configurado (SQUIRREL + GITHUB)');
+        console.log('✓ Squirrel.Windows: buscando archivo RELEASES en GitHub');
+        console.log(`   URL: ${updateUrl}`);
+      }
+      
+      // IMPORTANTE: Forzar actualizaciones en desarrollo
+      // Esto permite probar el sistema de actualizaciones sin empaquetar
+      if (process.env.NODE_ENV === 'development') {
+        autoUpdater.forceDevUpdateConfig = true;
+        console.log('⚠️ Actualizaciones forzadas en desarrollo - Solo para pruebas');
+        sendStatusToWindow('Modo desarrollo: actualizaciones habilitadas para pruebas');
       }
     } else {
       console.log('Auto-updater solo está configurado para Windows');

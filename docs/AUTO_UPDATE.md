@@ -43,18 +43,25 @@ La aplicación busca actualizaciones de dos formas:
 
 ### 3. Configuración del Feed
 
-El feed de actualizaciones está configurado en `electron.cjs`:
+El feed de actualizaciones está configurado en `electron.cjs` para **Squirrel.Windows** (Electron Forge):
 
 ```javascript
+// Para Squirrel.Windows, usamos provider 'generic' apuntando al GitHub Release
+const updateUrl = `https://github.com/Limpi23/inventory-pro-sc/releases/latest/download`;
+
 autoUpdater.setFeedURL({ 
-  provider: 'github',
-  owner: 'Limpi23',
-  repo: 'inventory-pro-sc'
+  provider: 'generic',
+  url: updateUrl
 });
 ```
 
+**Importante**: 
+- ✅ Usamos `provider: 'generic'` (NO `'github'`)
+- ✅ Porque Electron Forge genera `RELEASES` (formato Squirrel)
+- ❌ NO usamos `provider: 'github'` (buscaría `latest.yml` que no tenemos)
+
 `electron-updater` automáticamente:
-- Busca el archivo `RELEASES` en los releases de GitHub
+- Busca el archivo `RELEASES` en la URL especificada
 - Compara la versión actual con la disponible
 - Descarga el archivo `.nupkg` si hay una actualización
 
@@ -68,10 +75,32 @@ autoUpdater.setFeedURL({
 
 ## Pruebas
 
-### Probar en Desarrollo (macOS/Linux)
-El auto-updater está **deshabilitado** en desarrollo para evitar el error que veías. El menú muestra un mensaje explicando que las actualizaciones solo funcionan en Windows.
+### Probar en Desarrollo (Windows)
 
-### Probar en Windows
+**⚠️ IMPORTANTE**: El sistema de actualizaciones está configurado con `forceDevUpdateConfig = true` en modo desarrollo, lo que permite probar actualizaciones sin empaquetar la aplicación.
+
+**Pasos para probar en desarrollo**:
+
+1. **Asegúrate de tener una versión inferior** en `package.json` que la disponible en GitHub Releases
+2. **Ejecuta la aplicación en modo desarrollo**:
+   ```bash
+   npm run dev
+   ```
+3. **Verifica que el updater esté activo**: En la consola deberías ver:
+   ```
+   ⚠️ Actualizaciones forzadas en desarrollo - Solo para pruebas
+   ```
+4. **Usa el menú**: **Herramientas > Buscar actualizaciones**
+
+**Limitaciones en desarrollo**:
+- La actualización se descargará pero **NO se instalará** (Squirrel requiere app empaquetada)
+- Solo puedes probar la **detección** y **descarga** de actualizaciones
+- Para probar la **instalación completa**, debes usar la app empaquetada (ver abajo)
+
+### Probar en Desarrollo (macOS/Linux)
+El auto-updater solo funciona en Windows. En otras plataformas, el menú muestra un mensaje explicando esta limitación.
+
+### Probar la Instalación Completa (Windows)
 
 1. **Construir la versión actual**:
 ```bash
@@ -119,14 +148,19 @@ git push origin main --tags
 ### No se detectan actualizaciones
 
 **Verificar**:
-1. ¿El release está publicado en GitHub?
-2. ¿El release contiene los archivos `RELEASES` y `.nupkg`?
-3. ¿La versión del release es superior a la instalada?
-4. ¿Estás ejecutando desde el instalador o desde `npm run dev`?
+1. ✅ ¿El release está publicado en GitHub?
+2. ✅ ¿El release contiene los archivos `RELEASES` y `.nupkg`?
+3. ✅ ¿La versión del release es superior a la instalada?
+4. ✅ ¿Estás ejecutando desde el instalador o desde `npm run dev`?
+
+**Nota sobre pruebas en desarrollo**:
+- En desarrollo con `forceDevUpdateConfig = true`, puedes **detectar** y **descargar** actualizaciones
+- Sin embargo, la **instalación** requiere que la app esté empaquetada
+- El mensaje "Skip checkForUpdates because application is not packed" ya no debería aparecer si `forceDevUpdateConfig = true` está configurado
 
 **Solución**:
-- Las actualizaciones solo funcionan con la app **instalada** desde el Setup.exe
-- No funcionan cuando ejecutas `npm run dev` o `npm run start`
+- Para pruebas completas de instalación, usa la app **instalada** desde el Setup.exe
+- Para pruebas de detección/descarga, usa el modo desarrollo con `forceDevUpdateConfig = true`
 
 ### Rate Limiting de GitHub API
 

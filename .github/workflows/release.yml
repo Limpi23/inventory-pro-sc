@@ -47,6 +47,10 @@ jobs:
       - name: Build Windows installer
         run: npm run make:win
 
+      - name: Generate latest.yml for electron-updater
+        run: node scripts/generate-latest-yml.cjs
+        shell: powershell
+
       - name: List build artifacts
         run: |
           echo "=== Build Artifacts ==="
@@ -145,4 +149,14 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: out/make/squirrel.windows/x64/RELEASES
           asset_name: RELEASES
-          asset_content_type: text/plain 
+          asset_content_type: text/plain
+
+      - name: Upload latest.yml for electron-updater
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: out/make/squirrel.windows/x64/latest.yml
+          asset_name: latest.yml
+          asset_content_type: text/yaml 
