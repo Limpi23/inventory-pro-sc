@@ -256,9 +256,14 @@ const InvoiceDetail = () => {
             return;
         if (attemptedAutoSaleRef.current)
             return;
+        // Esperar a que se carguen los items antes de generar la venta
+        if (loading)
+            return;
+        if (invoiceItems.length === 0)
+            return;
         attemptedAutoSaleRef.current = true;
         handleGenerateSale();
-    }, [invoice, shouldAutoGenerateSale, handleGenerateSale]);
+    }, [invoice, invoiceItems, loading, shouldAutoGenerateSale, handleGenerateSale]);
     const handlePrint = useReactToPrint({
         contentRef: printFormat === 'letter' ? letterPrintRef : rollPrintRef,
         documentTitle: `Cotización-${invoice?.invoice_number || 'Desconocida'}`,

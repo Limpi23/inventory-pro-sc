@@ -24,8 +24,9 @@ const InventoryGeneral = () => {
     // Paginación
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(10);
-    // Refs para la impresión
+    // Refs para la impresión y búsqueda
     const printComponentRef = useRef(null);
+    const searchInputRef = useRef(null);
     useEffect(() => {
         fetchInventory();
     }, []);
@@ -33,13 +34,25 @@ const InventoryGeneral = () => {
         try {
             setIsLoading(true);
             // Obtener el inventario actual
+            // Supabase tiene un límite de 1000 registros por defecto
+            // Para inventarios grandes, necesitamos cargar todos los datos
             const client = await supabase.getClient();
-            const { data: inventoryData, error: inventoryError } = await client.from('current_stock')
+            // Obtener el conteo total primero
+            const { count } = await client
+                .from('current_stock')
+                .select('*', { count: 'exact', head: true });
+            console.log(`Total de registros en inventario: ${count}`);
+            // Cargar todos los datos sin límite (usar range para cargar todo)
+            // Si hay más de 1000, Supabase seguirá devolviendo solo 1000 a menos que usemos range
+            const { data: inventoryData, error: inventoryError } = await client
+                .from('current_stock')
                 .select('*')
-                .order('product_name');
+                .order('product_name')
+                .range(0, count ? count - 1 : 10000); // Cargar todos los registros
             if (inventoryError)
                 throw inventoryError;
             setInventory(inventoryData || []);
+            console.log(`Registros cargados: ${inventoryData?.length || 0}`);
             setIsLoading(false);
         }
         catch (err) {
@@ -52,7 +65,14 @@ const InventoryGeneral = () => {
         setIsLoading(true);
         try {
             const client = await supabase.getClient();
-            const { data: movementsData, error: movementsError } = await client.from('stock_movements')
+            // Obtener el conteo total de movimientos para este producto
+            const { count } = await client
+                .from('stock_movements')
+                .select('*', { count: 'exact', head: true })
+                .eq('product_id', productId);
+            // Cargar todos los movimientos sin límite de 1000
+            const { data: movementsData, error: movementsError } = await client
+                .from('stock_movements')
                 .select(`
           id,
           movement_date,
@@ -63,7 +83,8 @@ const InventoryGeneral = () => {
           movement_type:movement_types(description, code)
         `)
                 .eq('product_id', productId)
-                .order('movement_date', { ascending: false });
+                .order('movement_date', { ascending: false })
+                .range(0, count ? count - 1 : 10000); // Cargar todos los movimientos
             if (movementsError)
                 throw movementsError;
             const formattedMovements = (movementsData || []).map((m) => ({
@@ -279,10 +300,10 @@ const InventoryGeneral = () => {
                                             ? 'bg-blue-500 text-white shadow-sm'
                                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`, children: "Historial de Movimientos" }), _jsx("button", { onClick: () => setActiveTab('serialized'), className: `px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'serialized'
                                             ? 'bg-blue-500 text-white shadow-sm'
-                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`, children: "Inventario Serializado" })] }), _jsxs("div", { className: "relative flex-grow", children: [_jsx("div", { className: "absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none", children: _jsx("i", { className: "fas fa-search text-gray-400" }) }), _jsx("input", { type: "text", placeholder: "Buscar por nombre o SKU...", value: searchTerm, onChange: (e) => {
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`, children: "Inventario Serializado" })] }), _jsxs("div", { className: "relative flex-grow", children: [_jsx("div", { className: "absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none", children: _jsx("i", { className: "fas fa-search text-gray-400" }) }), _jsx("input", { ref: searchInputRef, type: "text", placeholder: "Buscar por nombre o SKU...", value: searchTerm, onChange: (e) => {
                                             setSearchTerm(e.target.value);
                                             setCurrentPage(1); // Reset a la primera página cuando se busca
-                                        }, className: "w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" })] }), (selectedProduct || selectedWarehouse || searchTerm) && (_jsxs("button", { onClick: clearFilters, className: "px-4 py-2 rounded-md text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors whitespace-nowrap", children: [_jsx("i", { className: "fas fa-times mr-2" }), "Limpiar Filtros"] }))] }), isLoading ? (_jsx("div", { className: "flex justify-center items-center py-20", children: _jsx("div", { className: "animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500" }) })) : activeTab === 'serialized' ? (_jsx(SerializedInventory, {})) : activeTab === 'current' ? (_jsxs("div", { className: "overflow-x-auto", children: [_jsxs("table", { className: "min-w-full divide-y divide-gray-200", children: [_jsx("thead", { className: "bg-gray-50", children: _jsxs("tr", { children: [_jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Producto" }), _jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "SKU" }), _jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Almac\u00E9n" }), _jsx("th", { className: "text-right text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Cantidad" }), _jsx("th", { className: "text-center text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Acciones" })] }) }), _jsx("tbody", { className: "bg-white divide-y divide-gray-200", children: currentItems.length === 0 ? (_jsx("tr", { children: _jsx("td", { colSpan: 5, className: "py-6 text-center text-sm text-gray-500", children: _jsxs("div", { className: "flex flex-col items-center", children: [_jsx("i", { className: "fas fa-box-open text-gray-300 text-4xl mb-2" }), _jsx("p", { children: "No hay datos de inventario disponibles" }), searchTerm && (_jsxs("p", { className: "text-xs mt-1", children: ["No se encontraron resultados para \"", searchTerm, "\""] }))] }) }) })) : (currentItems.map((item) => {
+                                        }, disabled: false, className: "w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" })] }), (selectedProduct || selectedWarehouse || searchTerm) && (_jsxs("button", { onClick: clearFilters, className: "px-4 py-2 rounded-md text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors whitespace-nowrap", children: [_jsx("i", { className: "fas fa-times mr-2" }), "Limpiar Filtros"] }))] }), isLoading ? (_jsx("div", { className: "flex justify-center items-center py-20", children: _jsx("div", { className: "animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500" }) })) : activeTab === 'serialized' ? (_jsx(SerializedInventory, {})) : activeTab === 'current' ? (_jsxs("div", { className: "overflow-x-auto", children: [_jsxs("table", { className: "min-w-full divide-y divide-gray-200", children: [_jsx("thead", { className: "bg-gray-50", children: _jsxs("tr", { children: [_jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Producto" }), _jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "SKU" }), _jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Almac\u00E9n" }), _jsx("th", { className: "text-right text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Cantidad" }), _jsx("th", { className: "text-center text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Acciones" })] }) }), _jsx("tbody", { className: "bg-white divide-y divide-gray-200", children: currentItems.length === 0 ? (_jsx("tr", { children: _jsx("td", { colSpan: 5, className: "py-6 text-center text-sm text-gray-500", children: _jsxs("div", { className: "flex flex-col items-center", children: [_jsx("i", { className: "fas fa-box-open text-gray-300 text-4xl mb-2" }), _jsx("p", { children: "No hay datos de inventario disponibles" }), searchTerm && (_jsxs("p", { className: "text-xs mt-1", children: ["No se encontraron resultados para \"", searchTerm, "\""] }))] }) }) })) : (currentItems.map((item) => {
                                             const rowKey = `${item.product_id}|${item.warehouse_id}`;
                                             const isExpanded = expandedKey === rowKey;
                                             const rows = locationsByRow[rowKey] || [];
