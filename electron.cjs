@@ -109,7 +109,9 @@ autoUpdater.on('update-downloaded', () => {
     buttons: ['Reiniciar', 'Más tarde']
   }).then((returnValue) => {
     if (returnValue.response === 0) {
-      autoUpdater.quitAndInstall();
+      // isSilent: false - mostrar instalador
+      // isForceRunAfter: true - FORZAR que reabra la app después de instalar
+      autoUpdater.quitAndInstall(false, true);
     }
   });
 });
@@ -347,7 +349,9 @@ ipcMain.on('check-for-updates', () => {
   autoUpdater.checkForUpdates();
 });
 ipcMain.on('install-update', () => {
-  autoUpdater.quitAndInstall();
+  // isSilent: false - mostrar instalador
+  // isForceRunAfter: true - FORZAR que reabra la app después de instalar
+  autoUpdater.quitAndInstall(false, true);
 });
 ipcMain.on('get-supabase-config', (event) => {
   event.sender.send('supabase-config', {
