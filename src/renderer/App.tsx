@@ -45,6 +45,7 @@ import SubscriptionRenew from './views/SubscriptionRenew';
 import SubscriptionGuard from './components/SubscriptionGuard';
 import Onboarding from './Onboarding';
 import SupabaseConfigModal from './components/SupabaseConfigModal';
+import SplashScreen from './components/SplashScreen';
 
 // Inicializar el tema
 const initializeTheme = () => {
@@ -120,6 +121,7 @@ const App = () => {
   const [ready, setReady] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -161,6 +163,15 @@ const App = () => {
     setReady(true);
     setShowOnboarding(false);
   };
+  
+  const handleSplashFinish = () => {
+    setShowSplash(false);
+  };
+
+  // Mostrar splash screen durante la carga inicial
+  if (showSplash) {
+    return <SplashScreen onFinish={handleSplashFinish} />;
+  }
 
   if (!ready && !showOnboarding) {
     return (

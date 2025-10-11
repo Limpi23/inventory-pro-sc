@@ -4,8 +4,11 @@
 
 // Manejar eventos de instalación de Squirrel.Windows
 // Esto es CRÍTICO para que la app se instale correctamente en el sistema
+// Durante la instalación/actualización, Squirrel ejecuta la app con parámetros especiales
+// y debemos cerrarla inmediatamente sin mostrar la ventana
 if (require('electron-squirrel-startup')) {
-  app.quit();
+  // Salir silenciosamente durante eventos de Squirrel (install/update/uninstall)
+  process.exit(0);
 }
 
 const { app, BrowserWindow, session, ipcMain, dialog, Menu, shell } = require('electron');
