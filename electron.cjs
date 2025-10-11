@@ -63,6 +63,14 @@ autoUpdater.on('update-available', (info) => {
   }).then((returnValue) => {
     if (returnValue.response === 0) {
       sendStatusToWindow('Descargando actualización...');
+      // Iniciar la descarga de la actualización
+      autoUpdater.downloadUpdate().catch(err => {
+        const errorMsg = `Error al descargar actualización: ${err.toString()}`;
+        sendStatusToWindow(errorMsg);
+        dialog.showErrorBox('Error de descarga', errorMsg);
+      });
+    } else {
+      sendStatusToWindow('Descarga de actualización cancelada por el usuario.');
     }
   });
 });
