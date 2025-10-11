@@ -2,15 +2,6 @@
 // Cambiaremos los require por import.
 // ... el resto del código se migrará en el siguiente paso ... 
 
-// Manejar eventos de instalación de Squirrel.Windows
-// Esto es CRÍTICO para que la app se instale correctamente en el sistema
-// Durante la instalación/actualización, Squirrel ejecuta la app con parámetros especiales
-// y debemos cerrarla inmediatamente sin mostrar la ventana
-if (require('electron-squirrel-startup')) {
-  // Salir silenciosamente durante eventos de Squirrel (install/update/uninstall)
-  process.exit(0);
-}
-
 const { app, BrowserWindow, session, ipcMain, dialog, Menu, shell } = require('electron');
 const path = require('path');
 const url = require('url');
@@ -20,6 +11,60 @@ const os = require('os');
 const Registry = require('winreg'); // Para Windows solamente
 const fs = require('fs');
 const Store = require('electron-store');
+
+// Manejar eventos de Squirrel.Windows manualmente
+// Esto permite instalación inicial pero NO bloquea las actualizaciones
+if (process.platform === 'win32') {
+  const handleSquirrelEvent = () => {
+    if (process.argv.length === 1) {
+      return false;
+    }
+
+    const squirrelEvent = process.argv[1];
+    
+    switch (squirrelEvent) {
+      case '--squirrel-install':
+      case '--squirrel-updated':
+        // Instalación o actualización completada
+        // Crear accesos directos y registrar la app
+        const target = path.basename(process.execPath);
+        const updateDotExe = path.resolve(path.dirname(process.execPath), '..', 'Update.exe');
+        const child_process = require('child_process');
+        
+        // Crear accesos directos
+        const createShortcut = `"${updateDotExe}" --createShortcut="${target}"`;
+        child_process.execSync(createShortcut);
+        
+        // Terminar inmediatamente
+        app.quit();
+        return true;
+
+      case '--squirrel-uninstall':
+        // Desinstalación - eliminar accesos directos
+        const targetUninstall = path.basename(process.execPath);
+        const updateDotExeUninstall = path.resolve(path.dirname(process.execPath), '..', 'Update.exe');
+        const child_process_uninstall = require('child_process');
+        
+        const removeShortcut = `"${updateDotExeUninstall}" --removeShortcut="${targetUninstall}"`;
+        child_process_uninstall.execSync(removeShortcut);
+        
+        app.quit();
+        return true;
+
+      case '--squirrel-obsolete':
+        // Versión obsoleta siendo reemplazada
+        app.quit();
+        return true;
+    }
+
+    return false;
+  };
+
+  if (handleSquirrelEvent()) {
+    // Si manejamos un evento de Squirrel, salir
+    process.exit(0);
+  }
+}
 
 let mainWindow;
 let manualUpdateRequested = false;
