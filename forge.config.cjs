@@ -28,7 +28,18 @@ module.exports = {
         // Debe coincidir con packagerConfig.executableName + '.exe'
         exe: 'InventarioPro.exe',
         setupIcon: './src/assets/app-icon.ico',
-        loadingGif: './src/assets/installer.gif'
+        loadingGif: './src/assets/installer.gif',
+        // Crear accesos directos en el escritorio y menú inicio
+        iconUrl: 'https://raw.githubusercontent.com/Limpi23/inventory-pro-sc/main/src/assets/app-icon.ico',
+        setupExe: 'InventarioProSetup.exe',
+        // Nombre del acceso directo
+        title: 'Inventario Pro',
+        // Crear acceso directo en el escritorio
+        createDesktopIcon: true,
+        // Crear acceso directo en el menú inicio
+        createStartMenuShortcut: true,
+        // Descripción que aparecerá en "Agregar o quitar programas"
+        description: 'Sistema de gestión de inventario y ventas'
       },
       platforms: ['win32']
     }
