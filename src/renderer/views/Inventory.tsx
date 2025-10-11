@@ -39,6 +39,7 @@ const Inventory: React.FC = () => {
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
   const [currentStock, setCurrentStock] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false); // Estado separado para envío del formulario
   const [error, setError] = useState<string | null>(null);
 
   // Formulario de entrada/salida
@@ -57,6 +58,10 @@ const Inventory: React.FC = () => {
   const [locationId, setLocationId] = useState('');
   const [destinationLocations, setDestinationLocations] = useState<Location[]>([]);
   const [destinationLocationId, setDestinationLocationId] = useState('');
+
+  // Estado para búsqueda de productos
+  const [productSearchTerm, setProductSearchTerm] = useState('');
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -172,6 +177,21 @@ const Inventory: React.FC = () => {
     })();
   }, [destinationWarehouseId]);
 
+  // Filtrar productos basado en búsqueda (nombre o SKU)
+  const filteredProducts = products.filter((product) => {
+    const searchLower = productSearchTerm.toLowerCase();
+    const nameMatch = product.name.toLowerCase().includes(searchLower);
+    const skuMatch = product.sku?.toLowerCase().includes(searchLower);
+    return nameMatch || skuMatch;
+  });
+
+  // Función para seleccionar un producto
+  const handleSelectProduct = (product: Product) => {
+    setProductId(product.id);
+    setProductSearchTerm(product.sku ? `${product.name} (${product.sku})` : product.name);
+    setShowProductDropdown(false);
+  };
+
   // Función para manejar cambios en el tipo de movimiento
   const handleMovementTypeChange = (type: 'entry' | 'exit' | 'transfer') => {
     if (type === 'entry') {
@@ -189,7 +209,7 @@ const Inventory: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    setIsSubmitting(true); // Usar estado separado para no bloquear todo el componente
     setError(null);
 
     try {
@@ -327,6 +347,8 @@ const Inventory: React.FC = () => {
   setDestinationWarehouseId(''); // Resetear almacén destino
   setLocationId('');
   setDestinationLocationId('');
+      setProductId('');
+      setProductSearchTerm(''); // Resetear búsqueda de productos
 
       alert(isTransfer 
         ? 'Transferencia registrada correctamente' 
@@ -335,7 +357,7 @@ const Inventory: React.FC = () => {
       console.error('Error:', err);
       setError(err.message);
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false); // Restaurar el estado del formulario
     }
   };
 
@@ -403,21 +425,64 @@ const Inventory: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Producto *
+                  Producto * (buscar por nombre o SKU)
                 </label>
-                <select
-                  value={productId}
-                  onChange={(e) => setProductId(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  required
-                >
-                  <option value="">Selecciona un producto</option>
-                  {products.map((product) => (
-                    <option key={product.id} value={product.id}>
-                      {product.name} {product.sku ? `(${product.sku})` : ''}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <i className="fas fa-search text-gray-400 text-sm"></i>
+                  </div>
+                  <input
+                    type="text"
+                    value={productSearchTerm}
+                    onChange={(e) => {
+                      setProductSearchTerm(e.target.value);
+                      setShowProductDropdown(true);
+                      if (!e.target.value) {
+                        setProductId('');
+                      }
+                    }}
+                    onFocus={() => setShowProductDropdown(true)}
+                    onBlur={() => {
+                      // Delay para permitir click en opciones
+                      setTimeout(() => setShowProductDropdown(false), 200);
+                    }}
+                    placeholder="Escribe nombre o SKU del producto..."
+                    className="w-full pl-10 rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  />
+                  
+                  {/* Dropdown de productos filtrados */}
+                  {showProductDropdown && productSearchTerm && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                      {filteredProducts.length > 0 ? (
+                        filteredProducts.map((product) => (
+                          <div
+                            key={product.id}
+                            onClick={() => handleSelectProduct(product)}
+                            className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-100 last:border-b-0"
+                          >
+                            <div className="font-medium text-gray-900">{product.name}</div>
+                            {product.sku && (
+                              <div className="text-xs text-gray-500">SKU: {product.sku}</div>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                          No se encontraron productos
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Mostrar producto seleccionado */}
+                  {productId && !showProductDropdown && (
+                    <div className="mt-1 text-xs text-green-600 flex items-center">
+                      <i className="fas fa-check-circle mr-1"></i>
+                      Producto seleccionado
+                    </div>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -568,10 +633,10 @@ const Inventory: React.FC = () => {
                   isTransfer
                     ? 'bg-green-600 hover:bg-green-700'
                     : 'bg-blue-600 hover:bg-blue-700'
-                }`}
-                disabled={isLoading}
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                disabled={isSubmitting}
               >
-                {isLoading ? 'Procesando...' : isTransfer 
+                {isSubmitting ? 'Procesando...' : isTransfer 
                   ? 'Registrar Transferencia' 
                   : `Registrar ${isEntry ? 'Entrada' : 'Salida'}`}
               </button>
