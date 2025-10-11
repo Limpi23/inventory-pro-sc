@@ -166,7 +166,7 @@ const App = () => {
     return (
       <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',fontFamily:'system-ui'}}>
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mb-4" />
-        <div style={{opacity:0.7,fontSize:14}}>Inicializando aplicación...</div>
+        <div style={{opacity:0.7,fontSize:14}}>⚙️ Cargando aplicación...</div>
       </div>
     );
   }
