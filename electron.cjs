@@ -296,25 +296,27 @@ app.whenReady().then(async () => {
         console.log('✓ Usando feed de actualizaciones personalizado');
       } else {
         // Para Squirrel.Windows con GitHub Releases
-        // Usamos provider 'generic' y apuntamos directamente a la URL del RELEASES
         const owner = 'Limpi23';
         const repo = 'inventory-pro-sc';
-        // La URL base apunta a la carpeta de releases latest
         const updateUrl = `https://github.com/${owner}/${repo}/releases/latest/download`;
         
-        autoUpdater.setFeedURL({ 
-          provider: 'generic',
-          url: updateUrl,
-          // Para Squirrel.Windows, NO usar 'channel'
-        });
-        sendStatusToWindow('Update feed configurado (SQUIRREL + GITHUB)');
-        console.log('✓ Squirrel.Windows: buscando archivo RELEASES en GitHub');
+        // IMPORTANTE: No usar setFeedURL con Squirrel.Windows en producción
+        // Dejar que autoUpdater use su configuración por defecto desde app-update.yml
+        // que será generado por electron-builder/forge
+        
+        // Solo configurar en desarrollo para testing
+        if (process.env.NODE_ENV === 'development') {
+          autoUpdater.setFeedURL({ 
+            provider: 'generic',
+            url: updateUrl
+          });
+          console.log('⚠️ Modo desarrollo: Feed URL configurado manualmente');
+        }
+        
+        sendStatusToWindow('Update feed listo para producción');
+        console.log('✓ Auto-updater configurado para Squirrel.Windows');
         console.log(`   URL: ${updateUrl}`);
       }
-      
-      // IMPORTANTE: Solo forzar dev config en desarrollo real, NO en producción
-      // forceDevUpdateConfig = true causa que busque archivos locales en lugar de GitHub
-      // Removemos esta opción para que funcione correctamente en producción
       
     } else {
       console.log('Auto-updater solo está configurado para Windows');

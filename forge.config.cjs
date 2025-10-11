@@ -7,6 +7,10 @@ module.exports = {
     icon: './src/assets/app-icon',
     // Nombre del ejecutable sin espacios para evitar problemas con Squirrel (dummy update.exe)
     executableName: 'InventarioPro',
+    // Copiar archivos adicionales necesarios para el empaquetado
+    extraResource: [
+      'app-update.yml'
+    ],
     // Evita que electron-packager intente procesar archivos .env inexistentes
     // (corrige error ENOENT lstat .env durante "Finalizing package" en Windows)
     ignore: [
