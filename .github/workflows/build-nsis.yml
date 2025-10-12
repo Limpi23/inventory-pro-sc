@@ -1,0 +1,43 @@
+name: Build with NSIS (electron-builder)
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-nsis:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Build preload script
+        run: npm run build:preload
+
+      - name: Build Windows installer with NSIS
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run publish:nsis
+
+      - name: List build artifacts
+        run: |
+          echo "=== Build Artifacts ==="
+          dir dist-builder
+        shell: powershell
