@@ -22,7 +22,6 @@ win:
       arch:
         - x64
   icon: src/assets/app-icon.ico
-  publisherName: SuitCore
   artifactName: ${productName}-${version}-Setup.${ext}
 
 nsis:
