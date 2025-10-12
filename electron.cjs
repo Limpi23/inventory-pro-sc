@@ -49,6 +49,10 @@ function loadEnvConfig() {
 autoUpdater.logger = require('electron-log');
 autoUpdater.logger.transports.file.level = 'info';
 
+// Configuración específica para NSIS
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = false;
+
 autoUpdater.on('checking-for-update', () => {
   sendStatusToWindow('Buscando actualizaciones...');
 });
@@ -128,9 +132,12 @@ autoUpdater.on('update-downloaded', () => {
     buttons: ['Reiniciar', 'Más tarde']
   }).then((returnValue) => {
     if (returnValue.response === 0) {
-      // isSilent: false - mostrar instalador
-      // isForceRunAfter: true - FORZAR que reabra la app después de instalar
-      autoUpdater.quitAndInstall(false, true);
+      // Para NSIS, setImmediate asegura que el diálogo se cierre antes de reiniciar
+      setImmediate(() => {
+        // isSilent: false - muestra el progreso de instalación
+        // isForceRunAfter: true - reabre la app automáticamente
+        autoUpdater.quitAndInstall(false, true);
+      });
     }
   });
 });
