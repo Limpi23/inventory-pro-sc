@@ -404,12 +404,12 @@ const Dashboard: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 flex-wrap">
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-          📊 Dashboard
+        <h1 className="text-4xl font-black bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent drop-shadow-lg">
+          🎯 Dashboard
         </h1>
         <span className="text-sm text-gray-500 bg-blue-50 px-3 py-1 rounded-full">Panel de Control</span>
-        <span className="text-base font-extrabold bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-600 text-white px-5 py-2 rounded-full shadow-xl animate-pulse border-2 border-white">
-          🎉 VERSIÓN 1.9.3 🚀
+        <span className="text-lg font-black bg-gradient-to-r from-yellow-400 via-orange-500 to-red-600 text-white px-6 py-2.5 rounded-full shadow-2xl animate-bounce border-4 border-yellow-200">
+          ⭐ v1.9.4 ACTUALIZADO! ⭐
         </span>
       </div>
       
