@@ -60,33 +60,22 @@ const InventoryGeneral: React.FC = () => {
     try {
       setIsLoading(true);
       
-      // Obtener el inventario actual
-      // Supabase tiene un límite de 1000 registros por defecto
-      // Para inventarios grandes, necesitamos cargar todos los datos
       const client = await supabase.getClient();
       
-      // Obtener el conteo total primero
-      const { count } = await client
-        .from('current_stock')
-        .select('*', { count: 'exact', head: true });
-      
-      console.log(`Total de registros en inventario: ${count}`);
-      
-      // Cargar todos los datos sin límite (usar range para cargar todo)
-      // Si hay más de 1000, Supabase seguirá devolviendo solo 1000 a menos que usemos range
+      // Cargar TODOS los datos sin límite usando un rango grande
+      // Supabase limita a 1000 por defecto, así que necesitamos especificar un rango
       const { data: inventoryData, error: inventoryError } = await client
         .from('current_stock')
         .select('*')
         .order('product_name')
-        .range(0, count ? count - 1 : 10000); // Cargar todos los registros
+        .range(0, 99999); // Rango muy grande para asegurar que traiga todos
       
       if (inventoryError) throw inventoryError;
-  setInventory((inventoryData as any[]) || []);
+      setInventory((inventoryData as any[]) || []);
       
-      console.log(`Registros cargados: ${inventoryData?.length || 0}`);
+      console.log(`Registros cargados en inventario: ${inventoryData?.length || 0}`);
       setIsLoading(false);
     } catch (err: any) {
-  // error already surfaced via toast elsewhere; no console noise
       setError(err.message);
       setIsLoading(false);
     }
