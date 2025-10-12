@@ -187,6 +187,17 @@ const InvoiceForm: React.FC = () => {
     }, 100);
     return () => clearTimeout(timer);
   }, [invoiceItems.length]); // Se ejecuta cuando cambia el número de items
+
+  // Hacer focus inicial cuando termina de cargar el componente
+  useEffect(() => {
+    if (!isLoading && !isEditing && productSearchInputRef.current) {
+      // Delay más largo para asegurar que todo el componente esté renderizado
+      const timer = setTimeout(() => {
+        productSearchInputRef.current?.focus();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading, isEditing]);
   
   const fetchCustomers = async () => {
     try {
