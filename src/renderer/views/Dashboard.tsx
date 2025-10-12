@@ -403,14 +403,9 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3 flex-wrap">
-        <h1 className="text-4xl font-black bg-gradient-to-r from-green-600 via-teal-600 to-cyan-600 bg-clip-text text-transparent drop-shadow-lg">
-          🎯 Dashboard
-        </h1>
-        <span className="text-sm text-gray-500 bg-blue-50 px-3 py-1 rounded-full">Panel de Control</span>
-        <span className="text-xl font-black bg-gradient-to-r from-emerald-400 via-green-500 to-teal-600 text-white px-6 py-3 rounded-full shadow-2xl animate-pulse border-4 border-green-200">
-          ✨ NSIS v1.10.1 ✨
-        </span>
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Dashboard</h1>
+        <span className="text-sm text-gray-500 dark:text-gray-400">Panel de Control</span>
       </div>
       
       {loading ? (
