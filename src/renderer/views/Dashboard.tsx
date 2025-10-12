@@ -408,8 +408,8 @@ const Dashboard: React.FC = () => {
           📊 Dashboard
         </h1>
         <span className="text-sm text-gray-500 bg-blue-50 px-3 py-1 rounded-full">Panel de Control</span>
-        <span className="text-xs font-bold bg-gradient-to-r from-orange-500 to-red-600 text-white px-4 py-1.5 rounded-full shadow-lg animate-bounce">
-          ⚡ NUEVA VERSIÓN 1.9.1
+        <span className="text-sm font-bold bg-gradient-to-r from-green-500 via-emerald-500 to-teal-600 text-white px-4 py-1.5 rounded-full shadow-lg">
+          ✅ v1.9.2 - Auto-Update Funcionando!
         </span>
       </div>
       
