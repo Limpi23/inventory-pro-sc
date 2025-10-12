@@ -14,6 +14,136 @@ const Store = require('electron-store');
 
 let mainWindow;
 let manualUpdateRequested = false;
+let progressWindow = null;
+
+// Función para crear ventana de progreso de descarga
+function createProgressWindow() {
+  progressWindow = new BrowserWindow({
+    width: 500,
+    height: 200,
+    frame: false,
+    resizable: false,
+    transparent: false,
+    alwaysOnTop: true,
+    center: true,
+    backgroundColor: '#ffffff',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  });
+
+  // HTML inline para la ventana de progreso
+  const progressHTML = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 100vh;
+          color: white;
+        }
+        .container {
+          text-align: center;
+          padding: 30px;
+          width: 100%;
+        }
+        h2 {
+          font-size: 20px;
+          font-weight: 600;
+          margin-bottom: 20px;
+          color: white;
+        }
+        .progress-container {
+          background: rgba(255, 255, 255, 0.2);
+          border-radius: 10px;
+          height: 40px;
+          margin: 20px 0;
+          overflow: hidden;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .progress-bar {
+          height: 100%;
+          background: linear-gradient(90deg, #4ade80 0%, #22c55e 100%);
+          width: 0%;
+          transition: width 0.3s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: bold;
+          font-size: 14px;
+          color: white;
+          text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
+        .status {
+          font-size: 14px;
+          color: rgba(255, 255, 255, 0.9);
+          margin-top: 10px;
+        }
+        .speed {
+          font-size: 12px;
+          color: rgba(255, 255, 255, 0.7);
+          margin-top: 5px;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h2>📥 Descargando Actualización</h2>
+        <div class="progress-container">
+          <div class="progress-bar" id="progressBar">0%</div>
+        </div>
+        <div class="status" id="status">Iniciando descarga...</div>
+        <div class="speed" id="speed"></div>
+      </div>
+      <script>
+        const { ipcRenderer } = require('electron');
+        ipcRenderer.on('download-progress', (event, data) => {
+          const progressBar = document.getElementById('progressBar');
+          const status = document.getElementById('status');
+          const speed = document.getElementById('speed');
+          
+          const percent = Math.round(data.percent);
+          progressBar.style.width = percent + '%';
+          progressBar.textContent = percent + '%';
+          
+          const downloaded = (data.transferred / 1024 / 1024).toFixed(2);
+          const total = (data.total / 1024 / 1024).toFixed(2);
+          const speedMB = (data.bytesPerSecond / 1024 / 1024).toFixed(2);
+          
+          status.textContent = \`Descargado \${downloaded} MB de \${total} MB\`;
+          speed.textContent = \`Velocidad: \${speedMB} MB/s\`;
+        });
+      </script>
+    </body>
+    </html>
+  `;
+
+  progressWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(progressHTML));
+  
+  progressWindow.on('closed', () => {
+    progressWindow = null;
+  });
+}
+
+// Función para cerrar ventana de progreso
+function closeProgressWindow() {
+  if (progressWindow) {
+    progressWindow.close();
+    progressWindow = null;
+  }
+}
 
 // Mitigar crashes del proceso GPU en algunos drivers de Windows
 try { app.disableHardwareAcceleration(); } catch (_) {}
@@ -62,9 +192,12 @@ autoUpdater.on('update-available', (info) => {
     buttons: ['Sí', 'No']
   }).then((returnValue) => {
     if (returnValue.response === 0) {
+      // Crear ventana de progreso
+      createProgressWindow();
       sendStatusToWindow('Descargando actualización...');
       // Iniciar la descarga de la actualización
       autoUpdater.downloadUpdate().catch(err => {
+        closeProgressWindow();
         const errorMsg = `Error al descargar actualización: ${err.toString()}`;
         sendStatusToWindow(errorMsg);
         dialog.showErrorBox('Error de descarga', errorMsg);
@@ -89,6 +222,14 @@ autoUpdater.on('update-not-available', () => {
   }
 });
 autoUpdater.on('error', (err) => {
+  // Cerrar ventana de progreso si está abierta
+  closeProgressWindow();
+  
+  // Limpiar barra de progreso en taskbar
+  if (mainWindow && process.platform === 'win32') {
+    mainWindow.setProgressBar(-1);
+  }
+  
   const errorMessage = `Error en actualización: ${err.toString()}`;
   sendStatusToWindow(errorMessage);
   if (manualUpdateRequested) {
@@ -99,8 +240,26 @@ autoUpdater.on('error', (err) => {
 autoUpdater.on('download-progress', (progressObj) => {
   let logMessage = `Velocidad: ${progressObj.bytesPerSecond} - Descargado ${progressObj.percent}%`;
   sendStatusToWindow(logMessage);
+  
+  // Enviar progreso a la ventana de progreso
+  if (progressWindow) {
+    progressWindow.webContents.send('download-progress', progressObj);
+  }
+  
+  // Actualizar barra de progreso en la taskbar (Windows)
+  if (mainWindow && process.platform === 'win32') {
+    mainWindow.setProgressBar(progressObj.percent / 100);
+  }
 });
 autoUpdater.on('update-downloaded', () => {
+  // Cerrar ventana de progreso
+  closeProgressWindow();
+  
+  // Limpiar barra de progreso en taskbar
+  if (mainWindow && process.platform === 'win32') {
+    mainWindow.setProgressBar(-1);
+  }
+  
   sendStatusToWindow('Actualización descargada');
   dialog.showMessageBox({
     type: 'info',
