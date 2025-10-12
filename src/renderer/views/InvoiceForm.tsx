@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase, stockMovementService } from '../lib/supabase';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
@@ -111,6 +111,9 @@ const InvoiceForm: React.FC = () => {
   const [availableSerials, setAvailableSerials] = useState<Record<string, ProductSerial[]>>({});
   const [selectedSerialId, setSelectedSerialId] = useState<string>('');
   
+  // Ref para el campo de búsqueda de productos
+  const productSearchInputRef = useRef<HTMLInputElement>(null);
+  
   useEffect(() => {
     fetchCustomers();
     fetchWarehouses();
@@ -173,6 +176,17 @@ const InvoiceForm: React.FC = () => {
       setInvoiceItems(updatedItems);
     }
   }, [globalDiscountPercent, discountMode]);
+
+  // Restaurar focus al campo de búsqueda después de agregar productos
+  useEffect(() => {
+    // Pequeño delay para asegurar que el DOM se haya actualizado
+    const timer = setTimeout(() => {
+      if (productSearchInputRef.current && !isEditing) {
+        productSearchInputRef.current.focus();
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [invoiceItems.length]); // Se ejecuta cuando cambia el número de items
   
   const fetchCustomers = async () => {
     try {
@@ -991,6 +1005,7 @@ const InvoiceForm: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Producto <span className="text-red-500">*</span></label>
                 <div className="relative">
                   <input
+                    ref={productSearchInputRef}
                     type="text"
                     placeholder="Buscar por nombre o SKU..."
                     value={productSearchTerm}
