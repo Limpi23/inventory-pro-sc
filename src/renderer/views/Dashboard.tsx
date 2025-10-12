@@ -403,13 +403,13 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
           📊 Dashboard
         </h1>
         <span className="text-sm text-gray-500 bg-blue-50 px-3 py-1 rounded-full">Panel de Control</span>
-        <span className="text-xs font-bold bg-gradient-to-r from-purple-500 to-pink-600 text-white px-3 py-1 rounded-full shadow-lg animate-pulse">
-          🚀 v1.9.0
+        <span className="text-xs font-bold bg-gradient-to-r from-orange-500 to-red-600 text-white px-4 py-1.5 rounded-full shadow-lg animate-bounce">
+          ⚡ NUEVA VERSIÓN 1.9.1
         </span>
       </div>
       
