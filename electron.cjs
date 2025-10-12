@@ -12,8 +12,8 @@ const Registry = require('winreg'); // Para Windows solamente
 const fs = require('fs');
 const Store = require('electron-store');
 
-// Manejar eventos de Squirrel.Windows manualmente
-// Esto permite instalación inicial pero NO bloquea las actualizaciones
+// Manejar eventos de Squirrel.Windows SOLO para instalación inicial
+// NO interferir con actualizaciones de electron-updater
 if (process.platform === 'win32') {
   const handleSquirrelEvent = () => {
     if (process.argv.length === 1) {
@@ -24,20 +24,39 @@ if (process.platform === 'win32') {
     
     switch (squirrelEvent) {
       case '--squirrel-install':
-      case '--squirrel-updated':
-        // Instalación o actualización completada
-        // Crear accesos directos y registrar la app
+        // SOLO instalación inicial
         const target = path.basename(process.execPath);
         const updateDotExe = path.resolve(path.dirname(process.execPath), '..', 'Update.exe');
         const child_process = require('child_process');
         
         // Crear accesos directos
-        const createShortcut = `"${updateDotExe}" --createShortcut="${target}"`;
-        child_process.execSync(createShortcut);
+        try {
+          const createShortcut = `"${updateDotExe}" --createShortcut="${target}"`;
+          child_process.execSync(createShortcut);
+        } catch (e) {
+          console.error('Error creando accesos directos:', e);
+        }
         
-        // Terminar inmediatamente
+        // Terminar inmediatamente (instalación inicial)
         app.quit();
         return true;
+
+      case '--squirrel-updated':
+        // Actualización completada - actualizar accesos directos pero NO cerrar
+        // Dejar que electron-updater maneje el reinicio
+        const targetUpdate = path.basename(process.execPath);
+        const updateDotExeUpdate = path.resolve(path.dirname(process.execPath), '..', 'Update.exe');
+        const child_process_update = require('child_process');
+        
+        try {
+          const updateShortcut = `"${updateDotExeUpdate}" --createShortcut="${targetUpdate}"`;
+          child_process_update.execSync(updateShortcut);
+        } catch (e) {
+          console.error('Error actualizando accesos directos:', e);
+        }
+        
+        // NO terminar - dejar que la app continúe iniciando
+        return false;
 
       case '--squirrel-uninstall':
         // Desinstalación - eliminar accesos directos
@@ -45,8 +64,12 @@ if (process.platform === 'win32') {
         const updateDotExeUninstall = path.resolve(path.dirname(process.execPath), '..', 'Update.exe');
         const child_process_uninstall = require('child_process');
         
-        const removeShortcut = `"${updateDotExeUninstall}" --removeShortcut="${targetUninstall}"`;
-        child_process_uninstall.execSync(removeShortcut);
+        try {
+          const removeShortcut = `"${updateDotExeUninstall}" --removeShortcut="${targetUninstall}"`;
+          child_process_uninstall.execSync(removeShortcut);
+        } catch (e) {
+          console.error('Error eliminando accesos directos:', e);
+        }
         
         app.quit();
         return true;
@@ -61,7 +84,7 @@ if (process.platform === 'win32') {
   };
 
   if (handleSquirrelEvent()) {
-    // Si manejamos un evento de Squirrel, salir
+    // Si manejamos un evento de Squirrel y retornamos true, salir
     process.exit(0);
   }
 }
