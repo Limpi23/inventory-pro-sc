@@ -24,13 +24,9 @@ const InventoryGeneral = () => {
     // Paginación
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(10);
-<<<<<<< HEAD
     // Estados para la vista previa de impresión
     const [showPrintOptions, setShowPrintOptions] = useState(false);
-    // Refs para la impresión
-=======
     // Refs para la impresión y búsqueda
->>>>>>> bcb67d7f2936075ea1dd631d2234523556940fae
     const printComponentRef = useRef(null);
     const searchInputRef = useRef(null);
     useEffect(() => {
@@ -41,7 +37,6 @@ const InventoryGeneral = () => {
     const fetchInventory = async () => {
         try {
             setIsLoading(true);
-<<<<<<< HEAD
             const client = await supabase.getClient();
             // Primero obtener el count total para la paginación
             const { count: totalCount, error: countError } = await client
@@ -51,28 +46,11 @@ const InventoryGeneral = () => {
                 throw countError;
             // Luego obtener solo los datos de la página actual
             const startIndex = (currentPage - 1) * itemsPerPage;
-=======
-            // Obtener el inventario actual
-            // Supabase tiene un límite de 1000 registros por defecto
-            // Para inventarios grandes, necesitamos cargar todos los datos
-            const client = await supabase.getClient();
-            // Obtener el conteo total primero
-            const { count } = await client
-                .from('current_stock')
-                .select('*', { count: 'exact', head: true });
-            console.log(`Total de registros en inventario: ${count}`);
-            // Cargar todos los datos sin límite (usar range para cargar todo)
-            // Si hay más de 1000, Supabase seguirá devolviendo solo 1000 a menos que usemos range
->>>>>>> bcb67d7f2936075ea1dd631d2234523556940fae
             const { data: inventoryData, error: inventoryError } = await client
                 .from('current_stock')
                 .select('*')
                 .order('product_name')
-<<<<<<< HEAD
                 .range(startIndex, startIndex + itemsPerPage - 1);
-=======
-                .range(0, count ? count - 1 : 10000); // Cargar todos los registros
->>>>>>> bcb67d7f2936075ea1dd631d2234523556940fae
             if (inventoryError)
                 throw inventoryError;
             // Debug: Log the actual count
@@ -86,7 +64,7 @@ const InventoryGeneral = () => {
             });
             setTotalInventoryCount(totalCount || 0);
             setInventory(inventoryData || []);
-            console.log(`Registros cargados: ${inventoryData?.length || 0}`);
+            console.log(`Registros cargados en inventario: ${inventoryData?.length || 0}`);
             setIsLoading(false);
         }
         catch (err) {

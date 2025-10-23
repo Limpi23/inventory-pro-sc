@@ -1,4 +1,4 @@
-import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 const Inventory = () => {
@@ -29,6 +29,10 @@ const Inventory = () => {
     // Estado para búsqueda de productos
     const [productSearchTerm, setProductSearchTerm] = useState('');
     const [showProductDropdown, setShowProductDropdown] = useState(false);
+    // Estados para la lista de productos (carrito)
+    const [movementItems, setMovementItems] = useState([]);
+    const [globalReference, setGlobalReference] = useState('');
+    const [globalNotes, setGlobalNotes] = useState('');
     useEffect(() => {
         async function fetchData() {
             try {
@@ -169,108 +173,160 @@ const Inventory = () => {
             setIsEntry(false); // Empezamos con salida del almacén origen
             setIsTransfer(true);
         }
+        // Limpiar la lista cuando se cambia el tipo de movimiento
+        setMovementItems([]);
     };
+    // Función para agregar producto a la lista
+    const handleAddToList = (e) => {
+        e.preventDefault();
+        // Validaciones
+        if (!productId || !warehouseId || !locationId) {
+            alert('Por favor completa todos los campos requeridos');
+            return;
+        }
+        if (isTransfer && (!destinationWarehouseId || !destinationLocationId)) {
+            alert('Por favor completa el almacén y ubicación de destino');
+            return;
+        }
+        if (isTransfer && destinationWarehouseId === warehouseId) {
+            alert('El almacén de destino debe ser diferente al de origen');
+            return;
+        }
+        // Buscar nombres para mostrar
+        const product = products.find(p => p.id === productId);
+        const warehouse = warehouses.find(w => w.id === warehouseId);
+        const location = locations.find(l => l.id === locationId);
+        const destWarehouse = isTransfer ? warehouses.find(w => w.id === destinationWarehouseId) : undefined;
+        const destLocation = isTransfer ? destinationLocations.find(l => l.id === destinationLocationId) : undefined;
+        if (!product || !warehouse || !location) {
+            alert('Error al obtener información del producto, almacén o ubicación');
+            return;
+        }
+        // Crear item para la lista
+        const newItem = {
+            tempId: crypto.randomUUID(),
+            productId: product.id,
+            productName: product.name,
+            productSku: product.sku,
+            warehouseId: warehouse.id,
+            warehouseName: warehouse.name,
+            locationId: location.id,
+            locationName: location.name,
+            quantity: quantity,
+            destinationWarehouseId: destWarehouse?.id,
+            destinationWarehouseName: destWarehouse?.name,
+            destinationLocationId: destLocation?.id,
+            destinationLocationName: destLocation?.name,
+        };
+        // Agregar a la lista
+        setMovementItems([...movementItems, newItem]);
+        // Limpiar formulario para agregar otro producto
+        setProductId('');
+        setProductSearchTerm('');
+        setLocationId('');
+        setQuantity(1);
+        if (isTransfer) {
+            setDestinationLocationId('');
+        }
+    };
+    // Función para eliminar un producto de la lista
+    const handleRemoveFromList = (tempId) => {
+        setMovementItems(movementItems.filter(item => item.tempId !== tempId));
+    };
+    // Función para guardar todos los movimientos
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setIsSubmitting(true); // Usar estado separado para no bloquear todo el componente
+        if (movementItems.length === 0) {
+            alert('Agrega al menos un producto a la lista antes de guardar');
+            return;
+        }
+        setIsSubmitting(true);
         setError(null);
         try {
             const client = await supabase.getClient();
-            if (!productId || !warehouseId) {
-                throw new Error('Selecciona un producto y un almacén');
-            }
-            if (!isTransfer && !locationId) {
-                throw new Error('Selecciona una ubicación');
-            }
-            // Validación adicional para transferencias
-            if (isTransfer && (!destinationWarehouseId || destinationWarehouseId === warehouseId)) {
-                throw new Error('Selecciona un almacén de destino diferente al de origen');
-            }
-            if (isTransfer && !destinationLocationId) {
-                throw new Error('Selecciona una ubicación de destino');
-            }
-            // Para salidas o transferencias, verificar stock disponible
+            // Validar stock para salidas y transferencias
             if (!isEntry || isTransfer) {
-                // Validar stock por ubicación (si está seleccionada)
-                const { data: stockData } = await client
-                    .from('current_stock_by_location')
-                    .select('current_quantity')
-                    .eq('product_id', productId)
-                    .eq('warehouse_id', warehouseId)
-                    .eq('location_id', locationId)
-                    .maybeSingle();
-                const currentQty = Number(stockData?.current_quantity ?? 0);
-                if (quantity > currentQty) {
-                    throw new Error(`Stock insuficiente. Solo hay ${currentQty} unidades disponibles.`);
+                for (const item of movementItems) {
+                    const { data: stockData } = await client
+                        .from('current_stock_by_location')
+                        .select('current_quantity')
+                        .eq('product_id', item.productId)
+                        .eq('warehouse_id', item.warehouseId)
+                        .eq('location_id', item.locationId)
+                        .maybeSingle();
+                    const currentQty = Number(stockData?.current_quantity ?? 0);
+                    if (item.quantity > currentQty) {
+                        throw new Error(`Stock insuficiente para ${item.productName}. Solo hay ${currentQty} unidades disponibles.`);
+                    }
                 }
             }
-            if (isTransfer) {
-                // Crear movimiento de salida del almacén origen
-                const outMovementType = movementTypes.find((t) => t.code === 'OUT_TRANSFER');
-                if (!outMovementType) {
-                    throw new Error('Tipo de movimiento de salida por transferencia no encontrado');
+            // Procesar cada item de la lista
+            for (const item of movementItems) {
+                if (isTransfer) {
+                    // Crear movimiento de salida del almacén origen
+                    const outMovementType = movementTypes.find((t) => t.code === 'OUT_TRANSFER');
+                    if (!outMovementType) {
+                        throw new Error('Tipo de movimiento de salida por transferencia no encontrado');
+                    }
+                    const transferId = crypto.randomUUID();
+                    const { error: outError } = await client
+                        .from('stock_movements')
+                        .insert({
+                        product_id: item.productId,
+                        warehouse_id: item.warehouseId,
+                        location_id: item.locationId,
+                        quantity: item.quantity,
+                        movement_type_id: outMovementType.id,
+                        movement_date: new Date(date).toISOString(),
+                        reference: globalReference || `Transferencia a ${item.destinationWarehouseName}`,
+                        notes: globalNotes || null,
+                        related_id: transferId
+                    });
+                    if (outError)
+                        throw outError;
+                    // Crear movimiento de entrada en el almacén destino
+                    const inMovementType = movementTypes.find((t) => t.code === 'IN_TRANSFER');
+                    if (!inMovementType) {
+                        throw new Error('Tipo de movimiento de entrada por transferencia no encontrado');
+                    }
+                    const { error: inError } = await client
+                        .from('stock_movements')
+                        .insert({
+                        product_id: item.productId,
+                        warehouse_id: item.destinationWarehouseId,
+                        location_id: item.destinationLocationId,
+                        quantity: item.quantity,
+                        movement_type_id: inMovementType.id,
+                        movement_date: new Date(date).toISOString(),
+                        reference: globalReference || `Transferencia desde ${item.warehouseName}`,
+                        notes: globalNotes || null,
+                        related_id: transferId
+                    });
+                    if (inError)
+                        throw inError;
                 }
-                // Generar un ID de transferencia para relacionar ambos movimientos
-                const transferId = crypto.randomUUID();
-                const { error: outError } = await client
-                    .from('stock_movements')
-                    .insert({
-                    product_id: productId,
-                    warehouse_id: warehouseId,
-                    location_id: locationId,
-                    quantity: quantity,
-                    movement_type_id: outMovementType.id,
-                    movement_date: new Date(date).toISOString(),
-                    reference: reference || `Transferencia a ${warehouses.find(w => w.id === destinationWarehouseId)?.name}`,
-                    notes: notes || null,
-                    related_id: transferId
-                });
-                if (outError)
-                    throw outError;
-                // Crear movimiento de entrada en el almacén destino
-                const inMovementType = movementTypes.find((t) => t.code === 'IN_TRANSFER');
-                if (!inMovementType) {
-                    throw new Error('Tipo de movimiento de entrada por transferencia no encontrado');
+                else {
+                    // Entradas y salidas normales
+                    const typeCode = isEntry ? 'IN_PURCHASE' : 'OUT_SALE';
+                    const movementType = movementTypes.find((t) => t.code === typeCode);
+                    if (!movementType) {
+                        throw new Error('Tipo de movimiento no encontrado');
+                    }
+                    const { error: insertError } = await client
+                        .from('stock_movements')
+                        .insert({
+                        product_id: item.productId,
+                        warehouse_id: item.warehouseId,
+                        location_id: item.locationId,
+                        quantity: item.quantity,
+                        movement_type_id: movementType.id,
+                        movement_date: new Date(date).toISOString(),
+                        reference: globalReference || null,
+                        notes: globalNotes || null
+                    });
+                    if (insertError)
+                        throw insertError;
                 }
-                const { error: inError } = await client
-                    .from('stock_movements')
-                    .insert({
-                    product_id: productId,
-                    warehouse_id: destinationWarehouseId,
-                    location_id: destinationLocationId,
-                    quantity: quantity,
-                    movement_type_id: inMovementType.id,
-                    movement_date: new Date(date).toISOString(),
-                    reference: reference || `Transferencia desde ${warehouses.find(w => w.id === warehouseId)?.name}`,
-                    notes: notes || null,
-                    related_id: transferId
-                });
-                if (inError)
-                    throw inError;
-            }
-            else {
-                // Código existente para entradas y salidas normales
-                // Buscar ID del tipo de movimiento
-                const typeCode = isEntry ? 'IN_PURCHASE' : 'OUT_SALE';
-                const movementType = movementTypes.find((t) => t.code === typeCode);
-                if (!movementType) {
-                    throw new Error('Tipo de movimiento no encontrado');
-                }
-                // Crear movimiento
-                const { error: insertError } = await client
-                    .from('stock_movements')
-                    .insert({
-                    product_id: productId,
-                    warehouse_id: warehouseId,
-                    location_id: locationId,
-                    quantity: quantity,
-                    movement_type_id: movementType.id,
-                    movement_date: new Date(date).toISOString(),
-                    reference: reference || null,
-                    notes: notes || null
-                });
-                if (insertError)
-                    throw insertError;
             }
             // Recargar datos
             const { data: updatedMovements } = await client
@@ -289,25 +345,28 @@ const Inventory = () => {
                 .from('current_stock')
                 .select('*');
             setCurrentStock(updatedStock || []);
-            // Reset form
+            // Reset form y lista
+            setMovementItems([]);
             setQuantity(1);
-            setReference('');
-            setNotes('');
-            setDestinationWarehouseId(''); // Resetear almacén destino
+            setGlobalReference('');
+            setGlobalNotes('');
+            setDestinationWarehouseId('');
             setLocationId('');
             setDestinationLocationId('');
             setProductId('');
-            setProductSearchTerm(''); // Resetear búsqueda de productos
+            setProductSearchTerm('');
+            const itemCount = movementItems.length;
             alert(isTransfer
-                ? 'Transferencia registrada correctamente'
-                : `${isEntry ? 'Entrada' : 'Salida'} registrada correctamente`);
+                ? `${itemCount} transferencia${itemCount > 1 ? 's' : ''} registrada${itemCount > 1 ? 's' : ''} correctamente`
+                : `${itemCount} ${isEntry ? 'entrada' : 'salida'}${itemCount > 1 ? 's' : ''} registrada${itemCount > 1 ? 's' : ''} correctamente`);
         }
         catch (err) {
             console.error('Error:', err);
             setError(err.message);
+            alert('Error: ' + err.message);
         }
         finally {
-            setIsSubmitting(false); // Restaurar el estado del formulario
+            setIsSubmitting(false);
         }
     };
     if (isLoading && !products.length) {
@@ -323,7 +382,7 @@ const Inventory = () => {
                                             ? 'bg-blue-500 text-white'
                                             : 'bg-gray-200 text-gray-700'}`, children: "Salida" }), _jsx("button", { onClick: () => handleMovementTypeChange('transfer'), className: `px-4 py-2 rounded-md text-sm ${isTransfer
                                             ? 'bg-green-500 text-white'
-                                            : 'bg-gray-200 text-gray-700'}`, children: "Transferencia" })] }), _jsxs("form", { onSubmit: handleSubmit, className: "space-y-4", children: [_jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-4", children: [_jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Producto * (buscar por nombre o SKU)" }), _jsxs("div", { className: "relative", children: [_jsx("div", { className: "absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none", children: _jsx("i", { className: "fas fa-search text-gray-400 text-sm" }) }), _jsx("input", { type: "text", value: productSearchTerm, onChange: (e) => {
+                                            : 'bg-gray-200 text-gray-700'}`, children: "Transferencia" })] }), _jsxs("form", { onSubmit: handleAddToList, className: "space-y-4", children: [_jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-4", children: [_jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Producto * (buscar por nombre o SKU)" }), _jsxs("div", { className: "relative", children: [_jsx("div", { className: "absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none", children: _jsx("i", { className: "fas fa-search text-gray-400 text-sm" }) }), _jsx("input", { type: "text", value: productSearchTerm, onChange: (e) => {
                                                                     setProductSearchTerm(e.target.value);
                                                                     setShowProductDropdown(true);
                                                                     if (!e.target.value) {
@@ -334,11 +393,11 @@ const Inventory = () => {
                                                                     setTimeout(() => setShowProductDropdown(false), 200);
                                                                 }, placeholder: "Escribe nombre o SKU del producto...", className: "w-full pl-10 rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent", required: true }), showProductDropdown && productSearchTerm && (_jsx("div", { className: "absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto", children: filteredProducts.length > 0 ? (filteredProducts.map((product) => (_jsxs("div", { onClick: () => handleSelectProduct(product), className: "px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-100 last:border-b-0", children: [_jsx("div", { className: "font-medium text-gray-900", children: product.name }), product.sku && (_jsxs("div", { className: "text-xs text-gray-500", children: ["SKU: ", product.sku] }))] }, product.id)))) : (_jsx("div", { className: "px-3 py-2 text-sm text-gray-500 text-center", children: "No se encontraron productos" })) })), productId && !showProductDropdown && (_jsxs("div", { className: "mt-1 text-xs text-green-600 flex items-center", children: [_jsx("i", { className: "fas fa-check-circle mr-1" }), "Producto seleccionado"] }))] })] }), _jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: isTransfer ? 'Almacén Origen *' : 'Almacén *' }), _jsxs("select", { value: warehouseId, onChange: (e) => setWarehouseId(e.target.value), className: "w-full rounded-md border border-gray-300 px-3 py-2 text-sm", required: true, children: [_jsx("option", { value: "", children: "Selecciona un almac\u00E9n" }), warehouses.map((warehouse) => (_jsx("option", { value: warehouse.id, children: warehouse.name }, warehouse.id)))] })] })] }), _jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: isTransfer ? 'Ubicación Origen *' : 'Ubicación *' }), _jsxs("select", { value: locationId, onChange: (e) => setLocationId(e.target.value), className: "w-full rounded-md border border-gray-300 px-3 py-2 text-sm", required: true, disabled: !warehouseId, children: [_jsx("option", { value: "", children: warehouseId ? 'Selecciona una ubicación' : 'Selecciona primero un almacén' }), locations.map((loc) => (_jsx("option", { value: loc.id, children: loc.name }, loc.id)))] })] }), isTransfer && (_jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Almac\u00E9n Destino *" }), _jsxs("select", { value: destinationWarehouseId, onChange: (e) => setDestinationWarehouseId(e.target.value), className: "w-full rounded-md border border-gray-300 px-3 py-2 text-sm", required: true, children: [_jsx("option", { value: "", children: "Selecciona un almac\u00E9n de destino" }), warehouses
                                                         .filter((w) => w.id !== warehouseId) // Filtrar el almacén origen
-                                                        .map((warehouse) => (_jsx("option", { value: warehouse.id, children: warehouse.name }, warehouse.id)))] })] })), isTransfer && (_jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Ubicaci\u00F3n Destino *" }), _jsxs("select", { value: destinationLocationId, onChange: (e) => setDestinationLocationId(e.target.value), className: "w-full rounded-md border border-gray-300 px-3 py-2 text-sm", required: true, disabled: !destinationWarehouseId, children: [_jsx("option", { value: "", children: destinationWarehouseId ? 'Selecciona una ubicación' : 'Selecciona primero un almacén' }), destinationLocations.map((loc) => (_jsx("option", { value: loc.id, children: loc.name }, loc.id)))] })] })), _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-4", children: [_jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Cantidad *" }), _jsx("input", { type: "number", min: "0.01", step: "0.01", value: quantity, onChange: (e) => setQuantity(Number(e.target.value)), className: "w-full rounded-md border border-gray-300 px-3 py-2 text-sm", required: true })] }), _jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Fecha *" }), _jsx("input", { type: "date", value: date, onChange: (e) => setDate(e.target.value), className: "w-full rounded-md border border-gray-300 px-3 py-2 text-sm", required: true })] })] }), _jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Referencia (opcional)" }), _jsx("input", { type: "text", value: reference, onChange: (e) => setReference(e.target.value), placeholder: "N\u00FAmero de factura, orden, etc.", className: "w-full rounded-md border border-gray-300 px-3 py-2 text-sm" })] }), _jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Notas (opcional)" }), _jsx("textarea", { value: notes, onChange: (e) => setNotes(e.target.value), placeholder: "Informaci\u00F3n adicional sobre este movimiento", className: "w-full rounded-md border border-gray-300 px-3 py-2 text-sm", rows: 3 })] }), _jsx("div", { className: "pt-4", children: _jsx("button", { type: "submit", className: `px-4 py-2 rounded-md text-white text-sm ${isTransfer
+                                                        .map((warehouse) => (_jsx("option", { value: warehouse.id, children: warehouse.name }, warehouse.id)))] })] })), isTransfer && (_jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Ubicaci\u00F3n Destino *" }), _jsxs("select", { value: destinationLocationId, onChange: (e) => setDestinationLocationId(e.target.value), className: "w-full rounded-md border border-gray-300 px-3 py-2 text-sm", required: true, disabled: !destinationWarehouseId, children: [_jsx("option", { value: "", children: destinationWarehouseId ? 'Selecciona una ubicación' : 'Selecciona primero un almacén' }), destinationLocations.map((loc) => (_jsx("option", { value: loc.id, children: loc.name }, loc.id)))] })] })), _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-4", children: [_jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Cantidad *" }), _jsx("input", { type: "number", min: "0.01", step: "0.01", value: quantity, onChange: (e) => setQuantity(Number(e.target.value)), className: "w-full rounded-md border border-gray-300 px-3 py-2 text-sm", required: true })] }), _jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Fecha *" }), _jsx("input", { type: "date", value: date, onChange: (e) => setDate(e.target.value), className: "w-full rounded-md border border-gray-300 px-3 py-2 text-sm", required: true })] })] }), _jsx("div", { className: "pt-4", children: _jsxs("button", { type: "submit", className: "px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed", children: [_jsx("i", { className: "fas fa-plus mr-2" }), "Agregar a la lista"] }) })] }), movementItems.length > 0 && (_jsxs("div", { className: "mt-6 border-t pt-4", children: [_jsxs("h3", { className: "text-lg font-semibold mb-3", children: ["Productos en la lista (", movementItems.length, ")"] }), _jsx("div", { className: "overflow-x-auto mb-4", children: _jsxs("table", { className: "min-w-full divide-y divide-gray-200", children: [_jsx("thead", { className: "bg-gray-50", children: _jsxs("tr", { children: [_jsx("th", { className: "px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase", children: "Producto" }), isTransfer ? (_jsxs(_Fragment, { children: [_jsx("th", { className: "px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase", children: "Origen" }), _jsx("th", { className: "px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase", children: "Destino" })] })) : (_jsx("th", { className: "px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase", children: "Almac\u00E9n / Ubicaci\u00F3n" })), _jsx("th", { className: "px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase", children: "Cantidad" }), _jsx("th", { className: "px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase", children: "Acci\u00F3n" })] }) }), _jsx("tbody", { className: "bg-white divide-y divide-gray-200", children: movementItems.map((item) => (_jsxs("tr", { children: [_jsxs("td", { className: "px-3 py-2 text-sm", children: [_jsx("div", { className: "font-medium", children: item.productName }), item.productSku && (_jsxs("div", { className: "text-xs text-gray-500", children: ["SKU: ", item.productSku] }))] }), isTransfer ? (_jsxs(_Fragment, { children: [_jsxs("td", { className: "px-3 py-2 text-sm", children: [_jsx("div", { children: item.warehouseName }), _jsx("div", { className: "text-xs text-gray-500", children: item.locationName })] }), _jsxs("td", { className: "px-3 py-2 text-sm", children: [_jsx("div", { children: item.destinationWarehouseName }), _jsx("div", { className: "text-xs text-gray-500", children: item.destinationLocationName })] })] })) : (_jsxs("td", { className: "px-3 py-2 text-sm", children: [_jsx("div", { children: item.warehouseName }), _jsx("div", { className: "text-xs text-gray-500", children: item.locationName })] })), _jsx("td", { className: "px-3 py-2 text-sm text-right font-medium", children: item.quantity }), _jsx("td", { className: "px-3 py-2 text-center", children: _jsx("button", { onClick: () => handleRemoveFromList(item.tempId), className: "text-red-600 hover:text-red-800 text-sm", title: "Eliminar de la lista", children: _jsx("i", { className: "fas fa-trash" }) }) })] }, item.tempId))) })] }) }), _jsxs("div", { className: "space-y-3 mb-4", children: [_jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Referencia (opcional)" }), _jsx("input", { type: "text", value: globalReference, onChange: (e) => setGlobalReference(e.target.value), placeholder: "N\u00FAmero de factura, orden, etc.", className: "w-full rounded-md border border-gray-300 px-3 py-2 text-sm" })] }), _jsxs("div", { children: [_jsx("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Notas (opcional)" }), _jsx("textarea", { value: globalNotes, onChange: (e) => setGlobalNotes(e.target.value), placeholder: "Informaci\u00F3n adicional sobre estos movimientos", className: "w-full rounded-md border border-gray-300 px-3 py-2 text-sm", rows: 2 })] })] }), _jsx("div", { className: "flex justify-end", children: _jsx("button", { onClick: handleSubmit, className: `px-6 py-2 rounded-md text-white text-sm font-medium ${isTransfer
                                                 ? 'bg-green-600 hover:bg-green-700'
-                                                : 'bg-blue-600 hover:bg-blue-700'} disabled:opacity-50 disabled:cursor-not-allowed`, disabled: isSubmitting, children: isSubmitting ? 'Procesando...' : isTransfer
-                                                ? 'Registrar Transferencia'
-                                                : `Registrar ${isEntry ? 'Entrada' : 'Salida'}` }) })] })] }), _jsxs("div", { className: "bg-white p-6 rounded-lg shadow", children: [_jsx("h2", { className: "text-xl font-semibold mb-3", children: "Stock Actual" }), _jsx("div", { className: "max-h-[400px] overflow-y-auto", children: _jsxs("table", { className: "min-w-full divide-y divide-gray-200", children: [_jsx("thead", { children: _jsxs("tr", { children: [_jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-2", children: "Producto" }), _jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-2", children: "Almac\u00E9n" }), _jsx("th", { className: "text-right text-xs font-medium text-gray-500 uppercase tracking-wider py-2", children: "Cantidad" })] }) }), _jsx("tbody", { className: "divide-y divide-gray-200", children: currentStock.length === 0 ? (_jsx("tr", { children: _jsx("td", { colSpan: 3, className: "py-2 text-center text-sm text-gray-500", children: "No hay datos de inventario" }) })) : (currentStock.map((item, index) => (_jsxs("tr", { children: [_jsx("td", { className: "py-2 text-sm", children: item.product_name }), _jsx("td", { className: "py-2 text-sm", children: item.warehouse_name }), _jsx("td", { className: "py-2 text-sm text-right font-medium", children: item.current_quantity })] }, index)))) })] }) })] })] }), _jsxs("div", { className: "bg-white p-6 rounded-lg shadow mt-6", children: [_jsx("h2", { className: "text-xl font-semibold mb-3", children: "Movimientos Recientes" }), _jsx("div", { className: "overflow-x-auto", children: _jsxs("table", { className: "min-w-full divide-y divide-gray-200", children: [_jsx("thead", { children: _jsxs("tr", { children: [_jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Fecha" }), _jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Tipo" }), _jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Producto" }), _jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Almac\u00E9n" }), _jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Ubicaci\u00F3n" }), _jsx("th", { className: "text-right text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Cantidad" }), _jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Referencia" })] }) }), _jsx("tbody", { className: "divide-y divide-gray-200", children: stockMovements.length === 0 ? (_jsx("tr", { children: _jsx("td", { colSpan: 7, className: "py-4 text-center text-sm text-gray-500", children: "No hay movimientos recientes" }) })) : (stockMovements.map((movement) => (_jsxs("tr", { children: [_jsx("td", { className: "py-3 px-4 text-sm", children: new Date(movement.movement_date).toLocaleDateString() }), _jsx("td", { className: "py-3 px-4 text-sm", children: _jsx("span", { className: `px-2 py-1 rounded-full text-xs font-medium ${movement.movement_type?.code?.startsWith('IN_')
+                                                : 'bg-blue-600 hover:bg-blue-700'} disabled:opacity-50 disabled:cursor-not-allowed`, disabled: isSubmitting, children: isSubmitting ? (_jsxs(_Fragment, { children: [_jsx("i", { className: "fas fa-spinner fa-spin mr-2" }), "Procesando..."] })) : (_jsxs(_Fragment, { children: [_jsx("i", { className: "fas fa-save mr-2" }), isTransfer
+                                                        ? `Registrar ${movementItems.length} Transferencia${movementItems.length > 1 ? 's' : ''}`
+                                                        : `Registrar ${movementItems.length} ${isEntry ? 'Entrada' : 'Salida'}${movementItems.length > 1 ? 's' : ''}`] })) }) })] }))] }), _jsxs("div", { className: "bg-white p-6 rounded-lg shadow", children: [_jsx("h2", { className: "text-xl font-semibold mb-3", children: "Stock Actual" }), _jsx("div", { className: "max-h-[400px] overflow-y-auto", children: _jsxs("table", { className: "min-w-full divide-y divide-gray-200", children: [_jsx("thead", { children: _jsxs("tr", { children: [_jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-2", children: "Producto" }), _jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-2", children: "Almac\u00E9n" }), _jsx("th", { className: "text-right text-xs font-medium text-gray-500 uppercase tracking-wider py-2", children: "Cantidad" })] }) }), _jsx("tbody", { className: "divide-y divide-gray-200", children: currentStock.length === 0 ? (_jsx("tr", { children: _jsx("td", { colSpan: 3, className: "py-2 text-center text-sm text-gray-500", children: "No hay datos de inventario" }) })) : (currentStock.map((item, index) => (_jsxs("tr", { children: [_jsx("td", { className: "py-2 text-sm", children: item.product_name }), _jsx("td", { className: "py-2 text-sm", children: item.warehouse_name }), _jsx("td", { className: "py-2 text-sm text-right font-medium", children: item.current_quantity })] }, index)))) })] }) })] })] }), _jsxs("div", { className: "bg-white p-6 rounded-lg shadow mt-6", children: [_jsx("h2", { className: "text-xl font-semibold mb-3", children: "Movimientos Recientes" }), _jsx("div", { className: "overflow-x-auto", children: _jsxs("table", { className: "min-w-full divide-y divide-gray-200", children: [_jsx("thead", { children: _jsxs("tr", { children: [_jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Fecha" }), _jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Tipo" }), _jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Producto" }), _jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Almac\u00E9n" }), _jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Ubicaci\u00F3n" }), _jsx("th", { className: "text-right text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Cantidad" }), _jsx("th", { className: "text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4", children: "Referencia" })] }) }), _jsx("tbody", { className: "divide-y divide-gray-200", children: stockMovements.length === 0 ? (_jsx("tr", { children: _jsx("td", { colSpan: 7, className: "py-4 text-center text-sm text-gray-500", children: "No hay movimientos recientes" }) })) : (stockMovements.map((movement) => (_jsxs("tr", { children: [_jsx("td", { className: "py-3 px-4 text-sm", children: new Date(movement.movement_date).toLocaleDateString() }), _jsx("td", { className: "py-3 px-4 text-sm", children: _jsx("span", { className: `px-2 py-1 rounded-full text-xs font-medium ${movement.movement_type?.code?.startsWith('IN_')
                                                         ? 'bg-green-100 text-green-800'
                                                         : 'bg-red-100 text-red-800'}`, children: movement.movement_type?.description || 'Desconocido' }) }), _jsx("td", { className: "py-3 px-4 text-sm", children: movement.product?.name }), _jsx("td", { className: "py-3 px-4 text-sm", children: movement.warehouse?.name }), _jsx("td", { className: "py-3 px-4 text-sm", children: movement.location?.name || '-' }), _jsx("td", { className: "py-3 px-4 text-sm text-right font-medium", children: movement.quantity }), _jsx("td", { className: "py-3 px-4 text-sm", children: movement.reference || '-' })] }, movement.id)))) })] }) })] })] }));
 };

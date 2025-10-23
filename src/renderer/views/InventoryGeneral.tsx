@@ -68,7 +68,6 @@ const InventoryGeneral: React.FC = () => {
       
       const client = await supabase.getClient();
       
-<<<<<<< HEAD
       // Primero obtener el count total para la paginación
       const { count: totalCount, error: countError } = await client
         .from('current_stock')
@@ -78,15 +77,10 @@ const InventoryGeneral: React.FC = () => {
       
       // Luego obtener solo los datos de la página actual
       const startIndex = (currentPage - 1) * itemsPerPage;
-=======
-      // Cargar TODOS los datos sin límite usando un rango grande
-      // Supabase limita a 1000 por defecto, así que necesitamos especificar un rango
->>>>>>> bcb67d7f2936075ea1dd631d2234523556940fae
       const { data: inventoryData, error: inventoryError } = await client
         .from('current_stock')
         .select('*')
         .order('product_name')
-<<<<<<< HEAD
         .range(startIndex, startIndex + itemsPerPage - 1);
       
       if (inventoryError) throw inventoryError;
@@ -102,20 +96,12 @@ const InventoryGeneral: React.FC = () => {
       });
       
       setTotalInventoryCount(totalCount || 0);
-=======
-        .range(0, 99999); // Rango muy grande para asegurar que traiga todos
-      
-      if (inventoryError) throw inventoryError;
->>>>>>> bcb67d7f2936075ea1dd631d2234523556940fae
       setInventory((inventoryData as any[]) || []);
       
       console.log(`Registros cargados en inventario: ${inventoryData?.length || 0}`);
       setIsLoading(false);
     } catch (err: any) {
-<<<<<<< HEAD
       console.error('Error loading inventory:', err);
-=======
->>>>>>> bcb67d7f2936075ea1dd631d2234523556940fae
       setError(err.message);
       setIsLoading(false);
     }
