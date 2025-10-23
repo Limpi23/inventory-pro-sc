@@ -49,6 +49,10 @@ function loadEnvConfig() {
 autoUpdater.logger = require('electron-log');
 autoUpdater.logger.transports.file.level = 'info';
 
+// Configuración específica para NSIS
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = false;
+
 autoUpdater.on('checking-for-update', () => {
   sendStatusToWindow('Buscando actualizaciones...');
 });
@@ -63,6 +67,18 @@ autoUpdater.on('update-available', (info) => {
   }).then((returnValue) => {
     if (returnValue.response === 0) {
       sendStatusToWindow('Descargando actualización...');
+      // Iniciar la descarga de la actualización
+      autoUpdater.downloadUpdate().catch(err => {
+        // Limpiar barra de progreso en taskbar
+        if (mainWindow && process.platform === 'win32') {
+          mainWindow.setProgressBar(-1);
+        }
+        const errorMsg = `Error al descargar actualización: ${err.toString()}`;
+        sendStatusToWindow(errorMsg);
+        dialog.showErrorBox('Error de descarga', errorMsg);
+      });
+    } else {
+      sendStatusToWindow('Descarga de actualización cancelada por el usuario.');
     }
   });
 });
@@ -81,6 +97,11 @@ autoUpdater.on('update-not-available', () => {
   }
 });
 autoUpdater.on('error', (err) => {
+  // Limpiar barra de progreso en taskbar
+  if (mainWindow && process.platform === 'win32') {
+    mainWindow.setProgressBar(-1);
+  }
+  
   const errorMessage = `Error en actualización: ${err.toString()}`;
   sendStatusToWindow(errorMessage);
   if (manualUpdateRequested) {
@@ -91,8 +112,18 @@ autoUpdater.on('error', (err) => {
 autoUpdater.on('download-progress', (progressObj) => {
   let logMessage = `Velocidad: ${progressObj.bytesPerSecond} - Descargado ${progressObj.percent}%`;
   sendStatusToWindow(logMessage);
+  
+  // Actualizar barra de progreso en la taskbar (Windows) - Nativo
+  if (mainWindow && process.platform === 'win32') {
+    mainWindow.setProgressBar(progressObj.percent / 100);
+  }
 });
 autoUpdater.on('update-downloaded', () => {
+  // Limpiar barra de progreso en taskbar
+  if (mainWindow && process.platform === 'win32') {
+    mainWindow.setProgressBar(-1);
+  }
+  
   sendStatusToWindow('Actualización descargada');
   dialog.showMessageBox({
     type: 'info',
@@ -101,7 +132,12 @@ autoUpdater.on('update-downloaded', () => {
     buttons: ['Reiniciar', 'Más tarde']
   }).then((returnValue) => {
     if (returnValue.response === 0) {
-      autoUpdater.quitAndInstall();
+      // Para NSIS, setImmediate asegura que el diálogo se cierre antes de reiniciar
+      setImmediate(() => {
+        // isSilent: false - muestra el progreso de instalación
+        // isForceRunAfter: true - reabre la app automáticamente
+        autoUpdater.quitAndInstall(false, true);
+      });
     }
   });
 });
@@ -275,26 +311,41 @@ app.whenReady().then(async () => {
     await ses.clearCache();
   }
   createWindow();
-  // Configurar feed de actualizaciones (GitHub Releases público)
+  // Configurar feed de actualizaciones para Squirrel.Windows
   try {
     // Solo configurar actualizaciones en Windows (plataforma objetivo)
     if (process.platform === 'win32') {
-      const FEED_URL = process.env.UPDATE_FEED_URL;
-      if (FEED_URL) {
-        autoUpdater.setFeedURL({ provider: 'generic', url: FEED_URL });
-        sendStatusToWindow('Update feed configurado (GENERIC)');
+      const CUSTOM_FEED_URL = process.env.UPDATE_FEED_URL;
+      
+      if (CUSTOM_FEED_URL) {
+        // Opción: URL personalizada
+        autoUpdater.setFeedURL({ provider: 'generic', url: CUSTOM_FEED_URL });
+        sendStatusToWindow('Update feed configurado (CUSTOM)');
+        console.log('✓ Usando feed de actualizaciones personalizado');
       } else {
-        // Para Squirrel.Windows con GitHub público
-        // El token no es necesario para repos públicos, pero ayuda a evitar rate limits
-        autoUpdater.setFeedURL({ 
-          provider: 'github',
-          owner: 'Limpi23',
-          repo: 'inventory-pro-sc',
-          // Si hay un token disponible, usarlo
-          ...(process.env.GH_TOKEN && { token: process.env.GH_TOKEN })
-        });
-        sendStatusToWindow('Update feed configurado (GITHUB)');
+        // Para Squirrel.Windows con GitHub Releases
+        const owner = 'Limpi23';
+        const repo = 'inventory-pro-sc';
+        const updateUrl = `https://github.com/${owner}/${repo}/releases/latest/download`;
+        
+        // IMPORTANTE: No usar setFeedURL con Squirrel.Windows en producción
+        // Dejar que autoUpdater use su configuración por defecto desde app-update.yml
+        // que será generado por electron-builder/forge
+        
+        // Solo configurar en desarrollo para testing
+        if (process.env.NODE_ENV === 'development') {
+          autoUpdater.setFeedURL({ 
+            provider: 'generic',
+            url: updateUrl
+          });
+          console.log('⚠️ Modo desarrollo: Feed URL configurado manualmente');
+        }
+        
+        sendStatusToWindow('Update feed listo para producción');
+        console.log('✓ Auto-updater configurado para Squirrel.Windows');
+        console.log(`   URL: ${updateUrl}`);
       }
+      
     } else {
       console.log('Auto-updater solo está configurado para Windows');
     }
@@ -324,7 +375,9 @@ ipcMain.on('check-for-updates', () => {
   autoUpdater.checkForUpdates();
 });
 ipcMain.on('install-update', () => {
-  autoUpdater.quitAndInstall();
+  // isSilent: false - mostrar instalador
+  // isForceRunAfter: true - FORZAR que reabra la app después de instalar
+  autoUpdater.quitAndInstall(false, true);
 });
 ipcMain.on('get-supabase-config', (event) => {
   event.sender.send('supabase-config', {

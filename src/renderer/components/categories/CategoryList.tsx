@@ -75,9 +75,17 @@ export default function CategoryList() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Verificar que sea un archivo CSV
-    if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
-      toast.error("Por favor, selecciona un archivo CSV válido");
+    // Verificar que sea un archivo Excel
+    const validTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel'
+    ];
+    const validExtensions = ['.xlsx', '.xls'];
+    const hasValidType = validTypes.includes(file.type);
+    const hasValidExtension = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
+
+    if (!hasValidType && !hasValidExtension) {
+      toast.error("Por favor, selecciona un archivo Excel válido (.xlsx o .xls)");
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -87,41 +95,26 @@ export default function CategoryList() {
     try {
       setIsImporting(true);
       
-      // Leer el contenido del archivo
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        try {
-          const csvContent = event.target?.result as string;
-          
-          // Importar las categorías desde el CSV
-          const result = await categoriesService.importFromCSV(csvContent);
-          
-          if (result.success > 0) {
-            toast.success(`Se importaron ${result.success} categorías correctamente`);
-            fetchCategories(); // Actualizar la lista de categorías
-          }
-          
-          if (result.errors > 0) {
-            toast.error(`No se pudieron importar ${result.errors} categorías`);
-            
-          }
-          
-        } catch (error) {
-          
-          toast.error("Error al procesar el archivo");
-        } finally {
-          setIsImporting(false);
-          if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-          }
-        }
-      };
+      // Importar las categorías desde Excel
+      const result = await categoriesService.importFromExcel(file);
       
-      reader.readAsText(file);
+      if (result.success > 0) {
+        toast.success(`Se importaron ${result.success} categorías correctamente`);
+        fetchCategories(); // Actualizar la lista de categorías
+      }
       
-    } catch (error) {
+      if (result.errors > 0) {
+        toast.error(`No se pudieron importar ${result.errors} categorías`);
+      }
       
-      toast.error("Error al importar categorías");
+      if (result.messages && result.messages.length > 0) {
+        console.log('Mensajes de importación:', result.messages);
+      }
+      
+    } catch (error: any) {
+      console.error('Error al importar:', error);
+      toast.error(error.message || "Error al importar categorías");
+    } finally {
       setIsImporting(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -129,20 +122,17 @@ export default function CategoryList() {
     }
   };
 
-  // Función para exportar categorías a CSV
+  // Función para exportar categorías a Excel
   const handleExport = async () => {
     try {
       setIsExporting(true);
-      const csvContent = await categoriesService.exportToCSV();
-      
-      // Crear un blob con el contenido CSV
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
+      const blob = await categoriesService.exportToExcel();
       
       // Crear un enlace para descargar el archivo y hacer clic en él
+      const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `categorias_${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute('download', `categorias_${new Date().toISOString().split('T')[0]}.xlsx`);
       document.body.appendChild(link);
       link.click();
       
@@ -152,7 +142,7 @@ export default function CategoryList() {
       
       toast.success("Categorías exportadas correctamente");
     } catch (error) {
-      
+      console.error('Error al exportar:', error);
       toast.error("Error al exportar categorías");
     } finally {
       setIsExporting(false);
@@ -168,7 +158,7 @@ export default function CategoryList() {
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
-            accept=".csv"
+            accept=".xlsx,.xls"
             className="hidden"
           />
           <Button 
@@ -176,14 +166,14 @@ export default function CategoryList() {
             variant="outline"
             disabled={isImporting}
           >
-            {isImporting ? "Importando..." : "Importar CSV"}
+            {isImporting ? "Importando..." : "Importar Excel"}
           </Button>
           <Button 
             onClick={handleExport} 
             variant="outline"
             disabled={isExporting || categories.length === 0}
           >
-            {isExporting ? "Exportando..." : "Exportar CSV"}
+            {isExporting ? "Exportando..." : "Exportar Excel"}
           </Button>
           <Button onClick={() => setIsModalOpen(true)}>
             Agregar Categoría

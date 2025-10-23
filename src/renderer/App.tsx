@@ -45,6 +45,7 @@ import SubscriptionRenew from './views/SubscriptionRenew';
 import SubscriptionGuard from './components/SubscriptionGuard';
 import Onboarding from './Onboarding';
 import SupabaseConfigModal from './components/SupabaseConfigModal';
+import SplashScreen from './components/SplashScreen';
 
 // Inicializar el tema
 const initializeTheme = () => {
@@ -120,6 +121,7 @@ const App = () => {
   const [ready, setReady] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -161,12 +163,21 @@ const App = () => {
     setReady(true);
     setShowOnboarding(false);
   };
+  
+  const handleSplashFinish = () => {
+    setShowSplash(false);
+  };
+
+  // Mostrar splash screen durante la carga inicial
+  if (showSplash) {
+    return <SplashScreen onFinish={handleSplashFinish} />;
+  }
 
   if (!ready && !showOnboarding) {
     return (
       <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',fontFamily:'system-ui'}}>
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mb-4" />
-        <div style={{opacity:0.7,fontSize:14}}>Inicializando aplicación...</div>
+        <div style={{opacity:0.8,fontSize:16,fontWeight:500}}>⚙️ Iniciando Inventario Pro...</div>
       </div>
     );
   }

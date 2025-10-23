@@ -51,8 +51,9 @@ const InventoryGeneral: React.FC = () => {
   // Estados para la vista previa de impresión
   const [showPrintOptions, setShowPrintOptions] = useState(false);
 
-  // Refs para la impresión
+  // Refs para la impresión y búsqueda
   const printComponentRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchInventory();
@@ -67,6 +68,7 @@ const InventoryGeneral: React.FC = () => {
       
       const client = await supabase.getClient();
       
+<<<<<<< HEAD
       // Primero obtener el count total para la paginación
       const { count: totalCount, error: countError } = await client
         .from('current_stock')
@@ -76,10 +78,15 @@ const InventoryGeneral: React.FC = () => {
       
       // Luego obtener solo los datos de la página actual
       const startIndex = (currentPage - 1) * itemsPerPage;
+=======
+      // Cargar TODOS los datos sin límite usando un rango grande
+      // Supabase limita a 1000 por defecto, así que necesitamos especificar un rango
+>>>>>>> bcb67d7f2936075ea1dd631d2234523556940fae
       const { data: inventoryData, error: inventoryError } = await client
         .from('current_stock')
         .select('*')
         .order('product_name')
+<<<<<<< HEAD
         .range(startIndex, startIndex + itemsPerPage - 1);
       
       if (inventoryError) throw inventoryError;
@@ -95,11 +102,20 @@ const InventoryGeneral: React.FC = () => {
       });
       
       setTotalInventoryCount(totalCount || 0);
+=======
+        .range(0, 99999); // Rango muy grande para asegurar que traiga todos
+      
+      if (inventoryError) throw inventoryError;
+>>>>>>> bcb67d7f2936075ea1dd631d2234523556940fae
       setInventory((inventoryData as any[]) || []);
       
+      console.log(`Registros cargados en inventario: ${inventoryData?.length || 0}`);
       setIsLoading(false);
     } catch (err: any) {
+<<<<<<< HEAD
       console.error('Error loading inventory:', err);
+=======
+>>>>>>> bcb67d7f2936075ea1dd631d2234523556940fae
       setError(err.message);
       setIsLoading(false);
     }
@@ -109,7 +125,16 @@ const InventoryGeneral: React.FC = () => {
     setIsLoading(true);
     try {
       const client = await supabase.getClient();
-      const { data: movementsData, error: movementsError } = await client.from('stock_movements')
+      
+      // Obtener el conteo total de movimientos para este producto
+      const { count } = await client
+        .from('stock_movements')
+        .select('*', { count: 'exact', head: true })
+        .eq('product_id', productId);
+      
+      // Cargar todos los movimientos sin límite de 1000
+      const { data: movementsData, error: movementsError } = await client
+        .from('stock_movements')
         .select(`
           id,
           movement_date,
@@ -120,7 +145,8 @@ const InventoryGeneral: React.FC = () => {
           movement_type:movement_types(description, code)
         `)
         .eq('product_id', productId)
-        .order('movement_date', { ascending: false });
+        .order('movement_date', { ascending: false })
+        .range(0, count ? count - 1 : 10000); // Cargar todos los movimientos
       
       if (movementsError) throw movementsError;
       
@@ -419,6 +445,7 @@ const InventoryGeneral: React.FC = () => {
               <i className="fas fa-search text-gray-400"></i>
             </div>
             <input
+              ref={searchInputRef}
               type="text"
               placeholder="Buscar por nombre o SKU..."
               value={searchTerm}
@@ -426,6 +453,7 @@ const InventoryGeneral: React.FC = () => {
                 setSearchTerm(e.target.value);
                 setCurrentPage(1); // Reset a la primera página cuando se busca
               }}
+              disabled={false} // Siempre habilitado, independiente del estado de carga
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>

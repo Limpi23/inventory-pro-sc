@@ -32,6 +32,23 @@ interface StockMovement {
   movement_type?: { code: string; description: string };
 }
 
+interface MovementItem {
+  tempId: string;
+  productId: string;
+  productName: string;
+  productSku?: string;
+  warehouseId: string;
+  warehouseName: string;
+  locationId: string;
+  locationName: string;
+  quantity: number;
+  // Para transferencias
+  destinationWarehouseId?: string;
+  destinationWarehouseName?: string;
+  destinationLocationId?: string;
+  destinationLocationName?: string;
+}
+
 const Inventory: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -39,6 +56,7 @@ const Inventory: React.FC = () => {
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
   const [currentStock, setCurrentStock] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false); // Estado separado para envío del formulario
   const [error, setError] = useState<string | null>(null);
 
   // Formulario de entrada/salida
@@ -57,6 +75,15 @@ const Inventory: React.FC = () => {
   const [locationId, setLocationId] = useState('');
   const [destinationLocations, setDestinationLocations] = useState<Location[]>([]);
   const [destinationLocationId, setDestinationLocationId] = useState('');
+
+  // Estado para búsqueda de productos
+  const [productSearchTerm, setProductSearchTerm] = useState('');
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
+
+  // Estados para la lista de productos (carrito)
+  const [movementItems, setMovementItems] = useState<MovementItem[]>([]);
+  const [globalReference, setGlobalReference] = useState('');
+  const [globalNotes, setGlobalNotes] = useState('');
 
   useEffect(() => {
     async function fetchData() {
@@ -172,6 +199,21 @@ const Inventory: React.FC = () => {
     })();
   }, [destinationWarehouseId]);
 
+  // Filtrar productos basado en búsqueda (nombre o SKU)
+  const filteredProducts = products.filter((product) => {
+    const searchLower = productSearchTerm.toLowerCase();
+    const nameMatch = product.name.toLowerCase().includes(searchLower);
+    const skuMatch = product.sku?.toLowerCase().includes(searchLower);
+    return nameMatch || skuMatch;
+  });
+
+  // Función para seleccionar un producto
+  const handleSelectProduct = (product: Product) => {
+    setProductId(product.id);
+    setProductSearchTerm(product.sku ? `${product.name} (${product.sku})` : product.name);
+    setShowProductDropdown(false);
+  };
+
   // Función para manejar cambios en el tipo de movimiento
   const handleMovementTypeChange = (type: 'entry' | 'exit' | 'transfer') => {
     if (type === 'entry') {
@@ -185,122 +227,186 @@ const Inventory: React.FC = () => {
       setIsEntry(false); // Empezamos con salida del almacén origen
       setIsTransfer(true);
     }
+    // Limpiar la lista cuando se cambia el tipo de movimiento
+    setMovementItems([]);
   };
 
+  // Función para agregar producto a la lista
+  const handleAddToList = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validaciones
+    if (!productId || !warehouseId || !locationId) {
+      alert('Por favor completa todos los campos requeridos');
+      return;
+    }
+
+    if (isTransfer && (!destinationWarehouseId || !destinationLocationId)) {
+      alert('Por favor completa el almacén y ubicación de destino');
+      return;
+    }
+
+    if (isTransfer && destinationWarehouseId === warehouseId) {
+      alert('El almacén de destino debe ser diferente al de origen');
+      return;
+    }
+
+    // Buscar nombres para mostrar
+    const product = products.find(p => p.id === productId);
+    const warehouse = warehouses.find(w => w.id === warehouseId);
+    const location = locations.find(l => l.id === locationId);
+    const destWarehouse = isTransfer ? warehouses.find(w => w.id === destinationWarehouseId) : undefined;
+    const destLocation = isTransfer ? destinationLocations.find(l => l.id === destinationLocationId) : undefined;
+
+    if (!product || !warehouse || !location) {
+      alert('Error al obtener información del producto, almacén o ubicación');
+      return;
+    }
+
+    // Crear item para la lista
+    const newItem: MovementItem = {
+      tempId: crypto.randomUUID(),
+      productId: product.id,
+      productName: product.name,
+      productSku: product.sku,
+      warehouseId: warehouse.id,
+      warehouseName: warehouse.name,
+      locationId: location.id,
+      locationName: location.name,
+      quantity: quantity,
+      destinationWarehouseId: destWarehouse?.id,
+      destinationWarehouseName: destWarehouse?.name,
+      destinationLocationId: destLocation?.id,
+      destinationLocationName: destLocation?.name,
+    };
+
+    // Agregar a la lista
+    setMovementItems([...movementItems, newItem]);
+
+    // Limpiar formulario para agregar otro producto
+    setProductId('');
+    setProductSearchTerm('');
+    setLocationId('');
+    setQuantity(1);
+    if (isTransfer) {
+      setDestinationLocationId('');
+    }
+  };
+
+  // Función para eliminar un producto de la lista
+  const handleRemoveFromList = (tempId: string) => {
+    setMovementItems(movementItems.filter(item => item.tempId !== tempId));
+  };
+
+  // Función para guardar todos los movimientos
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    
+    if (movementItems.length === 0) {
+      alert('Agrega al menos un producto a la lista antes de guardar');
+      return;
+    }
+
+    setIsSubmitting(true);
     setError(null);
 
     try {
-  const client = await supabase.getClient();
-      if (!productId || !warehouseId) {
-        throw new Error('Selecciona un producto y un almacén');
-      }
-      if (!isTransfer && !locationId) {
-        throw new Error('Selecciona una ubicación');
-      }
+      const client = await supabase.getClient();
 
-      // Validación adicional para transferencias
-      if (isTransfer && (!destinationWarehouseId || destinationWarehouseId === warehouseId)) {
-        throw new Error('Selecciona un almacén de destino diferente al de origen');
-      }
-      if (isTransfer && !destinationLocationId) {
-        throw new Error('Selecciona una ubicación de destino');
-      }
-
-      // Para salidas o transferencias, verificar stock disponible
+      // Validar stock para salidas y transferencias
       if (!isEntry || isTransfer) {
-        // Validar stock por ubicación (si está seleccionada)
-        const { data: stockData } = await client
-          .from('current_stock_by_location')
-          .select('current_quantity')
-          .eq('product_id', productId)
-          .eq('warehouse_id', warehouseId)
-          .eq('location_id', locationId)
-          .maybeSingle();
-        const currentQty = Number((stockData as any)?.current_quantity ?? 0);
-        if (quantity > currentQty) {
-          throw new Error(`Stock insuficiente. Solo hay ${currentQty} unidades disponibles.`);
+        for (const item of movementItems) {
+          const { data: stockData } = await client
+            .from('current_stock_by_location')
+            .select('current_quantity')
+            .eq('product_id', item.productId)
+            .eq('warehouse_id', item.warehouseId)
+            .eq('location_id', item.locationId)
+            .maybeSingle();
+          
+          const currentQty = Number((stockData as any)?.current_quantity ?? 0);
+          if (item.quantity > currentQty) {
+            throw new Error(`Stock insuficiente para ${item.productName}. Solo hay ${currentQty} unidades disponibles.`);
+          }
         }
       }
 
-      if (isTransfer) {
-        // Crear movimiento de salida del almacén origen
-        const outMovementType = movementTypes.find((t) => t.code === 'OUT_TRANSFER');
-        if (!outMovementType) {
-          throw new Error('Tipo de movimiento de salida por transferencia no encontrado');
+      // Procesar cada item de la lista
+      for (const item of movementItems) {
+        if (isTransfer) {
+          // Crear movimiento de salida del almacén origen
+          const outMovementType = movementTypes.find((t) => t.code === 'OUT_TRANSFER');
+          if (!outMovementType) {
+            throw new Error('Tipo de movimiento de salida por transferencia no encontrado');
+          }
+          
+          const transferId = crypto.randomUUID();
+          
+          const { error: outError } = await client
+            .from('stock_movements')
+            .insert({
+              product_id: item.productId,
+              warehouse_id: item.warehouseId,
+              location_id: item.locationId,
+              quantity: item.quantity,
+              movement_type_id: outMovementType.id,
+              movement_date: new Date(date).toISOString(),
+              reference: globalReference || `Transferencia a ${item.destinationWarehouseName}`,
+              notes: globalNotes || null,
+              related_id: transferId
+            });
+
+          if (outError) throw outError;
+
+          // Crear movimiento de entrada en el almacén destino
+          const inMovementType = movementTypes.find((t) => t.code === 'IN_TRANSFER');
+          if (!inMovementType) {
+            throw new Error('Tipo de movimiento de entrada por transferencia no encontrado');
+          }
+          
+          const { error: inError } = await client
+            .from('stock_movements')
+            .insert({
+              product_id: item.productId,
+              warehouse_id: item.destinationWarehouseId!,
+              location_id: item.destinationLocationId!,
+              quantity: item.quantity,
+              movement_type_id: inMovementType.id,
+              movement_date: new Date(date).toISOString(),
+              reference: globalReference || `Transferencia desde ${item.warehouseName}`,
+              notes: globalNotes || null,
+              related_id: transferId
+            });
+
+          if (inError) throw inError;
+        } else {
+          // Entradas y salidas normales
+          const typeCode = isEntry ? 'IN_PURCHASE' : 'OUT_SALE';
+          const movementType = movementTypes.find((t) => t.code === typeCode);
+          
+          if (!movementType) {
+            throw new Error('Tipo de movimiento no encontrado');
+          }
+
+          const { error: insertError } = await client
+            .from('stock_movements')
+            .insert({
+              product_id: item.productId,
+              warehouse_id: item.warehouseId,
+              location_id: item.locationId,
+              quantity: item.quantity,
+              movement_type_id: movementType.id,
+              movement_date: new Date(date).toISOString(),
+              reference: globalReference || null,
+              notes: globalNotes || null
+            });
+
+          if (insertError) throw insertError;
         }
-        
-        // Generar un ID de transferencia para relacionar ambos movimientos
-        const transferId = crypto.randomUUID();
-        
-  const { error: outError } = await client
-          .from('stock_movements')
-          .insert({
-            product_id: productId,
-            warehouse_id: warehouseId,
-            location_id: locationId,
-            quantity: quantity,
-            movement_type_id: outMovementType.id,
-            movement_date: new Date(date).toISOString(),
-            reference: reference || `Transferencia a ${warehouses.find(w => w.id === destinationWarehouseId)?.name}`,
-            notes: notes || null,
-            related_id: transferId
-          });
-
-        if (outError) throw outError;
-
-        // Crear movimiento de entrada en el almacén destino
-        const inMovementType = movementTypes.find((t) => t.code === 'IN_TRANSFER');
-        if (!inMovementType) {
-          throw new Error('Tipo de movimiento de entrada por transferencia no encontrado');
-        }
-        
-  const { error: inError } = await client
-          .from('stock_movements')
-          .insert({
-            product_id: productId,
-            warehouse_id: destinationWarehouseId,
-            location_id: destinationLocationId,
-            quantity: quantity,
-            movement_type_id: inMovementType.id,
-            movement_date: new Date(date).toISOString(),
-            reference: reference || `Transferencia desde ${warehouses.find(w => w.id === warehouseId)?.name}`,
-            notes: notes || null,
-            related_id: transferId
-          });
-
-        if (inError) throw inError;
-      } else {
-        // Código existente para entradas y salidas normales
-        // Buscar ID del tipo de movimiento
-        const typeCode = isEntry ? 'IN_PURCHASE' : 'OUT_SALE';
-        const movementType = movementTypes.find((t) => t.code === typeCode);
-        
-        if (!movementType) {
-          throw new Error('Tipo de movimiento no encontrado');
-        }
-
-        // Crear movimiento
-  const { error: insertError } = await client
-          .from('stock_movements')
-          .insert({
-            product_id: productId,
-            warehouse_id: warehouseId,
-            location_id: locationId,
-            quantity: quantity,
-            movement_type_id: movementType.id,
-            movement_date: new Date(date).toISOString(),
-            reference: reference || null,
-            notes: notes || null
-          });
-
-        if (insertError) throw insertError;
       }
 
       // Recargar datos
-  const { data: updatedMovements } = await client
+      const { data: updatedMovements } = await client
         .from('stock_movements')
         .select(`
           *,
@@ -312,30 +418,35 @@ const Inventory: React.FC = () => {
         .order('created_at', { ascending: false })
         .limit(10);
       
-  setStockMovements((updatedMovements as unknown as StockMovement[]) || []);
+      setStockMovements((updatedMovements as unknown as StockMovement[]) || []);
 
-  const { data: updatedStock } = await client
+      const { data: updatedStock } = await client
         .from('current_stock')
         .select('*');
       
-  setCurrentStock((updatedStock as unknown as any[]) || []);
+      setCurrentStock((updatedStock as unknown as any[]) || []);
 
-      // Reset form
+      // Reset form y lista
+      setMovementItems([]);
       setQuantity(1);
-      setReference('');
-      setNotes('');
-  setDestinationWarehouseId(''); // Resetear almacén destino
-  setLocationId('');
-  setDestinationLocationId('');
+      setGlobalReference('');
+      setGlobalNotes('');
+      setDestinationWarehouseId('');
+      setLocationId('');
+      setDestinationLocationId('');
+      setProductId('');
+      setProductSearchTerm('');
 
+      const itemCount = movementItems.length;
       alert(isTransfer 
-        ? 'Transferencia registrada correctamente' 
-        : `${isEntry ? 'Entrada' : 'Salida'} registrada correctamente`);
+        ? `${itemCount} transferencia${itemCount > 1 ? 's' : ''} registrada${itemCount > 1 ? 's' : ''} correctamente` 
+        : `${itemCount} ${isEntry ? 'entrada' : 'salida'}${itemCount > 1 ? 's' : ''} registrada${itemCount > 1 ? 's' : ''} correctamente`);
     } catch (err: any) {
       console.error('Error:', err);
       setError(err.message);
+      alert('Error: ' + err.message);
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -399,25 +510,68 @@ const Inventory: React.FC = () => {
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleAddToList} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Producto *
+                  Producto * (buscar por nombre o SKU)
                 </label>
-                <select
-                  value={productId}
-                  onChange={(e) => setProductId(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  required
-                >
-                  <option value="">Selecciona un producto</option>
-                  {products.map((product) => (
-                    <option key={product.id} value={product.id}>
-                      {product.name} {product.sku ? `(${product.sku})` : ''}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <i className="fas fa-search text-gray-400 text-sm"></i>
+                  </div>
+                  <input
+                    type="text"
+                    value={productSearchTerm}
+                    onChange={(e) => {
+                      setProductSearchTerm(e.target.value);
+                      setShowProductDropdown(true);
+                      if (!e.target.value) {
+                        setProductId('');
+                      }
+                    }}
+                    onFocus={() => setShowProductDropdown(true)}
+                    onBlur={() => {
+                      // Delay para permitir click en opciones
+                      setTimeout(() => setShowProductDropdown(false), 200);
+                    }}
+                    placeholder="Escribe nombre o SKU del producto..."
+                    className="w-full pl-10 rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  />
+                  
+                  {/* Dropdown de productos filtrados */}
+                  {showProductDropdown && productSearchTerm && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                      {filteredProducts.length > 0 ? (
+                        filteredProducts.map((product) => (
+                          <div
+                            key={product.id}
+                            onClick={() => handleSelectProduct(product)}
+                            className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-100 last:border-b-0"
+                          >
+                            <div className="font-medium text-gray-900">{product.name}</div>
+                            {product.sku && (
+                              <div className="text-xs text-gray-500">SKU: {product.sku}</div>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                          No se encontraron productos
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Mostrar producto seleccionado */}
+                  {productId && !showProductDropdown && (
+                    <div className="mt-1 text-xs text-green-600 flex items-center">
+                      <i className="fas fa-check-circle mr-1"></i>
+                      Producto seleccionado
+                    </div>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -535,48 +689,154 @@ const Inventory: React.FC = () => {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Referencia (opcional)
-              </label>
-              <input
-                type="text"
-                value={reference}
-                onChange={(e) => setReference(e.target.value)}
-                placeholder="Número de factura, orden, etc."
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Notas (opcional)
-              </label>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Información adicional sobre este movimiento"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                rows={3}
-              ></textarea>
-            </div>
-
             <div className="pt-4">
               <button
                 type="submit"
-                className={`px-4 py-2 rounded-md text-white text-sm ${
-                  isTransfer
-                    ? 'bg-green-600 hover:bg-green-700'
-                    : 'bg-blue-600 hover:bg-blue-700'
-                }`}
-                disabled={isLoading}
+                className="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isLoading ? 'Procesando...' : isTransfer 
-                  ? 'Registrar Transferencia' 
-                  : `Registrar ${isEntry ? 'Entrada' : 'Salida'}`}
+                <i className="fas fa-plus mr-2"></i>
+                Agregar a la lista
               </button>
             </div>
           </form>
+
+          {/* Lista de productos agregados */}
+          {movementItems.length > 0 && (
+            <div className="mt-6 border-t pt-4">
+              <h3 className="text-lg font-semibold mb-3">
+                Productos en la lista ({movementItems.length})
+              </h3>
+              
+              <div className="overflow-x-auto mb-4">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                        Producto
+                      </th>
+                      {isTransfer ? (
+                        <>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                            Origen
+                          </th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                            Destino
+                          </th>
+                        </>
+                      ) : (
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                          Almacén / Ubicación
+                        </th>
+                      )}
+                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                        Cantidad
+                      </th>
+                      <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">
+                        Acción
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {movementItems.map((item) => (
+                      <tr key={item.tempId}>
+                        <td className="px-3 py-2 text-sm">
+                          <div className="font-medium">{item.productName}</div>
+                          {item.productSku && (
+                            <div className="text-xs text-gray-500">SKU: {item.productSku}</div>
+                          )}
+                        </td>
+                        {isTransfer ? (
+                          <>
+                            <td className="px-3 py-2 text-sm">
+                              <div>{item.warehouseName}</div>
+                              <div className="text-xs text-gray-500">{item.locationName}</div>
+                            </td>
+                            <td className="px-3 py-2 text-sm">
+                              <div>{item.destinationWarehouseName}</div>
+                              <div className="text-xs text-gray-500">{item.destinationLocationName}</div>
+                            </td>
+                          </>
+                        ) : (
+                          <td className="px-3 py-2 text-sm">
+                            <div>{item.warehouseName}</div>
+                            <div className="text-xs text-gray-500">{item.locationName}</div>
+                          </td>
+                        )}
+                        <td className="px-3 py-2 text-sm text-right font-medium">
+                          {item.quantity}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <button
+                            onClick={() => handleRemoveFromList(item.tempId)}
+                            className="text-red-600 hover:text-red-800 text-sm"
+                            title="Eliminar de la lista"
+                          >
+                            <i className="fas fa-trash"></i>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Campos globales para referencia y notas */}
+              <div className="space-y-3 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Referencia (opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={globalReference}
+                    onChange={(e) => setGlobalReference(e.target.value)}
+                    placeholder="Número de factura, orden, etc."
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notas (opcional)
+                  </label>
+                  <textarea
+                    value={globalNotes}
+                    onChange={(e) => setGlobalNotes(e.target.value)}
+                    placeholder="Información adicional sobre estos movimientos"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    rows={2}
+                  ></textarea>
+                </div>
+              </div>
+
+              {/* Botón para guardar todos */}
+              <div className="flex justify-end">
+                <button
+                  onClick={handleSubmit}
+                  className={`px-6 py-2 rounded-md text-white text-sm font-medium ${
+                    isTransfer
+                      ? 'bg-green-600 hover:bg-green-700'
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <i className="fas fa-spinner fa-spin mr-2"></i>
+                      Procesando...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-save mr-2"></i>
+                      {isTransfer 
+                        ? `Registrar ${movementItems.length} Transferencia${movementItems.length > 1 ? 's' : ''}` 
+                        : `Registrar ${movementItems.length} ${isEntry ? 'Entrada' : 'Salida'}${movementItems.length > 1 ? 's' : ''}`}
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow">

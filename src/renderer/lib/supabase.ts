@@ -519,6 +519,30 @@ export const categoriesService = {
     await logAppEvent('category.export', 'category', null, { format: 'csv' });
     return csv;
   },
+  exportToExcel: async (): Promise<Blob> => {
+    const XLSX = await import('xlsx');
+    const categories = await categoriesService.getAll();
+    
+    // Crear datos para Excel
+    const excelData = categories.map(c => ({
+      'Nombre': c.name,
+      'Descripción': c.description || ''
+    }));
+    
+    // Crear worksheet y workbook
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Categorías');
+    
+    // Generar archivo Excel como blob
+    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([excelBuffer], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    });
+    
+    await logAppEvent('category.export', 'category', null, { format: 'excel' });
+    return blob;
+  },
   importFromCSV: async (fileContent: string): Promise<{ success: number; errors: number; messages: string[] }> => {
     const lines = fileContent.split('\n');
     const dataLines = lines.slice(1).filter(l => l.trim() !== '');
@@ -557,6 +581,96 @@ export const categoriesService = {
     const result = { success: successCount, errors: dataLines.length - successCount, messages: errors };
     await logAppEvent('category.import', 'category', null, { ...result });
     return result;
+  },
+  importFromExcel: async (file: File): Promise<{ success: number; errors: number; messages: string[] }> => {
+    const XLSX = await import('xlsx');
+    
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = async (e) => {
+        try {
+          const data = e.target?.result;
+          const workbook = XLSX.read(data, { type: 'binary' });
+          
+          // Leer la primera hoja
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as any[][];
+          
+          if (rows.length < 2) {
+            resolve({ success: 0, errors: 0, messages: ['El archivo está vacío'] });
+            return;
+          }
+          
+          const categories: any[] = [];
+          const errors: string[] = [];
+          
+          // Saltar la primera fila (encabezados) y procesar el resto
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length === 0) continue;
+            
+            const name = row[0] ? String(row[0]).trim() : '';
+            const description = row[1] ? String(row[1]).trim() : '';
+            
+            if (!name) {
+              errors.push(`Fila ${i + 1}: nombre requerido`);
+              continue;
+            }
+            
+            categories.push({ 
+              name, 
+              description: description || undefined 
+            });
+          }
+          
+          if (categories.length === 0) {
+            resolve({ success: 0, errors: rows.length - 1, messages: ['Sin categorías válidas', ...errors] });
+            return;
+          }
+          
+          const supabase = await getSupabaseClient();
+          let successCount = 0;
+          
+          // Insertar en lotes de 50
+          for (let i = 0; i < categories.length; i += 50) {
+            const batch = categories.slice(i, i + 50);
+            try {
+              const { data, error } = await supabase
+                .from('categories')
+                .insert(batch)
+                .select();
+              if (error) throw error;
+              if (data) successCount += data.length;
+            } catch (e: any) {
+              if (e.code === '23505') {
+                errors.push('Algunas categorías ya existían');
+              } else {
+                errors.push(e.message || 'Error al importar lote');
+              }
+            }
+          }
+          
+          const result = { 
+            success: successCount, 
+            errors: categories.length - successCount, 
+            messages: errors 
+          };
+          
+          await logAppEvent('category.import', 'category', null, { ...result, format: 'excel' });
+          resolve(result);
+          
+        } catch (error: any) {
+          reject(new Error(error.message || 'Error al procesar el archivo Excel'));
+        }
+      };
+      
+      reader.onerror = () => {
+        reject(new Error('Error al leer el archivo'));
+      };
+      
+      reader.readAsBinaryString(file);
+    });
   }
 };
 

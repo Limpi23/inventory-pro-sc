@@ -1,0 +1,45 @@
+appId: com.suitcore.inventariopro
+productName: Inventario Pro
+copyright: Copyright © 2025 SuitCore
+
+directories:
+  output: dist-builder
+  buildResources: src/assets
+
+files:
+  - dist/**/*
+  - electron.cjs
+  - preload.cjs
+  - package.json
+  - app-update.yml
+
+asarUnpack:
+  - "**/*.node"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: src/assets/app-icon.ico
+  artifactName: ${productName}-${version}-Setup.${ext}
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Inventario Pro
+  installerIcon: src/assets/app-icon.ico
+  uninstallerIcon: src/assets/app-icon.ico
+  installerHeaderIcon: src/assets/app-icon.ico
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+  allowElevation: true
+  perMachine: false
+
+publish:
+  provider: github
+  owner: Limpi23
+  repo: inventory-pro-sc
+  releaseType: release

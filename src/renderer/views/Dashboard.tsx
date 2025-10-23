@@ -403,7 +403,10 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Dashboard</h1>
+        <span className="text-sm text-gray-500 dark:text-gray-400">Panel de Control</span>
+      </div>
       
       {loading ? (
         <div className="flex justify-center py-20">
