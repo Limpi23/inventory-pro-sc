@@ -47,30 +47,59 @@ const InventoryGeneral: React.FC = () => {
   // Paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
+  
+  // Estados para la vista previa de impresión
+  const [showPrintOptions, setShowPrintOptions] = useState(false);
 
   // Refs para la impresión
   const printComponentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchInventory();
-  }, []);
+  }, [currentPage]); // Recargar cuando cambie la página
+
+  // Nuevo estado para total count
+  const [totalInventoryCount, setTotalInventoryCount] = useState<number>(0);
 
   const fetchInventory = async () => {
     try {
       setIsLoading(true);
       
-      // Obtener el inventario actual
       const client = await supabase.getClient();
-      const { data: inventoryData, error: inventoryError } = await client.from('current_stock')
+      
+      // Primero obtener el count total para la paginación
+      const { count: totalCount, error: countError } = await client
+        .from('current_stock')
+        .select('*', { count: 'exact', head: true });
+      
+      if (countError) throw countError;
+      
+      // Luego obtener solo los datos de la página actual
+      const startIndex = (currentPage - 1) * itemsPerPage;
+      const { data: inventoryData, error: inventoryError } = await client
+        .from('current_stock')
         .select('*')
-        .order('product_name');
+        .order('product_name')
+        .range(startIndex, startIndex + itemsPerPage - 1);
       
       if (inventoryError) throw inventoryError;
-  setInventory((inventoryData as any[]) || []);
+      
+      // Debug: Log the actual count
+      console.log('Inventory loaded:', {
+        totalRecords: totalCount || 0,
+        currentPageRecords: inventoryData?.length || 0,
+        currentPage,
+        itemsPerPage,
+        startIndex,
+        timestamp: new Date().toISOString()
+      });
+      
+      setTotalInventoryCount(totalCount || 0);
+      setInventory((inventoryData as any[]) || []);
       
       setIsLoading(false);
     } catch (err: any) {
-  // error already surfaced via toast elsewhere; no console noise
+      console.error('Error loading inventory:', err);
       setError(err.message);
       setIsLoading(false);
     }
@@ -186,31 +215,33 @@ const InventoryGeneral: React.FC = () => {
     setCurrentPage(1);
   };
 
-  // Filtrar inventario por producto, almacén y término de búsqueda
-  const filteredInventory = inventory.filter(item => {
-    if (selectedProduct && item.product_id !== selectedProduct) return false;
-    if (selectedWarehouse && item.warehouse_id !== selectedWarehouse) return false;
-    if (searchTerm && !item.product_name.toLowerCase().includes(searchTerm.toLowerCase()) && 
-       !(item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase()))) return false;
-    return true;
-  });
-
-  // Calcular paginación
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredInventory.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredInventory.length / itemsPerPage);
+  // Con paginación del servidor, no necesitamos filtrar en el frontend
+  // Los filtros se aplicarán en la consulta del servidor
+  const currentItems = inventory; // Los datos ya vienen paginados del servidor
+  const totalPages = Math.ceil(totalInventoryCount / itemsPerPage);
+  
+  // Calcular índices para mostrar "Mostrando X-Y de Z items"
+  const indexOfFirstItem = (currentPage - 1) * itemsPerPage;
+  const indexOfLastItem = Math.min(indexOfFirstItem + itemsPerPage, totalInventoryCount);
 
   // Cambiar de página
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
+
+  // Función para mostrar las opciones de impresión
+  const handleShowPrintOptions = () => {
+    setShowPrintOptions(true);
+  };
+
+  // Función para cerrar las opciones de impresión
+  const handleClosePrintOptions = () => {
+    setShowPrintOptions(false);
+  };
 
   // Manejo de la impresión usando react-to-print
   const handlePrint = useReactToPrint({
     contentRef: printComponentRef,
     documentTitle: `Inventario para Conteo Físico - ${new Date().toLocaleDateString()}`,
-    onAfterPrint: () => {
-  // impresión completada (silenciado)
-    }
+    onAfterPrint: handleClosePrintOptions
   });
   
   // Función para abrir las opciones de exportación
@@ -245,7 +276,7 @@ const InventoryGeneral: React.FC = () => {
           'Fecha de Conteo'
         ];
         
-        dataRows = filteredInventory.map(item => [
+        dataRows = currentItems.map(item => [
           item.product_name,
           item.sku || '',
           item.warehouse_name,
@@ -265,7 +296,7 @@ const InventoryGeneral: React.FC = () => {
           'Cantidad'
         ];
         
-        dataRows = filteredInventory.map(item => [
+        dataRows = currentItems.map(item => [
           item.product_name,
           item.sku || '',
           item.warehouse_name,
@@ -333,7 +364,7 @@ const InventoryGeneral: React.FC = () => {
             Exportar Inventario
           </button>
           <button
-            onClick={handlePrint}
+            onClick={handleShowPrintOptions}
             className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 flex items-center"
           >
             <i className="fas fa-print mr-2"></i>
@@ -559,10 +590,10 @@ const InventoryGeneral: React.FC = () => {
             </table>
 
             {/* Paginación */}
-            {filteredInventory.length > itemsPerPage && (
+            {totalInventoryCount > itemsPerPage && (
               <div className="mt-4 flex items-center justify-between">
                 <div className="text-sm text-gray-500">
-                  Mostrando {indexOfFirstItem + 1}-{Math.min(indexOfLastItem, filteredInventory.length)} de {filteredInventory.length} items
+                  Mostrando {indexOfFirstItem + 1}-{indexOfLastItem} de {totalInventoryCount} items
                 </div>
                 <div className="flex space-x-1">
                   <button
@@ -779,7 +810,7 @@ const InventoryGeneral: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredInventory.map((item, index) => (
+              {currentItems.map((item, index) => (
                 <tr key={`${item.product_id}-${item.warehouse_id}`} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
                   <td className="border border-gray-300 px-4 py-3">{item.product_name}</td>
                   <td className="border border-gray-300 px-4 py-3">{item.sku || '-'}</td>
@@ -818,6 +849,111 @@ const InventoryGeneral: React.FC = () => {
         </div>
       </div>
       
+      {/* Modal para vista previa de impresión */}
+      {showPrintOptions && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-6xl max-h-[90vh] shadow-lg">
+            <div className="flex items-start justify-between mb-4">
+              <h3 className="text-lg font-semibold">Vista Previa de Impresión</h3>
+              <button onClick={handleClosePrintOptions} className="text-gray-500 hover:text-gray-700">
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">Vista previa del inventario para conteo físico</p>
+              <div className="border rounded-md bg-gray-50 p-3 h-[500px] overflow-auto">
+                <div className="bg-white mx-auto">
+                  {/* Aquí se renderiza el contenido que se va a imprimir */}
+                  <div ref={printComponentRef} className="inventory-report-container">
+                    <div className="p-8">
+                      <div className="text-center border-b-2 border-gray-300 pb-4 mb-6">
+                        <h1 className="text-2xl font-bold text-gray-800">INVENTARIO PARA CONTEO FÍSICO</h1>
+                        <p className="text-lg text-gray-600 mt-2">Fecha: {new Date().toLocaleDateString()}</p>
+                      </div>
+                      
+                      <table className="w-full border-collapse border border-gray-400 text-sm">
+                        <thead>
+                          <tr className="bg-gray-100">
+                            <th className="border border-gray-400 px-3 py-2 text-left font-semibold">Producto</th>
+                            <th className="border border-gray-400 px-3 py-2 text-left font-semibold">SKU</th>
+                            <th className="border border-gray-400 px-3 py-2 text-left font-semibold">Almacén</th>
+                            <th className="border border-gray-400 px-3 py-2 text-center font-semibold">Cantidad Sistema</th>
+                            <th className="border border-gray-400 px-3 py-2 text-center font-semibold">Cantidad Física</th>
+                            <th className="border border-gray-400 px-3 py-2 text-center font-semibold">Diferencia</th>
+                            <th className="border border-gray-400 px-3 py-2 text-left font-semibold">Observaciones</th>
+                            <th className="border border-gray-400 px-3 py-2 text-left font-semibold">Responsable</th>
+                            <th className="border border-gray-400 px-3 py-2 text-left font-semibold">Fecha de Conteo</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {currentItems.map((item, index) => (
+                            <tr key={`${item.product_id}-${item.warehouse_id}`} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                              <td className="border border-gray-300 px-3 py-2">{item.product_name}</td>
+                              <td className="border border-gray-300 px-3 py-2">{item.sku || '-'}</td>
+                              <td className="border border-gray-300 px-3 py-2">{item.warehouse_name}</td>
+                              <td className="border border-gray-300 px-3 py-2 text-center">{item.current_quantity}</td>
+                              <td className="border border-gray-300 px-3 py-2" style={{ minWidth: '100px' }}></td>
+                              <td className="border border-gray-300 px-3 py-2" style={{ minWidth: '100px' }}></td>
+                              <td className="border border-gray-300 px-3 py-2" style={{ minWidth: '150px' }}></td>
+                              <td className="border border-gray-300 px-3 py-2" style={{ minWidth: '120px' }}></td>
+                              <td className="border border-gray-300 px-3 py-2" style={{ minWidth: '100px' }}></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      
+                      <div className="mt-8 grid grid-cols-3 gap-8">
+                        <div>
+                          <p className="font-semibold">Responsable del conteo:</p>
+                          <div className="mt-2 border-b border-gray-400 h-8"></div>
+                        </div>
+                        
+                        <div>
+                          <p className="font-semibold">Supervisor:</p>
+                          <div className="mt-2 border-b border-gray-400 h-8"></div>
+                        </div>
+                        
+                        <div>
+                          <p className="font-semibold">Fecha de conteo:</p>
+                          <div className="mt-2 border-b border-gray-400 h-8"></div>
+                        </div>
+                      </div>
+                      
+                      <div className="mt-6">
+                        <p className="font-semibold">Observaciones generales:</p>
+                        <div className="mt-2 border border-gray-400 h-24 p-2"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Nota: Esta es la vista previa del documento que se imprimirá. 
+                Use esta vista para revisar el contenido antes de imprimir.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={handleClosePrintOptions}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+              >
+                Cancelar
+              </button>
+              
+              <button
+                onClick={handlePrint}
+                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+              >
+                <i className="fas fa-print mr-2"></i>
+                Imprimir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Estilos para impresión - solo visible cuando se imprime */}
       <style>{`
         @media print {
