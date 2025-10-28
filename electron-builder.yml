@@ -13,6 +13,12 @@ files:
   - package.json
   - app-update.yml
 
+extraResources:
+  - from: supabase/migrations
+    to: migrations
+    filter:
+      - "**/*.sql"
+
 asarUnpack:
   - "**/*.node"
 

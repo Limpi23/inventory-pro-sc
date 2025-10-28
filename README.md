@@ -2,6 +2,15 @@
 
 Sistema profesional de inventario con Electron y Vite, diseñado para gestionar productos, entradas, salidas y notas de venta.
 
+## 🔐 Credenciales Predeterminadas
+
+Al configurar una nueva base de datos, el sistema crea automáticamente un usuario administrador genérico:
+
+- **Email**: `admin@suitcore.com`
+- **Contraseña**: `Suitcore123`
+
+**Importante**: Cambia estas credenciales inmediatamente después del primer inicio de sesión por seguridad.
+
 ## Características
 
 - Gestión de productos (creación, edición, eliminación)

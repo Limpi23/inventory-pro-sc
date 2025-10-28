@@ -64,6 +64,7 @@ const InvoiceForm: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [productStock, setProductStock] = useState<Record<string, number>>({});
+  const [isLoadingStock, setIsLoadingStock] = useState(false);
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
   const [editingItemDraft, setEditingItemDraft] = useState<{
@@ -119,6 +120,9 @@ const InvoiceForm: React.FC = () => {
     fetchWarehouses();
     fetchProducts();
     
+    // NO cargar stock inicial - solo se cargará cuando se seleccione un almacén
+    // fetchProductStock(''); // ← REMOVIDO
+    
     if (isEditing) {
       fetchInvoiceDetails();
     } else if (preselectedCustomerId) {
@@ -150,9 +154,27 @@ const InvoiceForm: React.FC = () => {
     }
   }, [editingItemIndex]);
 
+  // Nuevo useEffect: Cargar stock bajo demanda cuando cambian los productos filtrados
   useEffect(() => {
-    // Cargar stock cuando cambie el almacén (o al inicio sin almacén)
-    fetchProductStock(formData.warehouse_id);
+    if (filteredProducts.length > 0 && formData.warehouse_id) {
+      // Extraer SKUs de los productos filtrados
+      const skus = filteredProducts
+        .map(p => p.sku)
+        .filter((sku): sku is string => sku !== null && sku !== undefined);
+      
+      if (skus.length > 0) {
+        fetchStockForProducts(skus, formData.warehouse_id);
+      }
+    }
+  }, [filteredProducts, formData.warehouse_id]);
+
+  useEffect(() => {
+    // Ya NO cargar stock automáticamente cuando cambie el almacén
+    // El stock se cargará bajo demanda cuando el usuario busque productos
+    if (!formData.warehouse_id) {
+      // Si no hay almacén seleccionado, limpiar el stock
+      setProductStock({});
+    }
   }, [formData.warehouse_id]);
 
   // Recalcular items cuando cambie el descuento global
@@ -176,6 +198,19 @@ const InvoiceForm: React.FC = () => {
       setInvoiceItems(updatedItems);
     }
   }, [globalDiscountPercent, discountMode]);
+
+  // Cargar stock de los productos en la cotización
+  useEffect(() => {
+    if (invoiceItems.length > 0 && formData.warehouse_id) {
+      const skus = invoiceItems
+        .map(item => item.product_sku)
+        .filter((sku): sku is string => sku !== null && sku !== undefined);
+      
+      if (skus.length > 0) {
+        fetchStockForProducts(skus, formData.warehouse_id);
+      }
+    }
+  }, [invoiceItems.length, formData.warehouse_id]);
 
   // Restaurar focus al campo de búsqueda después de agregar productos
   useEffect(() => {
@@ -249,37 +284,130 @@ const InvoiceForm: React.FC = () => {
 
   const fetchProductStock = async (warehouseId: string) => {
     try {
-      let query = supabase
+      setIsLoadingStock(true);
+      
+      // Construir query sin encadenar - aplicar todo de una vez
+      const queryConfig: any = {
+        count: 'exact'
+      };
+      
+      let queryBuilder = supabase
         .from('current_stock')
-        .select('product_id, current_quantity, warehouse_id');
+        .select('product_id, product_name, sku, current_quantity, warehouse_id, warehouse_name', queryConfig);
       
       // Si hay almacén seleccionado, filtrar por ese almacén
       if (warehouseId) {
-        query = query.eq('warehouse_id', warehouseId);
+        queryBuilder = queryBuilder.eq('warehouse_id', warehouseId);
       }
       
-      const { data, error } = await query;
+      // Hacer múltiples consultas si es necesario (paginación manual)
+      const BATCH_SIZE = 1000;
+      let allData: any[] = [];
+      let offset = 0;
+      let hasMore = true;
       
-      if (error) throw error;
+      while (hasMore) {
+        const { data, error, count } = await queryBuilder.range(offset, offset + BATCH_SIZE - 1);
+        
+        if (error) {
+          console.error('[fetchProductStock] Error en query:', error);
+          throw error;
+        }
+        
+        if (data && data.length > 0) {
+          allData = allData.concat(data);
+          offset += BATCH_SIZE;
+          
+          // Si recibimos menos de BATCH_SIZE, ya no hay más datos
+          if (data.length < BATCH_SIZE) {
+            hasMore = false;
+          }
+          
+          // Límite de seguridad: máximo 50 batches (50,000 registros)
+          if (offset >= 50000) {
+            console.warn('[fetchProductStock] Alcanzado límite de seguridad de 50,000 registros');
+            hasMore = false;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+      
+      const data = allData;
+      const error = null;
+      
+      if (error) {
+        console.error('[fetchProductStock] Error en query:', error);
+        throw error;
+      }
       
       const stockMap: Record<string, number> = {};
       
       if (warehouseId) {
         // Stock específico del almacén seleccionado
+        // USAR SKU como clave en lugar de product_id
         data?.forEach(item => {
-          stockMap[item.product_id] = Number(item.current_quantity) || 0;
+          if (item.sku) {
+            stockMap[item.sku] = Number(item.current_quantity) || 0;
+          }
         });
       } else {
         // Stock total de todos los almacenes (sumar cantidades por producto)
+        // USAR SKU como clave en lugar de product_id
         data?.forEach(item => {
-          const currentQty = stockMap[item.product_id] || 0;
-          stockMap[item.product_id] = currentQty + (Number(item.current_quantity) || 0);
+          if (item.sku) {
+            const currentQty = stockMap[item.sku] || 0;
+            stockMap[item.sku] = currentQty + (Number(item.current_quantity) || 0);
+          }
         });
       }
       
       setProductStock(stockMap);
     } catch (err: any) {
-      console.error('Error fetching stock:', err);
+      console.error('[fetchProductStock] Error fatal:', err);
+      // NO resetear el stock en caso de error, mantener el estado anterior
+      toast.error('Error al cargar stock de productos');
+    } finally {
+      setIsLoadingStock(false);
+    }
+  };
+
+  // Nueva función: Cargar stock solo para productos específicos (optimizada)
+  const fetchStockForProducts = async (productSkus: string[], warehouseId: string) => {
+    if (!warehouseId || productSkus.length === 0) {
+      return;
+    }
+
+    try {
+      setIsLoadingStock(true);
+      
+      const { data, error } = await supabase
+        .from('current_stock')
+        .select('sku, current_quantity')
+        .eq('warehouse_id', warehouseId)
+        .in('sku', productSkus);
+      
+      if (error) {
+        console.error('[fetchStockForProducts] Error:', error);
+        throw error;
+      }
+      
+      // Actualizar solo los SKUs consultados (merge con stock existente)
+      setProductStock(prevStock => {
+        const newStock = { ...prevStock };
+        data?.forEach(item => {
+          if (item.sku) {
+            newStock[item.sku] = Number(item.current_quantity) || 0;
+          }
+        });
+        return newStock;
+      });
+      
+    } catch (err: any) {
+      console.error('[fetchStockForProducts] Error fatal:', err);
+      toast.error('Error al cargar stock de productos');
+    } finally {
+      setIsLoadingStock(false);
     }
   };
 
@@ -384,6 +512,7 @@ const InvoiceForm: React.FC = () => {
   
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+    
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -649,7 +778,6 @@ const InvoiceForm: React.FC = () => {
       let outboundMovementTypeId: number | null = null;
       if (status === 'emitida') {
         outboundMovementTypeId = await stockMovementService.getOutboundSaleTypeId();
-        console.log('[DEBUG] outboundMovementTypeId:', outboundMovementTypeId);
       }
 
       if (isEditing) {
@@ -801,14 +929,11 @@ const InvoiceForm: React.FC = () => {
               serial_id: item.serial_id || null
             }));
 
-            console.log('[DEBUG] Stock movements to insert:', JSON.stringify(stockMovements, null, 2));
-
             if (stockMovements.length) {
               const { error: movementError } = await supabase
                 .from('stock_movements')
                 .insert(stockMovements);
               if (movementError) throw movementError;
-              console.log('[DEBUG] Stock movements inserted successfully');
             }
 
             // Actualizar status de seriales a 'sold'
@@ -1014,11 +1139,17 @@ const InvoiceForm: React.FC = () => {
             <div className={`grid grid-cols-1 gap-4 mb-4 ${discountMode === 'product' ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Producto <span className="text-red-500">*</span></label>
+                {!formData.warehouse_id && (
+                  <p className="text-sm text-amber-600 mb-2">
+                    <i className="fas fa-info-circle mr-1"></i>
+                    Primero seleccione un almacén para ver productos disponibles
+                  </p>
+                )}
                 <div className="relative">
                   <input
                     ref={productSearchInputRef}
                     type="text"
-                    placeholder="Buscar por nombre o SKU..."
+                    placeholder={formData.warehouse_id ? "Buscar por nombre o SKU..." : "Seleccione un almacén primero..."}
                     value={productSearchTerm}
                     onChange={(e) => setProductSearchTerm(e.target.value)}
                     onKeyDownCapture={(event) => {
@@ -1031,15 +1162,19 @@ const InvoiceForm: React.FC = () => {
                       event.stopPropagation();
                     }}
                     autoComplete="off"
-                    className="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    disabled={!formData.warehouse_id}
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                   />
                   {filteredProducts.length > 0 && (
                     <div className="absolute z-10 mt-1 w-full bg-white shadow-lg rounded-md overflow-auto max-h-60 border border-gray-200">
-                      {filteredProducts.map(product => {
+                      {filteredProducts.map((product, index) => {
                         const searchLower = productSearchTerm.toLowerCase().trim();
                         const matchesSku = product.sku?.toLowerCase().includes(searchLower);
-                        const availableStock = productStock[product.id] || 0;
-                        const stockColor = availableStock > 0 ? 'text-green-600' : 'text-red-600';
+                        // CAMBIO: Usar SKU en lugar de ID para buscar stock
+                        const availableStock = product.sku ? productStock[product.sku] : undefined;
+                        const hasStockData = availableStock !== undefined;
+                        const stockValue = availableStock || 0;
+                        const stockColor = stockValue > 0 ? 'text-green-600' : 'text-red-600';
                         
                         return (
                           <div
@@ -1072,10 +1207,21 @@ const InvoiceForm: React.FC = () => {
                                 </div>
                               </div>
                               <div className="text-right ml-2">
-                                <div className={`text-sm font-semibold ${stockColor}`}>
-                                  Stock: {availableStock}
-                                </div>
-                                {!formData.warehouse_id && availableStock > 0 && (
+                                {isLoadingStock ? (
+                                  <div className="text-sm text-gray-400">
+                                    <i className="fas fa-spinner fa-spin mr-1"></i>
+                                    Cargando...
+                                  </div>
+                                ) : !hasStockData ? (
+                                  <div className="text-sm text-gray-400">
+                                    Stock: --
+                                  </div>
+                                ) : (
+                                  <div className={`text-sm font-semibold ${stockColor}`}>
+                                    Stock: {stockValue}
+                                  </div>
+                                )}
+                                {!formData.warehouse_id && hasStockData && stockValue > 0 && !isLoadingStock && (
                                   <div className="text-xs text-gray-400">
                                     (Total)
                                   </div>
@@ -1192,7 +1338,6 @@ const InvoiceForm: React.FC = () => {
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Disponible</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Precio Unit.</th>
                       {discountMode === 'product' && (
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descuento</th>
@@ -1205,8 +1350,11 @@ const InvoiceForm: React.FC = () => {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {invoiceItems.map((item, index) => {
                       const isEditingRow = editingItemIndex === index;
-                      const availableStock = productStock[item.product_id] || 0;
-                      const stockWarning = item.quantity > availableStock;
+                      // CAMBIO: Usar product_sku en lugar de product_id para buscar stock
+                      const availableStock = item.product_sku ? productStock[item.product_sku] : undefined;
+                      const hasStockData = availableStock !== undefined;
+                      const stockValue = availableStock || 0;
+                      const stockWarning = hasStockData && item.quantity > stockValue;
                       
                       return (
                         <tr key={`${item.product_id}-${index}`} className={stockWarning ? 'bg-red-50' : ''}>
@@ -1231,14 +1379,6 @@ const InvoiceForm: React.FC = () => {
                               />
                             ) : (
                               item.quantity
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className={`font-semibold ${stockWarning ? 'text-red-600' : 'text-green-600'}`}>
-                              {availableStock}
-                            </div>
-                            {stockWarning && (
-                              <div className="text-xs text-red-500">¡Stock insuficiente!</div>
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">

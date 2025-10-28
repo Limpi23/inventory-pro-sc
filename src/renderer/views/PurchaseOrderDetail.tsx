@@ -18,10 +18,12 @@ interface PurchaseOrder {
   supplier: {
     id: string;
     name: string;
-    contact_name: string;
-    phone: string;
-    email: string;
-    address: string;
+    contact_info?: {
+      contact_name?: string;
+      phone?: string;
+      email?: string;
+      address?: string;
+    };
   };
   warehouse: {
     id: string;
@@ -135,20 +137,6 @@ const PurchaseOrderDetail: React.FC = () => {
     })();
   }, [order?.warehouse_id, isReceivingItems]);
   
-  // Efecto para mostrar la recepción cuando los datos estén cargados
-  useEffect(() => {
-    if (order && !isLoading) {
-      const isReceivingRoute = location.pathname.includes('/recibir');
-      
-      // Si estamos en la ruta de recepción pero el estado de la orden no lo permite,
-      // redirigir a la vista de detalle normal
-      if (isReceivingRoute && !['enviada', 'recibida_parcialmente'].includes(order.status)) {
-        navigate(`/ordenes-compra/${id}`);
-        toast.error('Esta orden no puede recibir mercancía en su estado actual');
-      }
-    }
-  }, [location.hash, order, isLoading]);
-  
   // Efecto para detectar cambios en el hash
   useEffect(() => {
     if (location.hash === '#recibir' && order && !isLoading) {
@@ -188,10 +176,7 @@ const PurchaseOrderDetail: React.FC = () => {
         supplier: {
           id: (orderData as any)?.supplier?.id || '',
           name: (orderData as any)?.supplier?.name || 'Desconocido',
-          contact_name: (orderData as any)?.supplier?.contact_name || '',
-          phone: (orderData as any)?.supplier?.phone || '',
-            email: (orderData as any)?.supplier?.email || '',
-          address: (orderData as any)?.supplier?.address || ''
+          contact_info: (orderData as any)?.supplier?.contact_info || {}
         },
         warehouse: {
           id: (orderData as any)?.warehouse?.id || '',
@@ -1035,33 +1020,33 @@ const PurchaseOrderDetail: React.FC = () => {
                 <p className="mt-1 text-sm text-gray-900 dark:text-gray-300">{order.supplier.name}</p>
               </div>
               
-              {order.supplier.contact_name && (
+              {order.supplier.contact_info?.contact_name && (
                 <div>
                   <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Contacto</h4>
-                  <p className="mt-1 text-sm text-gray-900 dark:text-gray-300">{order.supplier.contact_name}</p>
+                  <p className="mt-1 text-sm text-gray-900 dark:text-gray-300">{order.supplier.contact_info.contact_name}</p>
                 </div>
               )}
               
               <div className="grid grid-cols-2 gap-4">
-                {order.supplier.phone && (
+                {order.supplier.contact_info?.phone && (
                   <div>
                     <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Teléfono</h4>
-                    <p className="mt-1 text-sm text-gray-900 dark:text-gray-300">{order.supplier.phone}</p>
+                    <p className="mt-1 text-sm text-gray-900 dark:text-gray-300">{order.supplier.contact_info.phone}</p>
                   </div>
                 )}
                 
-                {order.supplier.email && (
+                {order.supplier.contact_info?.email && (
                   <div>
                     <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Email</h4>
-                    <p className="mt-1 text-sm text-gray-900 dark:text-gray-300">{order.supplier.email}</p>
+                    <p className="mt-1 text-sm text-gray-900 dark:text-gray-300">{order.supplier.contact_info.email}</p>
                   </div>
                 )}
               </div>
               
-              {order.supplier.address && (
+              {order.supplier.contact_info?.address && (
                 <div>
                   <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Dirección</h4>
-                  <p className="mt-1 text-sm text-gray-900 dark:text-gray-300">{order.supplier.address}</p>
+                  <p className="mt-1 text-sm text-gray-900 dark:text-gray-300">{order.supplier.contact_info.address}</p>
                 </div>
               )}
             </div>

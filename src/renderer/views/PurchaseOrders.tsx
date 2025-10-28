@@ -28,10 +28,12 @@ interface PurchaseOrderPreview extends PurchaseOrder {
   supplier?: {
     id?: string;
     name?: string;
-    contact_name?: string;
-    phone?: string;
-    email?: string;
-    address?: string;
+    contact_info?: {
+      contact_name?: string;
+      phone?: string;
+      email?: string;
+      address?: string;
+    };
   } | null;
   warehouse?: {
     id?: string;
@@ -200,7 +202,7 @@ const PurchaseOrders: React.FC = () => {
         .from('purchase_orders')
         .select(`
           *,
-          supplier:suppliers(id, name, contact_name, phone, email, address),
+          supplier:suppliers(id, name, contact_info),
           warehouse:warehouses(id, name, location)
         `)
         .eq('id', orderId)
@@ -728,18 +730,18 @@ const PurchaseOrders: React.FC = () => {
                       <div>
                         <h4 className="text-sm font-medium text-gray-500">Proveedor</h4>
                         <p className="font-semibold text-gray-900">{selectedOrder.supplier?.name || selectedOrder.supplier_name}</p>
-                        {selectedOrder.supplier?.contact_name && (
-                          <p className="text-sm text-gray-600">Contacto: {selectedOrder.supplier.contact_name}</p>
+                        {selectedOrder.supplier?.contact_info?.contact_name && (
+                          <p className="text-sm text-gray-600">Contacto: {selectedOrder.supplier.contact_info.contact_name}</p>
                         )}
-                        {(selectedOrder.supplier?.phone || selectedOrder.supplier?.email) && (
+                        {(selectedOrder.supplier?.contact_info?.phone || selectedOrder.supplier?.contact_info?.email) && (
                           <p className="text-sm text-gray-600">
-                            {selectedOrder.supplier?.phone}
-                            {selectedOrder.supplier?.phone && selectedOrder.supplier?.email && ' | '}
-                            {selectedOrder.supplier?.email}
+                            {selectedOrder.supplier?.contact_info?.phone}
+                            {selectedOrder.supplier?.contact_info?.phone && selectedOrder.supplier?.contact_info?.email && ' | '}
+                            {selectedOrder.supplier?.contact_info?.email}
                           </p>
                         )}
-                        {selectedOrder.supplier?.address && (
-                          <p className="text-sm text-gray-600">{selectedOrder.supplier.address}</p>
+                        {selectedOrder.supplier?.contact_info?.address && (
+                          <p className="text-sm text-gray-600">{selectedOrder.supplier.contact_info.address}</p>
                         )}
                       </div>
                       <div>

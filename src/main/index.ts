@@ -200,7 +200,7 @@ ipcMain.handle('save-supabase-config', async (_event, config) => {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
     return { success: true };
   } catch (error) {
-    return { success: false, error: error.message };
+    return { success: false, error: (error as Error).message };
   }
 });
 
@@ -214,5 +214,33 @@ ipcMain.handle('get-supabase-config', async () => {
     return {};
   } catch (error) {
     return {};
+  }
+});
+
+// Handler para leer archivos de migración SQL
+ipcMain.handle('read-migration-file', async (_event, migrationName: string) => {
+  try {
+    // Determinar la ruta base dependiendo del entorno
+    let migrationsPath: string;
+    
+    if (process.env.NODE_ENV === 'development') {
+      // En desarrollo, leer desde la carpeta del proyecto
+      migrationsPath = path.join(__dirname, '../../supabase/migrations');
+    } else {
+      // En producción, leer desde la carpeta de recursos empaquetados
+      migrationsPath = path.join(process.resourcesPath, 'migrations');
+    }
+
+    const filePath = path.join(migrationsPath, `${migrationName}.sql`);
+    
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Archivo de migración no encontrado: ${migrationName}`);
+    }
+
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return content;
+  } catch (error) {
+    console.error('Error leyendo archivo de migración:', error);
+    throw error;
   }
 }); 

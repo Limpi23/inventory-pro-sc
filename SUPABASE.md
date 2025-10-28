@@ -2,6 +2,15 @@
 
 Este documento explica cómo configurar Supabase para su uso con Inventario Pro - SC.
 
+## 🔐 Usuario Administrador Predeterminado
+
+Al ejecutar las migraciones en una nueva base de datos Supabase, el sistema creará automáticamente un usuario administrador genérico:
+
+- **Email**: `admin@suitcore.com`
+- **Contraseña**: `Suitcore123`
+
+**⚠️ Importante**: Por razones de seguridad, debes cambiar estas credenciales inmediatamente después del primer inicio de sesión.
+
 ## Creación del proyecto en Supabase
 
 1. Crea una cuenta en [Supabase](https://supabase.com) si aún no la tienes.
@@ -13,9 +22,30 @@ Este documento explica cómo configurar Supabase para su uso con Inventario Pro 
 
 Una vez que hayas creado el proyecto, sigue estos pasos para configurar la base de datos:
 
+### Opción 1: Usando migraciones de Supabase (Recomendado)
+
+1. Instala la CLI de Supabase si aún no la tienes:
+```bash
+npm install -g supabase
+```
+
+2. Vincula tu proyecto local con tu proyecto de Supabase:
+```bash
+supabase link --project-ref tu-project-ref
+```
+
+3. Ejecuta las migraciones:
+```bash
+supabase db push
+```
+
+Esto creará automáticamente todas las tablas, funciones y el **usuario administrador genérico** (`admin@suitcore.com / Suitcore123`).
+
+### Opción 2: Manual desde el SQL Editor
+
 1. Ve a la sección "SQL Editor" en el panel de control de Supabase.
-2. Crea una nueva consulta y copia todo el contenido del archivo `sql/schema.sql` proporcionado en este proyecto.
-3. Ejecuta el script SQL para crear todas las tablas necesarias.
+2. Ejecuta los archivos de migración en orden desde la carpeta `supabase/migrations/`.
+3. Asegúrate de ejecutar la migración `20251024000000_create_generic_admin_user.sql` para crear el usuario administrador.
 
 El esquema incluye:
 - Tablas para productos, categorías, proveedores, clientes, almacenes

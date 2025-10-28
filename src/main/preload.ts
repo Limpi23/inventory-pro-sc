@@ -15,6 +15,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Notas de venta
   createSaleNote: (saleData: any) => ipcRenderer.invoke('create-sale-note', saleData),
   getSaleNotes: () => ipcRenderer.invoke('get-sale-notes'),
+  
+  // Migraciones
+  readMigrationFile: (migrationName: string) => ipcRenderer.invoke('read-migration-file', migrationName),
 });
 
 // Exponer APIs protegidas a través del puente contextual

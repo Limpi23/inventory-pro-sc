@@ -41,8 +41,8 @@ ALTER TABLE public.users ADD COLUMN tenant_id UUID REFERENCES tenants(id);
 INSERT INTO tenants (id, name, contact_email)
 VALUES (
   uuid_generate_v4(),
-  'Negocio Predeterminado',
-  'admin@ejemplo.com'
+  'Negocio SuitCore',
+  'admin@suitcore.com'
 );
 
 -- Actualizar usuarios existentes para asignarles el tenant predeterminado
