@@ -111,6 +111,7 @@ const InvoiceForm: React.FC = () => {
   const [productSearchTerm, setProductSearchTerm] = useState('');
   const [availableSerials, setAvailableSerials] = useState<Record<string, ProductSerial[]>>({});
   const [selectedSerialId, setSelectedSerialId] = useState<string>('');
+  const [inputKey, setInputKey] = useState(0); // Key para forzar re-render del input
   
   // Ref para el campo de búsqueda de productos
   const productSearchInputRef = useRef<HTMLInputElement>(null);
@@ -226,6 +227,9 @@ const InvoiceForm: React.FC = () => {
   // Hacer focus inicial cuando termina de cargar el componente
   useEffect(() => {
     if (!isLoading && !isEditing && productSearchInputRef.current) {
+      // Forzar re-render del input para evitar problemas de focus en Windows
+      setInputKey(prev => prev + 1);
+      
       // Delay más largo para asegurar que todo el componente esté renderizado
       const timer = setTimeout(() => {
         productSearchInputRef.current?.focus();
@@ -1147,11 +1151,16 @@ const InvoiceForm: React.FC = () => {
                 )}
                 <div className="relative">
                   <input
+                    key={inputKey}
                     ref={productSearchInputRef}
                     type="text"
                     placeholder={formData.warehouse_id ? "Buscar por nombre o SKU..." : "Seleccione un almacén primero..."}
                     value={productSearchTerm}
                     onChange={(e) => setProductSearchTerm(e.target.value)}
+                    onClick={(e) => {
+                      // Forzar focus explícito en Windows
+                      e.currentTarget.focus();
+                    }}
                     onKeyDownCapture={(event) => {
                       event.stopPropagation();
                     }}
