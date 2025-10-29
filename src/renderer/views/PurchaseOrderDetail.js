@@ -75,18 +75,6 @@ const PurchaseOrderDetail = () => {
             }
         })();
     }, [order?.warehouse_id, isReceivingItems]);
-    // Efecto para mostrar la recepción cuando los datos estén cargados
-    useEffect(() => {
-        if (order && !isLoading) {
-            const isReceivingRoute = location.pathname.includes('/recibir');
-            // Si estamos en la ruta de recepción pero el estado de la orden no lo permite,
-            // redirigir a la vista de detalle normal
-            if (isReceivingRoute && !['enviada', 'recibida_parcialmente'].includes(order.status)) {
-                navigate(`/ordenes-compra/${id}`);
-                toast.error('Esta orden no puede recibir mercancía en su estado actual');
-            }
-        }
-    }, [location.hash, order, isLoading]);
     // Efecto para detectar cambios en el hash
     useEffect(() => {
         if (location.hash === '#recibir' && order && !isLoading) {
