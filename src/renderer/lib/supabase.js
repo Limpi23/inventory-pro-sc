@@ -55,6 +55,11 @@ export const supabase = {
         }
         return supabaseInstance;
     },
+    // Reinicializar el cliente con nuevas credenciales
+    reinitialize: async () => {
+        supabaseInstance = null; // Limpiar instancia existente
+        return await supabase.getClient(); // Crear nueva instancia con credenciales actualizadas
+    },
     // Compat: permite usar supabase.from('tabla') como antes
     from: (table) => {
         if (!supabaseInstance) {

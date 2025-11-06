@@ -512,27 +512,32 @@ const Settings: React.FC = () => {
                   <Button
                     variant="destructive"
                     onClick={async () => {
-                      if (!confirm('¿Eliminar configuración Supabase guardada? Se cerrará la sesión.')) return;
+                      if (!confirm('¿Eliminar configuración Supabase guardada? Deberás configurarla nuevamente.')) return;
                       try {
                         await win.supabaseConfig.save({ url: '', anonKey: '' });
                         localStorage.removeItem('inventory_session');
                         setSupabaseConfig(null);
-                        toast.success('Configuración eliminada. Reinicia o vuelve a abrir para onboarding.');
+                        toast.success('Configuración eliminada. Redirigiendo...');
+                        // Esperar un momento y luego forzar el onboarding
+                        setTimeout(() => {
+                          sessionStorage.setItem('forceOnboarding','1');
+                          location.reload();
+                        }, 1000);
                       } catch (e:any) {
                         toast.error('Error eliminando configuración');
                       }
                     }}
-                  >Eliminar configuración</Button>
+                  >Eliminar y Reconfigurar</Button>
                   <Button
                     onClick={() => {
-                      // Forzar mostrar Onboarding almacenando un flag y recargando
-                      localStorage.removeItem('inventory_session');
-                      sessionStorage.setItem('forceOnboarding','1');
-                      location.reload();
+                      // Abrir modal de configuración sin eliminar datos
+                      const event = new CustomEvent('show-supabase-config');
+                      window.dispatchEvent(event);
+                      toast.success('Abriendo configuración de conexión...');
                     }}
-                  >Mostrar Onboarding</Button>
+                  >Modificar Configuración</Button>
                 </div>
-                <p className="text-xs text-muted-foreground">Si instalaste por primera vez y no apareció el asistente, puedes forzarlo aquí.</p>
+                <p className="text-xs text-muted-foreground">Puedes modificar la configuración de conexión o eliminarla para configurar una nueva base de datos.</p>
               </div>
             </CardContent>
           </Card>

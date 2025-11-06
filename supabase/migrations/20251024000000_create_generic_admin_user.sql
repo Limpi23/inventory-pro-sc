@@ -12,51 +12,69 @@ ON CONFLICT (id) DO NOTHING;
 DO $$
 DECLARE
   admin_user_id uuid;
+  existing_user_id uuid;
 BEGIN
   -- Generar un UUID fijo para el usuario admin genérico
   admin_user_id := 'a0000000-0000-0000-0000-000000000001'::uuid;
   
-  -- Insertar en auth.users si no existe
-  INSERT INTO auth.users (
-    id,
-    instance_id,
-    aud,
-    role,
-    email,
-    encrypted_password,
-    email_confirmed_at,
-    recovery_sent_at,
-    last_sign_in_at,
-    raw_app_meta_data,
-    raw_user_meta_data,
-    created_at,
-    updated_at,
-    confirmation_token,
-    email_change,
-    email_change_token_new,
-    recovery_token
-  )
-  VALUES (
-    admin_user_id,
-    '00000000-0000-0000-0000-000000000000',
-    'authenticated',
-    'authenticated',
-    'admin@suitcore.com',
-    -- Hash bcrypt de 'Suitcore123': generado con bcrypt
-    '$2b$10$T3GFyHy0bz5IjsVQJnLcCOVJ7u1F3Wv5P5uX7hXv/rFIApUtNZeLS',
-    NOW(),
-    NULL,
-    NULL,
-    '{"provider":"email","providers":["email"]}',
-    '{"full_name":"Administrador SuitCore"}',
-    NOW(),
-    NOW(),
-    '',
-    '',
-    '',
-    ''
-  )
-  ON CONFLICT (id) DO NOTHING;
+  -- Verificar si ya existe un usuario con este email
+  SELECT id INTO existing_user_id 
+  FROM auth.users 
+  WHERE email = 'admin@suitcore.com';
+  
+  -- Si existe, solo actualizar la contraseña si es necesario
+  IF existing_user_id IS NOT NULL THEN
+    UPDATE auth.users 
+    SET encrypted_password = '$2b$10$T3GFyHy0bz5IjsVQJnLcCOVJ7u1F3Wv5P5uX7hXv/rFIApUtNZeLS',
+        updated_at = NOW()
+    WHERE id = existing_user_id;
+  ELSE
+    -- Insertar en auth.users si no existe
+    INSERT INTO auth.users (
+      id,
+      instance_id,
+      aud,
+      role,
+      email,
+      encrypted_password,
+      email_confirmed_at,
+      recovery_sent_at,
+      last_sign_in_at,
+      raw_app_meta_data,
+      raw_user_meta_data,
+      created_at,
+      updated_at,
+      confirmation_token,
+      email_change,
+      email_change_token_new,
+      recovery_token
+    )
+    VALUES (
+      admin_user_id,
+      '00000000-0000-0000-0000-000000000000',
+      'authenticated',
+      'authenticated',
+      'admin@suitcore.com',
+      -- Hash bcrypt de 'Suitcore123': generado con bcrypt
+      '$2b$10$T3GFyHy0bz5IjsVQJnLcCOVJ7u1F3Wv5P5uX7hXv/rFIApUtNZeLS',
+      NOW(),
+      NULL,
+      NULL,
+      '{"provider":"email","providers":["email"]}',
+      '{"full_name":"Administrador SuitCore"}',
+      NOW(),
+      NOW(),
+      '',
+      '',
+      '',
+      ''
+    );
+  END IF;
+  
+  -- Usar el ID del usuario existente o el nuevo
+  IF existing_user_id IS NOT NULL THEN
+    admin_user_id := existing_user_id;
+  END IF;
   
   -- Insertar en public.users si no existe
   INSERT INTO public.users (
@@ -77,13 +95,25 @@ BEGIN
     NOW(),
     NOW()
   )
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (id) DO UPDATE
+  SET 
+    email = EXCLUDED.email,
+    full_name = EXCLUDED.full_name,
+    active = EXCLUDED.active,
+    role_id = EXCLUDED.role_id,
+    updated_at = NOW();
   
   -- También mantener el hash en public.users para compatibilidad si existe la columna
-  UPDATE public.users
-  SET password_hash = '$2b$10$T3GFyHy0bz5IjsVQJnLcCOVJ7u1F3Wv5P5uX7hXv/rFIApUtNZeLS'
-  WHERE id = admin_user_id 
-  AND password_hash IS NULL;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'users' 
+    AND column_name = 'password_hash'
+  ) THEN
+    UPDATE public.users
+    SET password_hash = '$2b$10$T3GFyHy0bz5IjsVQJnLcCOVJ7u1F3Wv5P5uX7hXv/rFIApUtNZeLS'
+    WHERE id = admin_user_id
+    AND password_hash IS NULL;
+  END IF;
   
 END $$;
 

@@ -129,6 +129,104 @@ const App = () => {
             setReady(true);
         }
     }, []);
+    // Escuchar eventos del menú de Electron
+    useEffect(() => {
+        const win = window;
+        // Listener para "Configurar Conexión Supabase"
+        const handleShowSupabaseConfig = () => {
+            setShowConfigModal(true);
+        };
+        // Listener personalizado desde Settings
+        const handleCustomShowConfig = () => {
+            setShowConfigModal(true);
+        };
+        // Listener para "Ejecutar Migraciones"
+        const handleRunMigrations = async () => {
+            const { toast } = await import('react-hot-toast');
+            const { migrationService } = await import('./lib/migrationService');
+            toast.loading('Ejecutando migraciones...', { id: 'migrations' });
+            try {
+                await migrationService.runMigrations((progress) => {
+                    if (progress.status === 'running') {
+                        toast.loading(`${progress.currentMigration} (${progress.currentIndex}/${progress.totalMigrations})`, { id: 'migrations' });
+                    }
+                });
+                toast.success('Migraciones completadas exitosamente', { id: 'migrations' });
+            }
+            catch (error) {
+                // Verificar si es el error de bootstrap requerido
+                if (error.message?.includes('BOOTSTRAP_REQUIRED')) {
+                    toast.error('Se requiere configuración inicial', { id: 'migrations', duration: 5000 });
+                    // Extraer el SQL del mensaje de error
+                    const sqlMatch = error.message.match(/ejecuta:\n\n([\s\S]+)$/);
+                    const bootstrapSQL = sqlMatch ? sqlMatch[1] : '';
+                    if (bootstrapSQL) {
+                        // Copiar al portapapeles
+                        try {
+                            await navigator.clipboard.writeText(bootstrapSQL);
+                            toast.success('SQL copiado al portapapeles.\nEjecútalo en Supabase SQL Editor:\nhttps://supabase.com/dashboard', { id: 'bootstrap-copied', duration: 10000 });
+                        }
+                        catch (clipError) {
+                            toast.error('Por favor, ejecuta el SQL manualmente en Supabase SQL Editor', { id: 'bootstrap-manual', duration: 8000 });
+                        }
+                        // Mostrar el SQL en consola para que el usuario pueda copiarlo
+                        console.log('==========================================');
+                        console.log('EJECUTA ESTE SQL EN SUPABASE SQL EDITOR:');
+                        console.log('==========================================');
+                        console.log(bootstrapSQL);
+                        console.log('==========================================');
+                    }
+                }
+                else {
+                    toast.error(`Error: ${error.message}`, { id: 'migrations', duration: 5000 });
+                }
+            }
+        };
+        // Listener para "Verificar Estado de BD"
+        const handleCheckMigrationStatus = async () => {
+            const { migrationService } = await import('./lib/migrationService');
+            const { toast } = await import('react-hot-toast');
+            toast.loading('Verificando estado...', { id: 'check-db' });
+            try {
+                const needsSetup = await migrationService.needsInitialSetup();
+                if (needsSetup) {
+                    toast.error('La base de datos requiere migraciones. Use "Ejecutar Migraciones" del menú.', { id: 'check-db' });
+                }
+                else {
+                    toast.success('La base de datos está actualizada.', { id: 'check-db' });
+                }
+            }
+            catch (error) {
+                toast.error(`Error al verificar: ${error.message}`, { id: 'check-db' });
+            }
+        };
+        // Guardar referencias de los listeners
+        let showConfigListener;
+        let runMigrationsListener;
+        let checkStatusListener;
+        // Registrar listeners de Electron IPC
+        if (win.electron?.ipcRenderer) {
+            showConfigListener = win.electron.ipcRenderer.on('show-supabase-config', handleShowSupabaseConfig);
+            runMigrationsListener = win.electron.ipcRenderer.on('run-migrations-manual', handleRunMigrations);
+            checkStatusListener = win.electron.ipcRenderer.on('check-migration-status', handleCheckMigrationStatus);
+        }
+        // Registrar listener de evento personalizado
+        window.addEventListener('show-supabase-config', handleCustomShowConfig);
+        return () => {
+            if (win.electron?.ipcRenderer) {
+                if (showConfigListener) {
+                    win.electron.ipcRenderer.removeListener('show-supabase-config', showConfigListener);
+                }
+                if (runMigrationsListener) {
+                    win.electron.ipcRenderer.removeListener('run-migrations-manual', runMigrationsListener);
+                }
+                if (checkStatusListener) {
+                    win.electron.ipcRenderer.removeListener('check-migration-status', checkStatusListener);
+                }
+            }
+            window.removeEventListener('show-supabase-config', handleCustomShowConfig);
+        };
+    }, []);
     const handleOpenConfig = () => {
         setShowConfigModal(true);
     };

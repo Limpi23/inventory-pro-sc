@@ -20,7 +20,11 @@ contextBridge.exposeInMainWorld('electron', {
     // Comunicación IPC
     ipcRenderer: {
         on: (channel, listener) => {
-            ipcRenderer.on(channel, listener);
+            console.log('[Preload] Registrando listener para canal:', channel);
+            // Wrapper para que funcione correctamente con contextBridge
+            const subscription = (_event, ...args) => listener(...args);
+            ipcRenderer.on(channel, subscription);
+            return subscription;
         },
         send: (channel, ...args) => {
             ipcRenderer.send(channel, ...args);

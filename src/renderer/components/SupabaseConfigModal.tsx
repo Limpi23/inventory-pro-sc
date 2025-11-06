@@ -8,6 +8,7 @@ import {
   DialogClose
 } from './ui/dialog';
 import { migrationService, MigrationProgress } from '../lib/migrationService';
+import { supabase } from '../lib/supabase';
 import MigrationProgressUI from './MigrationProgressUI';
 
 interface SupabaseConfigModalProps {
@@ -67,13 +68,17 @@ const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ onFinish, onC
     try {
       // 1. Guardar la configuración primero
       const result = await (window as any).supabaseConfig.save({ url, anonKey: accessKey });
+      
       if (result && result.error) {
         setError('Error al guardar: ' + result.error);
         setSaving(false);
         return;
       }
+      
+      // 2. Forzar recarga de Supabase client con nuevas credenciales
+      await supabase.reinitialize();
 
-      // 2. Verificar si la base de datos necesita setup inicial
+      // 3. Verificar si la base de datos necesita setup inicial
       const needsSetup = await migrationService.needsInitialSetup();
       
       if (needsSetup) {
@@ -81,7 +86,7 @@ const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ onFinish, onC
         setShowMigrationProgress(true);
         setSaving(false);
 
-        // 3. Ejecutar migraciones con reporte de progreso
+        // 4. Ejecutar migraciones con reporte de progreso
         await migrationService.runMigrations((progress) => {
           setMigrationProgress(progress);
           
@@ -99,7 +104,6 @@ const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ onFinish, onC
         window.location.reload();
       }
     } catch (e) {
-      console.error('Error en handleSave:', e);
       setError('Error al guardar la configuración: ' + ((e as any)?.message || e));
       setSaving(false);
       setShowMigrationProgress(false);
@@ -138,6 +142,16 @@ const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ onFinish, onC
                   placeholder="https://..."
                   value={url}
                   onChange={e => setUrl(e.target.value)}
+                  onPaste={(e) => {
+                    // Permitir pegado explícitamente
+                    e.stopPropagation();
+                  }}
+                  onKeyDown={(e) => {
+                    // Permitir Ctrl+V / Cmd+V
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+                      e.stopPropagation();
+                    }
+                  }}
                   style={{ width: '100%', marginBottom: 16, padding: 8, borderRadius: 6, border: '1px solid #ccc' }}
                   autoFocus
                 />
@@ -147,6 +161,16 @@ const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ onFinish, onC
                   placeholder="Clave de acceso"
                   value={accessKey}
                   onChange={e => setAccessKey(e.target.value)}
+                  onPaste={(e) => {
+                    // Permitir pegado explícitamente
+                    e.stopPropagation();
+                  }}
+                  onKeyDown={(e) => {
+                    // Permitir Ctrl+V / Cmd+V
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+                      e.stopPropagation();
+                    }
+                  }}
                   style={{ width: '100%', marginBottom: 16, padding: 8, borderRadius: 6, border: '1px solid #ccc' }}
                 />
                 {error && <div style={{color:'red',marginBottom:12}}>{error}</div>}

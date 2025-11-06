@@ -184,6 +184,53 @@ function createWindow() {
     sendDatabaseConfigToRenderer();
     sendSupabaseConfigToRenderer();
   });
+  
+  // Habilitar menú contextual para copiar/pegar en inputs
+  mainWindow.webContents.on('context-menu', (event, params) => {
+    const { Menu, MenuItem } = require('electron');
+    const menu = new Menu();
+    
+    // Agregar opciones de edición si hay texto seleccionado o campo editable
+    if (params.isEditable || params.selectionText) {
+      if (params.misspelledWord) {
+        menu.append(new MenuItem({ label: 'Agregar al diccionario', click: () => {} }));
+        menu.append(new MenuItem({ type: 'separator' }));
+      }
+      
+      menu.append(new MenuItem({ 
+        label: 'Cortar', 
+        role: 'cut',
+        enabled: params.editFlags.canCut
+      }));
+      menu.append(new MenuItem({ 
+        label: 'Copiar', 
+        role: 'copy',
+        enabled: params.editFlags.canCopy
+      }));
+      menu.append(new MenuItem({ 
+        label: 'Pegar', 
+        role: 'paste',
+        enabled: params.editFlags.canPaste
+      }));
+      menu.append(new MenuItem({ type: 'separator' }));
+      menu.append(new MenuItem({ 
+        label: 'Seleccionar todo', 
+        role: 'selectAll'
+      }));
+    } else if (params.selectionText) {
+      // Si solo hay texto seleccionado (no editable)
+      menu.append(new MenuItem({ 
+        label: 'Copiar', 
+        role: 'copy'
+      }));
+    }
+    
+    // Mostrar el menú solo si tiene items
+    if (menu.items.length > 0) {
+      menu.popup();
+    }
+  });
+  
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -486,17 +533,26 @@ function setupApplicationMenu() {
           }
         },
         {
-          label: 'Mostrar Onboarding',
+          label: 'Configurar Conexión',
           click: () => {
-            try {
-              const Store = require('electron-store');
-              const s = new Store();
-              s.set('supabase', { url: '', anonKey: '' }); // limpiar
-            } catch (e) {
-              console.warn('No se pudo limpiar supabase store', e);
-            }
             if (mainWindow) {
-              mainWindow.webContents.executeJavaScript("sessionStorage.setItem('forceOnboarding','1'); location.reload();");
+              mainWindow.webContents.send('show-supabase-config');
+            }
+          }
+        },
+        {
+          label: 'Ejecutar Migraciones',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('run-migrations-manual');
+            }
+          }
+        },
+        {
+          label: 'Verificar Estado de BD',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('check-migration-status');
             }
           }
         },
@@ -537,3 +593,30 @@ ipcMain.handle('get-supabase-config', () => {
 ipcMain.handle('test-supabase-connection', () => testSupabaseConnection(false));
 // Versión de la aplicación para mostrar en el renderer
 ipcMain.handle('app-version', () => app.getVersion());
+
+// Handler para leer archivos de migración
+ipcMain.handle('read-migration-file', async (event, migrationName) => {
+  try {
+    // Buscar el archivo de migración en supabase/migrations/
+    const migrationsDir = path.join(app.getAppPath(), 'supabase', 'migrations');
+    
+    // Listar archivos en el directorio
+    const files = fs.readdirSync(migrationsDir);
+    
+    // Buscar el archivo que coincida con el nombre de migración
+    const migrationFile = files.find(file => file.includes(migrationName));
+    
+    if (!migrationFile) {
+      return '';
+    }
+    
+    // Leer el contenido del archivo
+    const filePath = path.join(migrationsDir, migrationFile);
+    const content = fs.readFileSync(filePath, 'utf8');
+    
+    return content;
+  } catch (error) {
+    console.error(`Error leyendo migración ${migrationName}:`, error);
+    return '';
+  }
+});

@@ -51,7 +51,14 @@ export const migrationService = {
     async needsInitialSetup() {
         try {
             const client = await supabase.getClient();
-            // Verificar si existe la tabla de usuarios
+            // Primero verificar si existe la función execute_migration
+            const { data: funcData, error: funcError } = await client.rpc('execute_migration', {
+                migration_sql: 'SELECT 1'
+            });
+            if (funcError && funcError.code === 'PGRST202') {
+                return true;
+            }
+            // Si la función existe, verificar si existe la tabla de usuarios
             const { data, error } = await client
                 .from('users')
                 .select('id')
@@ -63,10 +70,15 @@ export const migrationService = {
             return false;
         }
         catch (error) {
-            console.error('Error verificando estado de la BD:', error);
             // En caso de error, asumimos que necesita setup
             return true;
         }
+    },
+    /**
+     * Obtiene el SQL de bootstrap que debe ejecutarse manualmente
+     */
+    async getBootstrapSQL() {
+        return await this.getMigrationContent('20251024000001_create_migration_executor');
     },
     /**
      * Ejecuta todas las migraciones con reporte de progreso
@@ -75,47 +87,24 @@ export const migrationService = {
         const client = await supabase.getClient();
         const totalMigrations = MIGRATIONS.length;
         try {
-            // PASO 1: Crear la función execute_migration primero (bootstrap)
+            // PASO 1: Verificar que existe la función execute_migration
             onProgress({
-                currentMigration: 'Preparando entorno de migración...',
+                currentMigration: 'Verificando entorno de migración...',
                 currentIndex: 0,
                 totalMigrations: totalMigrations + 1,
                 percentage: 0,
                 status: 'running'
             });
-            const bootstrapSQL = `
-        CREATE OR REPLACE FUNCTION public.execute_migration(migration_sql TEXT)
-        RETURNS jsonb
-        LANGUAGE plpgsql
-        SECURITY DEFINER
-        AS $$
-        DECLARE
-          result_data jsonb;
-        BEGIN
-          EXECUTE migration_sql;
-          result_data := jsonb_build_object('success', true, 'message', 'OK');
-          RETURN result_data;
-        EXCEPTION
-          WHEN OTHERS THEN
-            result_data := jsonb_build_object('success', false, 'error', SQLERRM);
-            RETURN result_data;
-        END;
-        $$;
-        
-        GRANT EXECUTE ON FUNCTION public.execute_migration(TEXT) TO anon;
-        GRANT EXECUTE ON FUNCTION public.execute_migration(TEXT) TO authenticated;
-      `;
-            // Ejecutar bootstrap usando una query raw directa
-            try {
-                const { error: bootstrapError } = await client.rpc('execute_migration', { migration_sql: bootstrapSQL });
-                if (bootstrapError) {
-                    // Si la función no existe, necesitamos crearla de otra forma
-                    // Esto solo funcionará si tenemos permisos suficientes
-                    console.warn('No se pudo ejecutar bootstrap via RPC, intentando método alternativo');
-                }
-            }
-            catch (e) {
-                console.warn('Bootstrap inicial falló, continuando con migraciones:', e);
+            // Probar si la función execute_migration existe
+            const { error: testError } = await client.rpc('execute_migration', {
+                migration_sql: 'SELECT 1'
+            });
+            if (testError && testError.code === 'PGRST202') {
+                // La función no existe - necesitamos que el usuario la cree manualmente
+                const bootstrapSQL = await this.getBootstrapSQL();
+                throw new Error('BOOTSTRAP_REQUIRED: Primero debes ejecutar el SQL de bootstrap en Supabase.\n\n' +
+                    'Ve a https://supabase.com/dashboard → SQL Editor y ejecuta:\n\n' +
+                    bootstrapSQL);
             }
             // PASO 2: Ejecutar cada migración
             for (let i = 0; i < MIGRATIONS.length; i++) {
@@ -131,7 +120,6 @@ export const migrationService = {
                 // Obtener contenido de la migración
                 const sqlContent = await this.getMigrationContent(migrationName);
                 if (!sqlContent) {
-                    console.warn(`No se encontró el contenido de la migración: ${migrationName}`);
                     continue;
                 }
                 // Ejecutar la migración usando la función RPC execute_migration
@@ -139,14 +127,12 @@ export const migrationService = {
                     migration_sql: sqlContent
                 });
                 if (error) {
-                    console.error(`Error ejecutando migración ${migrationName}:`, error);
                     // Algunas migraciones pueden fallar por dependencias, continuamos
                     continue;
                 }
                 // Verificar si la función retornó un error
                 const result = data;
                 if (result && !result.success) {
-                    console.warn(`Migración ${migrationName} reportó problema:`, result.error);
                     // Continuamos con la siguiente migración
                 }
                 // Pequeña pausa para que la UI se actualice
@@ -162,7 +148,6 @@ export const migrationService = {
             });
         }
         catch (error) {
-            console.error('Error durante las migraciones:', error);
             onProgress({
                 currentMigration: 'Error',
                 currentIndex: 0,
@@ -189,7 +174,7 @@ export const migrationService = {
                 return content;
             }
             catch (error) {
-                console.error(`No se pudo leer el archivo de migración ${migrationName}:`, error);
+                // Error al leer la migración
             }
         }
         return '';
@@ -213,7 +198,6 @@ export const migrationService = {
                 }
                 catch {
                     // Ignorar errores individuales
-                    console.warn('Statement ignorado:', statement.substring(0, 50) + '...');
                 }
             }
         }

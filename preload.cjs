@@ -7,7 +7,27 @@ contextBridge.exposeInMainWorld('electron', {
   ipc: {
     send: (channel, ...args) => ipcRenderer.send(channel, ...args),
     invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
-    on: (channel, listener) => ipcRenderer.on(channel, listener)
+    on: (channel, listener) => {
+      // Wrapper necesario para que funcione con contextBridge
+      const subscription = (_event, ...args) => listener(...args);
+      ipcRenderer.on(channel, subscription);
+      return subscription;
+    },
+    removeListener: (channel, listener) => {
+      ipcRenderer.removeListener(channel, listener);
+    }
+  },
+  ipcRenderer: {
+    on: (channel, listener) => {
+      // Wrapper necesario para que funcione con contextBridge
+      const subscription = (_event, ...args) => listener(...args);
+      ipcRenderer.on(channel, subscription);
+      return subscription;
+    },
+    send: (channel, ...args) => ipcRenderer.send(channel, ...args),
+    removeListener: (channel, listener) => {
+      ipcRenderer.removeListener(channel, listener);
+    }
   }
 });
 
@@ -22,13 +42,15 @@ contextBridge.exposeInMainWorld('supabaseConfig', {
   get: () => ipcRenderer.invoke('get-supabase-config')
 });
 
+// API para migraciones
+contextBridge.exposeInMainWorld('electronAPI', {
+  readMigrationFile: (migrationName) => ipcRenderer.invoke('read-migration-file', migrationName)
+});
+
 // Mensajes de actualización / estado
 ipcRenderer.on('update-message', (_e, msg) => {
   console.log('[update]', msg);
 });
-
-// Diagnóstico para verificar carga correcta
-console.log('[preload.cjs] cargado correctamente');
 
 // Logger expuesto a renderer
 contextBridge.exposeInMainWorld('logger', {

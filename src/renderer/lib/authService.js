@@ -5,17 +5,98 @@ export const authService = {
     login: async (email, password) => {
         try {
             const client = await supabase.getClient();
-            // Autenticar con Supabase Auth
+            // MÉTODO 1: Intentar con Supabase Auth primero
             const { data: authData, error: authError } = await client.auth.signInWithPassword({
                 email,
                 password,
             });
-            if (authError || !authData.user) {
-                console.error('Error de autenticación:', authError);
-                return null;
+            // Si Supabase Auth funciona, continuar con el flujo normal
+            if (!authError && authData.user) {
+                // Buscar usuario en la tabla users para obtener datos adicionales
+                let { data: userData, error } = await client
+                    .from('users')
+                    .select(`
+            id, 
+            email, 
+            full_name, 
+            active, 
+            role_id,
+            last_login,
+            created_at,
+            roles (
+              name,
+              description
+            )
+          `)
+                    .eq('id', authData.user.id)
+                    .single();
+                if (error?.code === 'PGRST116' || (error && /not found|No rows/.test(error.message)) || !userData) {
+                    // Si no existe perfil en public.users, crearlo automáticamente
+                    const insertPayload = {
+                        id: authData.user.id,
+                        email: (authData.user.email || '').toLowerCase(),
+                        full_name: (authData.user.user_metadata?.full_name || authData.user.email || '').toString(),
+                        active: true,
+                        role_id: 1, // rol por defecto
+                        created_at: new Date().toISOString(),
+                        last_login: new Date().toISOString()
+                    };
+                    const { data: created, error: createErr } = await client
+                        .from('users')
+                        .insert(insertPayload)
+                        .select(`
+              id, email, full_name, active, role_id, last_login, created_at,
+              roles (name, description)
+            `)
+                        .single();
+                    if (createErr) {
+                        console.error('No se pudo crear el perfil de usuario:', createErr);
+                        return null;
+                    }
+                    userData = created;
+                }
+                else if (error) {
+                    console.error('Error al buscar usuario:', error);
+                    return null;
+                }
+                if (!userData.active) {
+                    console.error('Usuario desactivado:', email);
+                    throw new Error('Usuario desactivado');
+                }
+                // Mapear datos y castear tipos para cumplir interfaz User
+                let roleName = '';
+                let roleDescription = '';
+                if (userData.roles) {
+                    const roles = userData.roles;
+                    if (isRoleArray(roles)) {
+                        roleName = roles[0]?.name || '';
+                        roleDescription = roles[0]?.description || '';
+                    }
+                    else if (typeof roles === 'object' && roles !== null) {
+                        roleName = roles.name || '';
+                        roleDescription = roles.description || '';
+                    }
+                }
+                const sessionUser = {
+                    id: String(userData.id),
+                    email: String(userData.email),
+                    full_name: String(userData.full_name || ''),
+                    active: Boolean(userData.active),
+                    role_id: Number(userData.role_id || 0),
+                    role_name: String(roleName || ''),
+                    role_description: String(roleDescription || ''),
+                    last_login: userData.last_login ? String(userData.last_login) : undefined,
+                    created_at: String(userData.created_at || new Date().toISOString())
+                };
+                // Guardar sesión
+                saveSession(sessionUser);
+                return sessionUser;
             }
-            // Buscar usuario en la tabla users para obtener datos adicionales
-            let { data: userData, error } = await client
+            // MÉTODO 2: Si Supabase Auth falla, intentar con password_hash en public.users
+            console.log('Supabase Auth falló, intentando con password_hash local...');
+            console.log('Buscando usuario con email:', email.toLowerCase());
+            // Verificar si existe la columna password_hash
+            const { data: userWithHash, error: hashError } = await client
                 .from('users')
                 .select(`
           id, 
@@ -23,6 +104,7 @@ export const authService = {
           full_name, 
           active, 
           role_id,
+          password_hash,
           last_login,
           created_at,
           roles (
@@ -30,46 +112,79 @@ export const authService = {
             description
           )
         `)
-                .eq('id', authData.user.id)
-                .single();
-            if (error?.code === 'PGRST116' || (error && /not found|No rows/.test(error.message)) || !userData) {
-                // Si no existe perfil en public.users, crearlo automáticamente
-                const insertPayload = {
-                    id: authData.user.id,
-                    email: (authData.user.email || '').toLowerCase(),
-                    full_name: (authData.user.user_metadata?.full_name || authData.user.email || '').toString(),
-                    active: true,
-                    role_id: 1, // rol por defecto
-                    created_at: new Date().toISOString(),
-                    last_login: new Date().toISOString()
-                };
-                const { data: created, error: createErr } = await client
-                    .from('users')
-                    .insert(insertPayload)
-                    .select(`
-            id, email, full_name, active, role_id, last_login, created_at,
-            roles (name, description)
-          `)
-                    .single();
-                if (createErr) {
-                    console.error('No se pudo crear el perfil de usuario:', createErr);
-                    return null;
-                }
-                userData = created;
-            }
-            else if (error) {
-                console.error('Error al buscar usuario:', error);
+                .eq('email', email.toLowerCase())
+                .maybeSingle();
+            console.log('Resultado búsqueda usuario:', { userWithHash, hashError });
+            if (hashError) {
+                console.error('Error al buscar usuario:', hashError);
                 return null;
             }
-            if (!userData.active) {
+            if (!userWithHash) {
+                console.error('Usuario no encontrado:', email);
+                return null;
+            }
+            // Verificar si tiene password_hash
+            if (!userWithHash.password_hash) {
+                console.error('Usuario no tiene password_hash configurado');
+                return null;
+            }
+            // Verificar contraseña usando crypt
+            const { data: passwordMatch, error: cryptError } = await client.rpc('verify_password', {
+                user_email: email.toLowerCase(),
+                user_password: password
+            });
+            // Si no existe la función verify_password, intentar crear una query directa
+            if (cryptError?.code === 'PGRST202') {
+                // Crear la función verify_password si no existe
+                await client.rpc('execute_migration', {
+                    migration_sql: `
+            CREATE OR REPLACE FUNCTION public.verify_password(user_email TEXT, user_password TEXT)
+            RETURNS BOOLEAN
+            LANGUAGE plpgsql
+            SECURITY DEFINER
+            AS $$
+            DECLARE
+              stored_hash TEXT;
+            BEGIN
+              SELECT password_hash INTO stored_hash
+              FROM public.users
+              WHERE email = user_email;
+              
+              IF stored_hash IS NULL THEN
+                RETURN FALSE;
+              END IF;
+              
+              RETURN (stored_hash = crypt(user_password, stored_hash));
+            END;
+            $$;
+            
+            GRANT EXECUTE ON FUNCTION public.verify_password(TEXT, TEXT) TO anon, authenticated;
+          `
+                });
+                // Intentar verificar nuevamente
+                const { data: retryMatch, error: retryError } = await client.rpc('verify_password', {
+                    user_email: email.toLowerCase(),
+                    user_password: password
+                });
+                if (retryError || !retryMatch) {
+                    console.error('Contraseña incorrecta');
+                    return null;
+                }
+            }
+            else if (cryptError || !passwordMatch) {
+                console.error('Contraseña incorrecta');
+                return null;
+            }
+            // Contraseña válida, retornar usuario
+            if (!userWithHash.active) {
                 console.error('Usuario desactivado:', email);
                 throw new Error('Usuario desactivado');
             }
-            // Mapear datos y castear tipos para cumplir interfaz User
+            // Mapear datos del usuario
             let roleName = '';
             let roleDescription = '';
-            if (userData.roles) {
-                const roles = userData.roles;
+            if (userWithHash.roles) {
+                const roles = userWithHash.roles;
                 if (isRoleArray(roles)) {
                     roleName = roles[0]?.name || '';
                     roleDescription = roles[0]?.description || '';
@@ -80,15 +195,15 @@ export const authService = {
                 }
             }
             const sessionUser = {
-                id: String(userData.id),
-                email: String(userData.email),
-                full_name: String(userData.full_name || ''),
-                active: Boolean(userData.active),
-                role_id: Number(userData.role_id || 0),
+                id: String(userWithHash.id),
+                email: String(userWithHash.email),
+                full_name: String(userWithHash.full_name || ''),
+                active: Boolean(userWithHash.active),
+                role_id: Number(userWithHash.role_id || 0),
                 role_name: String(roleName || ''),
                 role_description: String(roleDescription || ''),
-                last_login: userData.last_login ? String(userData.last_login) : undefined,
-                created_at: String(userData.created_at || new Date().toISOString())
+                last_login: userWithHash.last_login ? String(userWithHash.last_login) : undefined,
+                created_at: String(userWithHash.created_at || new Date().toISOString())
             };
             // Guardar sesión
             saveSession(sessionUser);

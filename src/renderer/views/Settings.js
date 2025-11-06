@@ -143,22 +143,27 @@ const Settings = () => {
                                                                 setLoadingConfig(false);
                                                             }
                                                         }, children: "Refrescar" }), _jsx(Button, { variant: "destructive", onClick: async () => {
-                                                            if (!confirm('¿Eliminar configuración Supabase guardada? Se cerrará la sesión.'))
+                                                            if (!confirm('¿Eliminar configuración Supabase guardada? Deberás configurarla nuevamente.'))
                                                                 return;
                                                             try {
                                                                 await win.supabaseConfig.save({ url: '', anonKey: '' });
                                                                 localStorage.removeItem('inventory_session');
                                                                 setSupabaseConfig(null);
-                                                                toast.success('Configuración eliminada. Reinicia o vuelve a abrir para onboarding.');
+                                                                toast.success('Configuración eliminada. Redirigiendo...');
+                                                                // Esperar un momento y luego forzar el onboarding
+                                                                setTimeout(() => {
+                                                                    sessionStorage.setItem('forceOnboarding', '1');
+                                                                    location.reload();
+                                                                }, 1000);
                                                             }
                                                             catch (e) {
                                                                 toast.error('Error eliminando configuración');
                                                             }
-                                                        }, children: "Eliminar configuraci\u00F3n" }), _jsx(Button, { onClick: () => {
-                                                            // Forzar mostrar Onboarding almacenando un flag y recargando
-                                                            localStorage.removeItem('inventory_session');
-                                                            sessionStorage.setItem('forceOnboarding', '1');
-                                                            location.reload();
-                                                        }, children: "Mostrar Onboarding" })] }), _jsx("p", { className: "text-xs text-muted-foreground", children: "Si instalaste por primera vez y no apareci\u00F3 el asistente, puedes forzarlo aqu\u00ED." })] }) })] }) })] }), _jsxs("div", { className: "mt-6 flex justify-end space-x-4", children: [_jsx(Button, { variant: "outline", onClick: handleReset, children: "Restablecer valores predeterminados" }), _jsx(Button, { onClick: handleSave, disabled: saving, children: saving ? 'Guardando...' : 'Guardar configuración' })] })] }));
+                                                        }, children: "Eliminar y Reconfigurar" }), _jsx(Button, { onClick: () => {
+                                                            // Abrir modal de configuración sin eliminar datos
+                                                            const event = new CustomEvent('show-supabase-config');
+                                                            window.dispatchEvent(event);
+                                                            toast.success('Abriendo configuración de conexión...');
+                                                        }, children: "Modificar Configuraci\u00F3n" })] }), _jsx("p", { className: "text-xs text-muted-foreground", children: "Puedes modificar la configuraci\u00F3n de conexi\u00F3n o eliminarla para configurar una nueva base de datos." })] }) })] }) })] }), _jsxs("div", { className: "mt-6 flex justify-end space-x-4", children: [_jsx(Button, { variant: "outline", onClick: handleReset, children: "Restablecer valores predeterminados" }), _jsx(Button, { onClick: handleSave, disabled: saving, children: saving ? 'Guardando...' : 'Guardar configuración' })] })] }));
 };
 export default Settings;
