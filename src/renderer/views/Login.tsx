@@ -79,7 +79,7 @@ const Login: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="max-w-md w-full space-y-8 p-10 bg-white rounded-xl shadow-lg">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-primary">Inventario Pro - SC</h1>
+          <h1 className="text-3xl font-bold text-primary">C.O.M.P.A</h1>
           <h2 className="mt-6 text-xl font-semibold text-gray-900">
             Iniciar Sesión
           </h2>
@@ -209,7 +209,7 @@ const Login: React.FC = () => {
         
         <div className="mt-6 text-center text-sm">
           <p className="text-gray-600">
-            ©2025 Inventario Pro - SC - Todos los derechos reservados
+            ©2025 C.O.M.P.A - Todos los derechos reservados
           </p>
         </div>
       </div>

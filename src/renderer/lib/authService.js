@@ -93,8 +93,6 @@ export const authService = {
                 return sessionUser;
             }
             // MÉTODO 2: Si Supabase Auth falla, intentar con password_hash en public.users
-            console.log('Supabase Auth falló, intentando con password_hash local...');
-            console.log('Buscando usuario con email:', email.toLowerCase());
             // Verificar si existe la columna password_hash
             const { data: userWithHash, error: hashError } = await client
                 .from('users')
@@ -114,18 +112,14 @@ export const authService = {
         `)
                 .eq('email', email.toLowerCase())
                 .maybeSingle();
-            console.log('Resultado búsqueda usuario:', { userWithHash, hashError });
             if (hashError) {
-                console.error('Error al buscar usuario:', hashError);
                 return null;
             }
             if (!userWithHash) {
-                console.error('Usuario no encontrado:', email);
                 return null;
             }
             // Verificar si tiene password_hash
             if (!userWithHash.password_hash) {
-                console.error('Usuario no tiene password_hash configurado');
                 return null;
             }
             // Verificar contraseña usando crypt
@@ -172,12 +166,10 @@ export const authService = {
                 }
             }
             else if (cryptError || !passwordMatch) {
-                console.error('Contraseña incorrecta');
                 return null;
             }
             // Contraseña válida, retornar usuario
             if (!userWithHash.active) {
-                console.error('Usuario desactivado:', email);
                 throw new Error('Usuario desactivado');
             }
             // Mapear datos del usuario

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 const DEFAULT_SETTINGS = {
-    name: 'Inventario Pro - SC',
+    name: 'C.O.M.P.A',
     taxId: '123456789-0',
     address: 'Calle Principal #123',
     phone: '(123) 456-7890',

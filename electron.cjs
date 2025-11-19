@@ -297,7 +297,7 @@ function readWindowsRegistrySettings() {
   if (process.platform !== 'win32') return;
   const regKey = new Registry({
     hive: Registry.HKCU,
-    key: '\\Software\\Inventario Pro\\Inventario Pro - SC'
+    key: '\\Software\\C.O.M.P.A'
   });
   regKey.get('CompanyName', (err, item) => {
     if (!err) {
@@ -568,8 +568,8 @@ function setupApplicationMenu() {
           label: 'Acerca de',
           click: () => dialog.showMessageBox({
             type: 'info',
-            title: 'Inventario Pro - SC',
-            message: 'Inventario Pro - SC',
+            title: 'C.O.M.P.A',
+            message: 'C.O.M.P.A',
             detail: `Versión ${app.getVersion()}\n©2025`
           })
         }

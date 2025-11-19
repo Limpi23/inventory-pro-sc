@@ -18,7 +18,7 @@ El sistema de migraciones automáticas permite que cada cliente que instale la a
 ### Para un Cliente Nuevo:
 
 ```
-1. Instala la aplicación Inventario Pro - SC
+1. Instala la aplicación C.O.M.P.A
    ↓
 2. Abre la aplicación (primera vez)
    ↓

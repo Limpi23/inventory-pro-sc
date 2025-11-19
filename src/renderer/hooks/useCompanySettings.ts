@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { CompanySettings } from '../../types';
 
 const DEFAULT_SETTINGS: CompanySettings = {
-  name: 'Inventario Pro - SC',
+  name: 'C.O.M.P.A',
   taxId: '123456789-0',
   address: 'Calle Principal #123',
   phone: '(123) 456-7890',

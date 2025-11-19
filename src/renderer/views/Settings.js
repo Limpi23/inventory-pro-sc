@@ -15,7 +15,7 @@ import { useCurrency } from '../hooks/useCurrency';
 import { useAuth } from '../lib/auth';
 const MAINTENANCE_RESET_SECRET = 'suitcore2025';
 const DEFAULT_SETTINGS = {
-    name: 'Inventario Pro - SC',
+    name: 'C.O.M.P.A',
     taxId: '123456789-0',
     address: 'Calle Principal #123',
     phone: '(123) 456-7890',

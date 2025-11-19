@@ -1,6 +1,6 @@
-# Configuración de Supabase para Inventario Pro - SC
+# Configuración de Supabase para C.O.M.P.A
 
-Este documento explica cómo configurar Supabase para su uso con Inventario Pro - SC.
+Este documento explica cómo configurar Supabase para su uso con C.O.M.P.A.
 
 ## 🔐 Usuario Administrador Predeterminado
 

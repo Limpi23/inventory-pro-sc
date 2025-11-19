@@ -1,4 +1,4 @@
-# Inventario Pro - SC
+# C.O.M.P.A
 
 Sistema profesional de inventario con Electron y Vite, diseñado para gestionar productos, entradas, salidas y notas de venta.
 

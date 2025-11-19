@@ -31,24 +31,33 @@ const InventoryGeneral = () => {
     const searchInputRef = useRef(null);
     useEffect(() => {
         fetchInventory();
-    }, [currentPage]); // Recargar cuando cambie la página
+    }, [currentPage, searchTerm]); // Recargar cuando cambie la página o el término de búsqueda
     // Nuevo estado para total count
     const [totalInventoryCount, setTotalInventoryCount] = useState(0);
     const fetchInventory = async () => {
         try {
             setIsLoading(true);
             const client = await supabase.getClient();
-            // Primero obtener el count total para la paginación
-            const { count: totalCount, error: countError } = await client
+            // Construir query base
+            let countQuery = client
                 .from('current_stock')
                 .select('*', { count: 'exact', head: true });
+            let dataQuery = client
+                .from('current_stock')
+                .select('*');
+            // Aplicar filtro de búsqueda si existe
+            if (searchTerm.trim()) {
+                const searchFilter = `product_name.ilike.%${searchTerm}%,sku.ilike.%${searchTerm}%`;
+                countQuery = countQuery.or(searchFilter);
+                dataQuery = dataQuery.or(searchFilter);
+            }
+            // Primero obtener el count total para la paginación
+            const { count: totalCount, error: countError } = await countQuery;
             if (countError)
                 throw countError;
             // Luego obtener solo los datos de la página actual
             const startIndex = (currentPage - 1) * itemsPerPage;
-            const { data: inventoryData, error: inventoryError } = await client
-                .from('current_stock')
-                .select('*')
+            const { data: inventoryData, error: inventoryError } = await dataQuery
                 .order('product_name')
                 .range(startIndex, startIndex + itemsPerPage - 1);
             if (inventoryError)

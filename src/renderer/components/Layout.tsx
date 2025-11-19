@@ -171,10 +171,10 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenConfig }) => {
         <div className="p-4 flex items-center justify-between border-b">
           {sidebarOpen ? (
             <div className="flex items-center">
-              <h1 className="text-xl font-bold text-primary">Inventario Pro - SC</h1>
+              <h1 className="text-xl font-bold text-primary">C.O.M.P.A</h1>
             </div>
           ) : (
-            <h1 className="text-xl font-bold text-primary">IP</h1>
+            <h1 className="text-xl font-bold text-primary">C.O.M.P.A</h1>
           )}
           <Button
             variant="ghost"
@@ -280,7 +280,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenConfig }) => {
                 <SheetContent side="left" className="p-0 w-72">
                   <div className="p-4 border-b flex items-center justify-between">
                     <div className="flex items-center">
-                      <h1 className="text-xl font-bold text-primary">Inventario Pro - SC</h1>
+                      <h1 className="text-xl font-bold text-primary">C.O.M.P.A</h1>
                     </div>
                   </div>
                   <nav className="mt-4">
