@@ -44,7 +44,9 @@ contextBridge.exposeInMainWorld('supabaseConfig', {
 
 // API para migraciones
 contextBridge.exposeInMainWorld('electronAPI', {
-  readMigrationFile: (migrationName) => ipcRenderer.invoke('read-migration-file', migrationName)
+  readMigrationFile: (migrationName) => ipcRenderer.invoke('read-migration-file', migrationName),
+  print: (options) => ipcRenderer.invoke('print-content', options),
+  printToPDF: (options) => ipcRenderer.invoke('print-to-pdf', options)
 });
 
 // Mensajes de actualización / estado

@@ -62,6 +62,7 @@ const InvoiceDetail: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [printFormat, setPrintFormat] = useState<'letter' | 'roll'>('letter');
   const [showPrintDialog, setShowPrintDialog] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
   const { settings } = useCompanySettings();
   const currency = useCurrency();
   const location = useLocation();
@@ -337,12 +338,21 @@ const InvoiceDetail: React.FC = () => {
     handleGenerateSale();
   }, [invoice, invoiceItems, loading, shouldAutoGenerateSale, handleGenerateSale]);
   
-  const handlePrint = useReactToPrint({
+
+
+  // Abrir el visor de vista previa
+  const handleOpenPreview = () => {
+    setShowPrintDialog(false);
+    setShowPreviewModal(true);
+  };
+
+  // Función de impresión real desde el visor
+  const handlePrintFromPreview = useReactToPrint({
     contentRef: printFormat === 'letter' ? letterPrintRef : rollPrintRef,
-  documentTitle: `Cotización-${invoice?.invoice_number || 'Desconocida'}`,
+    documentTitle: `Cotización ${invoice?.invoice_number || 'Desconocida'}`,
     onAfterPrint: () => {
-      setShowPrintDialog(false);
-  toast.success('Cotización enviada a impresión correctamente');
+      setShowPreviewModal(false);
+      toast.success('Cotización enviada a impresión correctamente');
     },
   });
   
@@ -662,6 +672,7 @@ const InvoiceDetail: React.FC = () => {
                 <span>Formato Rollo</span>
               </label>
             </div>
+            
             <div className="flex justify-end mt-6 space-x-2">
               <button
                 onClick={() => setShowPrintDialog(false)}
@@ -670,16 +681,254 @@ const InvoiceDetail: React.FC = () => {
                 Cancelar
               </button>
               <button
-                onClick={handlePrint}
+                onClick={handleOpenPreview}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
               >
-                Imprimir
+                <i className="fas fa-eye mr-2"></i>
+                Ver Vista Previa
               </button>
             </div>
           </div>
         </div>
       )}
       
+      {/* Modal de Vista Previa - Visor completo */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-90 flex flex-col z-50">
+          {/* Barra de herramientas superior */}
+          <div className="bg-gray-800 p-4 flex justify-between items-center border-b border-gray-700">
+            <div className="flex items-center space-x-4">
+              <h2 className="text-white text-lg font-semibold">
+                Vista Previa - Cotización {invoice.invoice_number}
+              </h2>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setPrintFormat('letter')}
+                  className={`px-3 py-1 rounded text-sm ${
+                    printFormat === 'letter'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  <i className="fas fa-file-alt mr-1"></i>
+                  Carta
+                </button>
+                <button
+                  onClick={() => setPrintFormat('roll')}
+                  className={`px-3 py-1 rounded text-sm ${
+                    printFormat === 'roll'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  <i className="fas fa-receipt mr-1"></i>
+                  Rollo
+                </button>
+              </div>
+            </div>
+            <div className="flex space-x-3">
+              <button
+                onClick={handlePrintFromPreview}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center"
+              >
+                <i className="fas fa-print mr-2"></i>
+                Imprimir
+              </button>
+              <button
+                onClick={() => setShowPreviewModal(false)}
+                className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 flex items-center"
+              >
+                <i className="fas fa-times mr-2"></i>
+                Cerrar
+              </button>
+            </div>
+          </div>
+
+          {/* Área de vista previa con scroll */}
+          <div className="flex-1 overflow-auto p-8 flex justify-center">
+            <div className="bg-gray-100 p-8 rounded-lg shadow-2xl">
+              {printFormat === 'letter' ? (
+                /* Vista previa formato carta */
+                <div className="bg-white p-8 shadow-lg" style={{ width: '8.5in', minHeight: '11in' }}>
+                  <div className="text-center mb-6">
+                    <h1 className="text-2xl font-bold">COTIZACIÓN</h1>
+                    <p className="text-xl">{invoice.invoice_number}</p>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-6 mb-6">
+                    <div>
+                      <h2 className="text-lg font-bold mb-2">Información de Empresa</h2>
+                      <p>{settings.name}</p>
+                      <p>NIT: {settings.taxId}</p>
+                      <p>{settings.address}</p>
+                      <p>Tel: {settings.phone}</p>
+                      {settings.email && <p>{settings.email}</p>}
+                      {settings.website && <p>{settings.website}</p>}
+                    </div>
+                    
+                    <div>
+                      <h2 className="text-lg font-bold mb-2">Información de Cliente</h2>
+                      <p><strong>{invoice.customer.name}</strong></p>
+                      {invoice.customer.identification_type && invoice.customer.identification_number && (
+                        <p>{invoice.customer.identification_type}: {invoice.customer.identification_number}</p>
+                      )}
+                      {invoice.customer.address && <p>Dirección: {invoice.customer.address}</p>}
+                      {invoice.customer.phone && <p>Teléfono: {invoice.customer.phone}</p>}
+                      {invoice.customer.email && <p>Email: {invoice.customer.email}</p>}
+                    </div>
+                  </div>
+                  
+                  <div className="mb-6">
+                    <h2 className="text-lg font-bold mb-2">Detalles de Cotización</h2>
+                    <div className="grid grid-cols-2 gap-6">
+                      <div>
+                        <p><strong>Fecha de emisión:</strong> {formatDate(invoice.invoice_date)}</p>
+                        {invoice.due_date && (
+                          <p><strong>Fecha de vencimiento:</strong> {formatDate(invoice.due_date)}</p>
+                        )}
+                      </div>
+                      <div>
+                        <p><strong>Método de pago:</strong> {invoice.payment_method ? `${invoice.payment_method.charAt(0).toUpperCase()}${invoice.payment_method.slice(1)}` : 'No especificado'}</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <table className="w-full border-collapse border border-black mb-6">
+                    <thead>
+                      <tr className="bg-gray-200">
+                        <th className="border border-black p-2 text-left">Producto</th>
+                        <th className="border border-black p-2 text-center">Cant.</th>
+                        <th className="border border-black p-2 text-right">Precio Unit.</th>
+                        <th className="border border-black p-2 text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {invoiceItems.map((item) => (
+                        <tr key={item.id}>
+                          <td className="border border-black p-2">
+                            <div>{item.product.name}</div>
+                            <div className="text-xs text-gray-600">SKU: {item.product.sku}</div>
+                          </td>
+                          <td className="border border-black p-2 text-center">{item.quantity}</td>
+                          <td className="border border-black p-2 text-right">{currency.format(item.unit_price)}</td>
+                          <td className="border border-black p-2 text-right">{currency.format(item.total_price)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  
+                  <div className="flex justify-end mb-6">
+                    <div className="w-64 space-y-2">
+                      <div className="flex justify-between">
+                        <span>Subtotal:</span>
+                        <span>{currency.format(invoice.subtotal)}</span>
+                      </div>
+                      {invoice.discount_amount > 0 && (
+                        <div className="flex justify-between text-red-600">
+                          <span>Descuento:</span>
+                          <span>-{currency.format(invoice.discount_amount)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span>IVA:</span>
+                        <span>{currency.format(invoice.tax_amount)}</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-lg pt-2 border-t border-black">
+                        <span>Total:</span>
+                        <span>{currency.format(invoice.total_amount)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {invoice.notes && (
+                    <div className="mb-6">
+                      <h3 className="font-bold mb-2">Notas:</h3>
+                      <p className="text-sm whitespace-pre-line">{invoice.notes}</p>
+                    </div>
+                  )}
+                  
+                  <div className="text-center text-sm mt-10 text-gray-600">
+                    <p>Gracias por su compra</p>
+                    <p>{settings.footerText}</p>
+                  </div>
+                </div>
+              ) : (
+                /* Vista previa formato rollo */
+                <div className="bg-white p-4 shadow-lg" style={{ width: '80mm' }}>
+                  <div className="text-center mb-4 text-sm">
+                    <h1 className="font-bold text-base">{settings.name.toUpperCase()}</h1>
+                    <p className="text-xs">NIT: {settings.taxId}</p>
+                    <p className="text-xs">{settings.address}</p>
+                    <p className="text-xs">Tel: {settings.phone}</p>
+                    <div className="border-t border-dashed border-black my-2"></div>
+                    <h2 className="font-bold">COTIZACIÓN {invoice.invoice_number}</h2>
+                    <p className="text-xs">Fecha: {formatDate(invoice.invoice_date)}</p>
+                  </div>
+                  
+                  <div className="mb-3 text-xs">
+                    <p><strong>Cliente:</strong> {invoice.customer.name}</p>
+                    {invoice.customer.identification_type && invoice.customer.identification_number && (
+                      <p><strong>{invoice.customer.identification_type}:</strong> {invoice.customer.identification_number}</p>
+                    )}
+                    {invoice.customer.phone && <p><strong>Tel:</strong> {invoice.customer.phone}</p>}
+                  </div>
+                  
+                  <div className="border-t border-dashed border-black my-2"></div>
+                  
+                  <div className="mb-3">
+                    {invoiceItems.map((item) => (
+                      <div key={item.id} className="mb-2 text-xs">
+                        <p className="font-semibold">{item.product.name}</p>
+                        <div className="flex justify-between">
+                          <span>{item.quantity} x {currency.format(item.unit_price)}</span>
+                          <span className="font-semibold">{currency.format(item.total_price)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="border-t border-dashed border-black my-2"></div>
+                  
+                  <div className="text-xs space-y-1">
+                    <div className="flex justify-between">
+                      <span>Subtotal:</span>
+                      <span>{currency.format(invoice.subtotal)}</span>
+                    </div>
+                    {invoice.discount_amount > 0 && (
+                      <div className="flex justify-between">
+                        <span>Descuento:</span>
+                        <span>-{currency.format(invoice.discount_amount)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span>IVA:</span>
+                      <span>{currency.format(invoice.tax_amount)}</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-sm pt-1 border-t border-black">
+                      <span>TOTAL:</span>
+                      <span>{currency.format(invoice.total_amount)}</span>
+                    </div>
+                  </div>
+                  
+                  {invoice.notes && (
+                    <>
+                      <div className="border-t border-dashed border-black my-2"></div>
+                      <div className="text-xs">
+                        <p className="font-semibold">Notas:</p>
+                        <p className="whitespace-pre-line">{invoice.notes}</p>
+                      </div>
+                    </>
+                  )}
+                  
+                  <div className="border-t border-dashed border-black my-3"></div>
+                  <p className="text-center text-xs">¡Gracias por su preferencia!</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Componentes de impresión (ocultos) */}
       <div className="hidden">
         {/* Formato carta */}

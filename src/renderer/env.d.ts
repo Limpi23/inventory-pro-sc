@@ -21,6 +21,29 @@ declare global {
         details?: any;
       }) => Promise<unknown>;
     };
+    electronAPI?: {
+      readMigrationFile: (migrationName: string) => Promise<any>;
+      print: (options?: {
+        pageSize?: string | { width: number; height: number };
+        printBackground?: boolean;
+        color?: boolean;
+        margins?: {
+          marginType?: string;
+        };
+        landscape?: boolean;
+      }) => Promise<{ success: boolean; error?: string }>;
+      printToPDF: (options?: {
+        pageSize?: string;
+        printBackground?: boolean;
+        landscape?: boolean;
+        margins?: {
+          top?: number;
+          bottom?: number;
+          left?: number;
+          right?: number;
+        };
+      }) => Promise<{ success: boolean; pdfPath?: string; error?: string }>;
+    };
   }
 }
 

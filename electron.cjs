@@ -258,6 +258,86 @@ ipcMain.handle('log-event', (_event, payload) => {
   }
 });
 
+// IPC: Impresión nativa con vista previa de Windows
+ipcMain.handle('print-content', async (_event, options) => {
+  try {
+    if (!mainWindow) {
+      return { success: false, error: 'Ventana principal no disponible' };
+    }
+
+    // Opciones de impresión para Electron
+    const printOptions = {
+      silent: false,  // false = muestra el diálogo de impresión nativo
+      printBackground: true,
+      color: true,
+      margins: {
+        marginType: 'printableArea'
+      },
+      landscape: false,
+      pagesPerSheet: 1,
+      collate: false,
+      copies: 1,
+      pageSize: options?.pageSize || 'A4',
+      ...options
+    };
+
+    // Usar webContents.print() que muestra el diálogo nativo de Windows con vista previa
+    return new Promise((resolve) => {
+      mainWindow.webContents.print(printOptions, (success, failureReason) => {
+        if (success) {
+          resolve({ success: true });
+        } else {
+          resolve({ success: false, error: failureReason || 'Error desconocido' });
+        }
+      });
+    });
+  } catch (e) {
+    console.error('Error en impresión nativa:', e);
+    return { success: false, error: e.message || String(e) };
+  }
+});
+
+// IPC: Generar PDF con vista previa (abre el visor de PDF de Windows)
+ipcMain.handle('print-to-pdf', async (_event, options) => {
+  try {
+    if (!mainWindow) {
+      return { success: false, error: 'Ventana principal no disponible' };
+    }
+
+    // Opciones para generar PDF
+    const pdfOptions = {
+      printBackground: true,
+      pageSize: options?.pageSize || 'Letter',
+      landscape: false,
+      margins: {
+        top: 0,
+        bottom: 0,
+        left: 0,
+        right: 0
+      },
+      ...options
+    };
+
+    // Generar PDF
+    const pdfData = await mainWindow.webContents.printToPDF(pdfOptions);
+    
+    // Guardar PDF temporal
+    const tempDir = app.getPath('temp');
+    const timestamp = Date.now();
+    const pdfPath = path.join(tempDir, `cotizacion_${timestamp}.pdf`);
+    
+    fs.writeFileSync(pdfPath, pdfData);
+    
+    // Abrir PDF con el visor predeterminado (tiene vista previa nativa)
+    shell.openPath(pdfPath);
+    
+    return { success: true, pdfPath };
+  } catch (e) {
+    console.error('Error generando PDF:', e);
+    return { success: false, error: e.message || String(e) };
+  }
+});
+
 function sendDatabaseConfigToRenderer() {
   if (!mainWindow) return;
   const dbConfig = {
