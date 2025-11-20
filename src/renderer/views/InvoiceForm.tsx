@@ -181,27 +181,28 @@ const InvoiceForm: React.FC = () => {
     }
   }, [formData.warehouse_id]);
 
-  // Recalcular items cuando cambie el descuento global
+  // Recalcular items cuando cambie el descuento global o el estado de IVA
   useEffect(() => {
-    if (discountMode === 'global' && invoiceItems.length > 0) {
-      const updatedItems = invoiceItems.map(item => {
+    if (invoiceItems.length > 0 && (discountMode === 'global' || showTaxColumn !== undefined)) {
+      setInvoiceItems(prev => prev.map(item => {
+        const discountPercent = discountMode === 'global' ? globalDiscountPercent : item.discount_percent;
         const { discountAmount, taxAmount, totalPrice } = calculateItemTotals(
           item.quantity,
           item.unit_price,
           item.tax_rate,
-          globalDiscountPercent
+          discountPercent
         );
         return {
           ...item,
-          discount_percent: globalDiscountPercent,
+          discount_percent: discountPercent,
           discount_amount: discountAmount,
           tax_amount: taxAmount,
           total_price: totalPrice
         };
-      });
-      setInvoiceItems(updatedItems);
+      }));
     }
-  }, [globalDiscountPercent, discountMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalDiscountPercent, discountMode, showTaxColumn]);
 
   // Cargar stock de los productos en la cotización
   useEffect(() => {
@@ -574,7 +575,9 @@ const InvoiceForm: React.FC = () => {
     const subtotal = quantity * unitPrice;
     const discountAmount = (subtotal * discountPercent) / 100;
     const taxableAmount = subtotal - discountAmount;
-    const taxAmount = (taxableAmount * taxRate) / 100;
+    // Si showTaxColumn es false, no calcular IVA (usar 0%)
+    const effectiveTaxRate = showTaxColumn ? taxRate : 0;
+    const taxAmount = (taxableAmount * effectiveTaxRate) / 100;
     const totalPrice = taxableAmount + taxAmount;
     
     return {
