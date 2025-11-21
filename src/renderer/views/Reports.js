@@ -87,13 +87,15 @@ const Reports = () => {
                 total_amount: invoice.total_amount || 0
             }));
             setSalesData(formattedData);
-            // Calcular estadísticas
-            if (formattedData.length > 0) {
-                const total = formattedData.reduce((sum, item) => sum + item.total_amount, 0);
-                const count = formattedData.length;
+            // Calcular estadísticas (EXCLUIR facturas anuladas del total)
+            // Filtrar solo facturas válidas (emitida, pagada, borrador) para los cálculos
+            const validInvoices = formattedData.filter(item => item.status !== 'anulada');
+            if (validInvoices.length > 0) {
+                const total = validInvoices.reduce((sum, item) => sum + item.total_amount, 0);
+                const count = validInvoices.length;
                 const avg = total / count;
-                const min = Math.min(...formattedData.map(item => item.total_amount));
-                const max = Math.max(...formattedData.map(item => item.total_amount));
+                const min = Math.min(...validInvoices.map(item => item.total_amount));
+                const max = Math.max(...validInvoices.map(item => item.total_amount));
                 setStats({
                     totalAmount: total,
                     count,

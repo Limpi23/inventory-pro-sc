@@ -83,6 +83,9 @@ const InvoiceForm: React.FC = () => {
   const [discountMode, setDiscountMode] = useState<'product' | 'global'>('product');
   const [globalDiscountPercent, setGlobalDiscountPercent] = useState<number>(0);
   
+  // Estado para mostrar/ocultar columna de IVA
+  const [showTaxColumn, setShowTaxColumn] = useState<boolean>(true);
+  
   const [formData, setFormData] = useState({
     customer_id: '',
     warehouse_id: '',
@@ -178,27 +181,28 @@ const InvoiceForm: React.FC = () => {
     }
   }, [formData.warehouse_id]);
 
-  // Recalcular items cuando cambie el descuento global
+  // Recalcular items cuando cambie el descuento global o el estado de IVA
   useEffect(() => {
-    if (discountMode === 'global' && invoiceItems.length > 0) {
-      const updatedItems = invoiceItems.map(item => {
+    if (invoiceItems.length > 0 && (discountMode === 'global' || showTaxColumn !== undefined)) {
+      setInvoiceItems(prev => prev.map(item => {
+        const discountPercent = discountMode === 'global' ? globalDiscountPercent : item.discount_percent;
         const { discountAmount, taxAmount, totalPrice } = calculateItemTotals(
           item.quantity,
           item.unit_price,
           item.tax_rate,
-          globalDiscountPercent
+          discountPercent
         );
         return {
           ...item,
-          discount_percent: globalDiscountPercent,
+          discount_percent: discountPercent,
           discount_amount: discountAmount,
           tax_amount: taxAmount,
           total_price: totalPrice
         };
-      });
-      setInvoiceItems(updatedItems);
+      }));
     }
-  }, [globalDiscountPercent, discountMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalDiscountPercent, discountMode, showTaxColumn]);
 
   // Cargar stock de los productos en la cotización
   useEffect(() => {
@@ -571,7 +575,9 @@ const InvoiceForm: React.FC = () => {
     const subtotal = quantity * unitPrice;
     const discountAmount = (subtotal * discountPercent) / 100;
     const taxableAmount = subtotal - discountAmount;
-    const taxAmount = (taxableAmount * taxRate) / 100;
+    // Si showTaxColumn es false, no calcular IVA (usar 0%)
+    const effectiveTaxRate = showTaxColumn ? taxRate : 0;
+    const taxAmount = (taxableAmount * effectiveTaxRate) / 100;
     const totalPrice = taxableAmount + taxAmount;
     
     return {
@@ -1099,7 +1105,7 @@ const InvoiceForm: React.FC = () => {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-medium">Agregar Productos</h2>
               
-              {/* Toggle para modo de descuento */}
+              {/* Toggle para modo de descuento y columna IVA */}
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
                   <label className="text-sm font-medium text-gray-700">Descuento:</label>
@@ -1118,6 +1124,27 @@ const InvoiceForm: React.FC = () => {
                   </button>
                   <span className="text-sm text-gray-600">
                     {discountMode === 'product' ? 'Por Producto' : 'Global'}
+                  </span>
+                </div>
+                
+                {/* Toggle para mostrar/ocultar columna IVA */}
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700">Mostrar IVA:</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowTaxColumn(!showTaxColumn)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      showTaxColumn ? 'bg-blue-600' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        showTaxColumn ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    {showTaxColumn ? 'Sí' : 'No'}
                   </span>
                 </div>
                 
@@ -1351,7 +1378,9 @@ const InvoiceForm: React.FC = () => {
                       {discountMode === 'product' && (
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descuento</th>
                       )}
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IVA</th>
+                      {showTaxColumn && (
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IVA</th>
+                      )}
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                     </tr>
@@ -1432,10 +1461,12 @@ const InvoiceForm: React.FC = () => {
                               )}
                             </td>
                           )}
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div>{item.tax_rate}%</div>
-                            <div className="text-sm text-gray-500">{formatCurrency(item.tax_amount)}</div>
-                          </td>
+                          {showTaxColumn && (
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div>{item.tax_rate}%</div>
+                              <div className="text-sm text-gray-500">{formatCurrency(item.tax_amount)}</div>
+                            </td>
+                          )}
                           <td className="px-6 py-4 whitespace-nowrap font-medium">{formatCurrency(item.total_price)}</td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             {isEditingRow ? (
@@ -1500,10 +1531,12 @@ const InvoiceForm: React.FC = () => {
                   </span>
                   <span>{formatCurrency(discountAmount)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span>IVA:</span>
-                  <span>{formatCurrency(taxAmount)}</span>
-                </div>
+                {showTaxColumn && (
+                  <div className="flex justify-between">
+                    <span>IVA:</span>
+                    <span>{formatCurrency(taxAmount)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-bold text-lg">
                   <span>Total:</span>
                   <span>{formatCurrency(total)}</span>

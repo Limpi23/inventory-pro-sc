@@ -1,7 +1,11 @@
 {
   "name": "inventory-suit",
   "private": true,
+<<<<<<< HEAD
   "version": "1.11.10",
+=======
+  "version": "1.11.13",
+>>>>>>> e77b1da2639e0e9806c566b29f9995226158519e
   "type": "module",
   "main": "electron.cjs",
   "scripts": {
