@@ -35,15 +35,17 @@ export default function ProductList() {
     hasPermission('products', '*') ||
     hasPermission('*', '*')
   );
+
   const [products, setProducts] = useState<UIProduct[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isPriceUpdateOpen, setIsPriceUpdateOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  // Alcance de selección por defecto: todos los filtrados (como ubicaciones)
-  const [selectScope, setSelectScope] = useState<'page' | 'all'>('all');
+  // Alcance de selección: 'page' (solo visibles) o 'all' (todos los que coinciden con filtros)
+  const [selectScope, setSelectScope] = useState<'page'>('page');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [warehouseFilter, setWarehouseFilter] = useState<string>('');
@@ -54,7 +56,7 @@ export default function ProductList() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   useEffect(() => {
-    fetchProducts();
+    fetchProducts({ keepPage: true });
     // Cargar listas para filtros
     (async () => {
       try {
@@ -62,85 +64,64 @@ export default function ProductList() {
         setWarehouses((whs as any[])?.map(w => ({ id: w.id, name: w.name })) || []);
         setLocations((locs as any[])?.map(l => ({ id: l.id, name: l.name, warehouse_id: (l as any).warehouse_id })) || []);
       } catch (e) {
-        
+        console.error("Error loading filters", e);
       }
     })();
   }, []);
 
+  // Recargar cuando cambian filtros o paginación
+  useEffect(() => {
+    fetchProducts({ keepPage: true });
+  }, [page, pageSize, warehouseFilter, locationFilter]);
+
   async function fetchProducts(opts?: { keepPage?: boolean }) {
     try {
       setIsLoading(true);
-      const data = await productService.getAll();
+      const { data, count } = await productService.getProducts({
+        page: opts?.keepPage ? page : 1,
+        pageSize,
+        search: searchQuery,
+        warehouseId: warehouseFilter,
+        locationId: locationFilter
+      });
+      
       const list = (data as unknown as UIProduct[]) || [];
       setProducts(list);
-      // Si los IDs seleccionados ya no están, límpialos
-      setSelectedIds(prev => new Set([...prev].filter(id => list.some(p => p.id === id))));
+      setTotalCount(count || 0);
+      
       if (!opts?.keepPage) setPage(1);
     } catch (error) {
-      
+      console.error("Error fetching products", error);
     } finally {
       setIsLoading(false);
     }
   }
 
   async function handleSearch() {
-    if (!searchQuery.trim()) {
-      fetchProducts();
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-  const data = await productService.search(searchQuery);
-  const list = (data as unknown as UIProduct[]) || [];
-  setProducts(list);
-  setSelectedIds(prev => new Set([...prev].filter(id => list.some(p => p.id === id))));
-  setPage(1);
-    } catch (error) {
-      
-    } finally {
-      setIsLoading(false);
-    }
+    setPage(1);
+    fetchProducts({ keepPage: false });
   }
 
-  // Paginación
-  const filteredProducts = useMemo(() => {
-    let list = products;
-    if (warehouseFilter) {
-      list = list.filter(p => ((p as any).location?.warehouse_id === warehouseFilter) || ((p as any).warehouse_id === warehouseFilter));
-    }
-    if (locationFilter) {
-      list = list.filter(p => ((p as any).location?.id === locationFilter) || ((p as any).location_id === locationFilter));
-    }
-    return list;
-  }, [products, warehouseFilter, locationFilter]);
+  // Paginación calculada con datos del servidor
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  
+  // En modo servidor, 'products' ya contiene solo los items de la página actual
+  const visibleProducts = products;
 
-  const total = filteredProducts.length;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const startIndex = (page - 1) * pageSize;
-  const endIndex = Math.min(startIndex + pageSize, total);
-  const visibleProducts = useMemo(() => filteredProducts.slice(startIndex, endIndex), [filteredProducts, startIndex, endIndex]);
-
-  useEffect(() => {
-    // Ajustar página si cambia el total y la página actual queda fuera de rango
-    if (page > totalPages) setPage(totalPages);
-  }, [totalPages, page]);
-
-  // Selección: por alcance (página o todos los filtrados)
-  const scopeItems = selectScope === 'page' ? visibleProducts : filteredProducts;
-  const allVisibleSelected = useMemo(() => scopeItems.length > 0 && scopeItems.every(p => selectedIds.has(p.id)), [scopeItems, selectedIds]);
-  const someVisibleSelected = useMemo(() => scopeItems.some(p => selectedIds.has(p.id)) && !allVisibleSelected, [scopeItems, selectedIds, allVisibleSelected]);
+  // Selección
+  const allVisibleSelected = useMemo(() => visibleProducts.length > 0 && visibleProducts.every(p => selectedIds.has(p.id)), [visibleProducts, selectedIds]);
+  const someVisibleSelected = useMemo(() => visibleProducts.some(p => selectedIds.has(p.id)) && !allVisibleSelected, [visibleProducts, selectedIds, allVisibleSelected]);
 
   const toggleSelectAll = () => {
     if (allVisibleSelected) {
       // deseleccionar visibles
       const next = new Set(selectedIds);
-      scopeItems.forEach(p => next.delete(p.id));
+      visibleProducts.forEach(p => next.delete(p.id));
       setSelectedIds(next);
     } else {
       // seleccionar visibles
       const next = new Set(selectedIds);
-      scopeItems.forEach(p => next.add(p.id));
+      visibleProducts.forEach(p => next.add(p.id));
       setSelectedIds(next);
     }
   };
@@ -161,17 +142,16 @@ export default function ProductList() {
   async function handleDelete(id: string) {
     if (confirm("¿Estás seguro de que deseas eliminar este producto?")) {
       try {
-  await productService.delete(id);
-  // Log de evento
-  window.logger?.log({
-    action: 'product.delete',
-    entity: 'product',
-    entityId: id,
-    actor: user?.email || undefined
-  });
-    fetchProducts({ keepPage: true });
+        await productService.delete(id);
+        window.logger?.log({
+          action: 'product.delete',
+          entity: 'product',
+          entityId: id,
+          actor: user?.email || undefined
+        });
+        fetchProducts({ keepPage: true });
       } catch (error) {
-        
+        console.error(error);
       }
     }
   }
@@ -179,29 +159,29 @@ export default function ProductList() {
   async function handleMarkInactive(id: string, alreadyInactive: boolean) {
     if (alreadyInactive) return;
     try {
-  await productService.update(id, { status: 'inactive' });
-  window.logger?.log({ action: 'product.mark_inactive', entity: 'product', entityId: id, actor: user?.email || undefined });
-  fetchProducts({ keepPage: true });
+      await productService.update(id, { status: 'inactive' });
+      window.logger?.log({ action: 'product.mark_inactive', entity: 'product', entityId: id, actor: user?.email || undefined });
+      fetchProducts({ keepPage: true });
     } catch (error) {
-      
+      console.error(error);
     }
   }
 
   async function handleMarkActive(id: string, alreadyActive: boolean) {
     if (alreadyActive) return;
     try {
-  await productService.update(id, { status: 'active' });
-  window.logger?.log({ action: 'product.mark_active', entity: 'product', entityId: id, actor: user?.email || undefined });
-  fetchProducts({ keepPage: true });
+      await productService.update(id, { status: 'active' });
+      window.logger?.log({ action: 'product.mark_active', entity: 'product', entityId: id, actor: user?.email || undefined });
+      fetchProducts({ keepPage: true });
     } catch (error) {
-      
+      console.error(error);
     }
   }
 
   function handleModalClose() {
     setIsModalOpen(false);
     setEditingProduct(null);
-  fetchProducts({ keepPage: true });
+    fetchProducts({ keepPage: true });
   }
 
   // Formatear el precio como moneda en Bolivianos
@@ -210,20 +190,17 @@ export default function ProductList() {
     return currency.format(Number.isFinite(numeric) ? numeric : 0);
   };
 
-  // Exportar a Excel (seleccionados o todos si no hay selección) con soporte >1000 y columnas compatibles con importación
+  // Exportar a Excel
   const handleExportExcel = async () => {
     try {
       let items: UIProduct[] = [];
       if (selectedIds.size > 0) {
-        items = products.filter(p => selectedIds.has(p.id));
+        const all = await productService.getAll();
+        items = (all as unknown as UIProduct[]).filter(p => selectedIds.has(p.id));
       } else {
-        // Traer todos en lotes para superar el límite de 1000
-        const all = await (productService as any).getAllAll?.(1000) ?? await productService.getAll();
-        items = all as UIProduct[];
-      }
-
-      // Aplicar filtros de UI cuando no hay selección
-      if (selectedIds.size === 0) {
+        const all = await productService.getAll();
+        items = all as unknown as UIProduct[];
+        
         if (warehouseFilter) {
           items = items.filter(p => ((p as any).location?.warehouse_id === warehouseFilter) || ((p as any).warehouse_id === warehouseFilter));
         }
@@ -266,7 +243,7 @@ export default function ProductList() {
       XLSX.utils.book_append_sheet(wb, ws, "Productos");
       XLSX.writeFile(wb, `productos_${new Date().toISOString().slice(0,10)}.xlsx`);
     } catch (e) {
-      
+      console.error(e);
       (toast as any)?.error?.('No se pudo exportar productos');
     }
   };
@@ -277,7 +254,7 @@ export default function ProductList() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-xl md:text-2xl">Productos</CardTitle>
           <div className="flex gap-2 sm:justify-end w-full sm:w-auto">
-            <ProductImport onImportComplete={fetchProducts} size="sm" className="w-full sm:w-auto" />
+            <ProductImport onImportComplete={() => fetchProducts({ keepPage: false })} size="sm" className="w-full sm:w-auto" />
             <Button
               onClick={handleExportExcel}
               variant="outline"
@@ -343,11 +320,11 @@ export default function ProductList() {
             {selectedIds.size > 0 && (
               <div className="flex items-center justify-between p-3 mb-2 rounded-md bg-blue-50 text-blue-900 border border-blue-200">
                 <div className="text-sm">
-                  Seleccionados {selectedIds.size} de {selectScope === 'page' ? visibleProducts.length : filteredProducts.length}{selectScope === 'page' ? ' en esta página' : ' en total'}.
+                  Seleccionados {selectedIds.size}.
                 </div>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm" onClick={() => setSelectedIds(new Set())}>Limpiar selección</Button>
-                  {/* Botón de eliminación masiva, con extremo cuidado */}
+                  {/* Botón de eliminación masiva */}
                   <Button
                     variant="destructive"
                     size="sm"
@@ -359,12 +336,12 @@ export default function ProductList() {
                       try {
                         setIsLoading(true);
                         const ids = Array.from(selectedIds);
-                        await productService.deleteMany(ids);
+                        await Promise.all(ids.map(id => productService.delete(id)));
+                        
                         window.logger?.log({ action: 'product.bulk_delete', entity: 'product', details: { ids }, actor: user?.email || undefined });
                         setSelectedIds(new Set());
                         await fetchProducts({ keepPage: true });
                       } catch (e) {
-                        
                         toast.error('Ocurrió un error eliminando uno o más productos.');
                       } finally {
                         setIsLoading(false);
@@ -382,7 +359,7 @@ export default function ProductList() {
                     <Checkbox
                       checked={someVisibleSelected ? 'indeterminate' : allVisibleSelected}
                       onCheckedChange={toggleSelectAll}
-                      aria-label={selectScope === 'page' ? 'Seleccionar todos en esta página' : 'Seleccionar todos (filtrados)'}
+                      aria-label="Seleccionar todos en esta página"
                     />
                   </TableHead>
                   <TableHead>Nombre</TableHead>
@@ -506,23 +483,12 @@ export default function ProductList() {
                 )}
               </TableBody>
             </Table>
-            {/* Selector de alcance de selección y paginación */}
             {/* Controles de paginación */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-4">
               <div className="text-sm text-muted-foreground">
-                Mostrando {total === 0 ? 0 : startIndex + 1}–{endIndex} de {total}
+                Mostrando {totalCount === 0 ? 0 : (page - 1) * pageSize + 1}–{Math.min(page * pageSize, totalCount)} de {totalCount}
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-sm hidden md:inline">Selección</span>
-                <Select value={selectScope} onValueChange={(val) => setSelectScope(val as 'page' | 'all')}>
-                  <SelectTrigger className="w-[160px]" aria-label="Alcance de selección">
-                    <SelectValue placeholder="Página" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="page">Esta página</SelectItem>
-                    <SelectItem value="all">Todos (filtrados)</SelectItem>
-                  </SelectContent>
-                </Select>
                 <span className="text-sm">Por página</span>
                 <Select value={String(pageSize)} onValueChange={(val) => { setPageSize(Number(val)); setPage(1); }}>
                   <SelectTrigger className="w-[80px]">

@@ -1,51 +1,53 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import Layout from './components/Layout';
-import Dashboard from './views/Dashboard';
-import Products from './views/Products';
-import Categories from './views/Categories';
-import Warehouses from './views/Warehouses';
-import Suppliers from './views/Suppliers';
-import SupplierDetail from './views/SupplierDetail';
-import Reports from './views/Reports';
-import Locations from './views/Locations';
-
-// Existentes
-import Sales from './views/Sales';
-import Inventory from './views/Inventory';
-import InventoryGeneral from './views/InventoryGeneral';
-import PurchaseOrders from './views/PurchaseOrders';
-import PurchaseOrderForm from './views/PurchaseOrderForm';
-import PurchaseOrderDetail from './views/PurchaseOrderDetail';
-import PurchaseOrderList from './views/PurchaseOrderList';
-import SupplierPurchases from './views/SupplierPurchases';
-
-// Nuevas vistas para el módulo de ventas
-import Customers from './views/Customers';
-import CustomerForm from './views/CustomerForm';
-import Invoices from './views/Invoices';
-import InvoiceForm from './views/InvoiceForm';
-import Returns from './views/Returns';
-import InvoiceDetail from './views/InvoiceDetail';
-import ReturnForm from './views/ReturnForm';
-import ReturnDetail from './views/ReturnDetail';
-
-// Gestión de usuarios
-import Users from './views/Users';
-import RolePermissions from './views/RolePermissions';
-import Login from './views/Login';
-import ResetPassword from './views/ResetPassword';
-import Settings from './views/Settings';
 import { AuthProvider, useAuth } from './lib/auth';
 import { Toaster } from 'react-hot-toast';
-
-// Componentes de suscripción
-import SubscriptionExpired from './views/SubscriptionExpired';
-import SubscriptionRenew from './views/SubscriptionRenew';
-import SubscriptionGuard from './components/SubscriptionGuard';
+import SplashScreen from './components/SplashScreen';
 import Onboarding from './Onboarding';
 import SupabaseConfigModal from './components/SupabaseConfigModal';
-import SplashScreen from './components/SplashScreen';
+import SubscriptionGuard from './components/SubscriptionGuard';
+
+// Lazy load pages
+const Dashboard = React.lazy(() => import('./views/Dashboard'));
+const Products = React.lazy(() => import('./views/Products'));
+const Categories = React.lazy(() => import('./views/Categories'));
+const Warehouses = React.lazy(() => import('./views/Warehouses'));
+const Suppliers = React.lazy(() => import('./views/Suppliers'));
+const SupplierDetail = React.lazy(() => import('./views/SupplierDetail'));
+const Reports = React.lazy(() => import('./views/Reports'));
+const Locations = React.lazy(() => import('./views/Locations'));
+
+// Existentes
+const Sales = React.lazy(() => import('./views/Sales'));
+const Inventory = React.lazy(() => import('./views/Inventory'));
+const InventoryGeneral = React.lazy(() => import('./views/InventoryGeneral'));
+const PurchaseOrders = React.lazy(() => import('./views/PurchaseOrders'));
+const PurchaseOrderForm = React.lazy(() => import('./views/PurchaseOrderForm'));
+const PurchaseOrderDetail = React.lazy(() => import('./views/PurchaseOrderDetail'));
+const PurchaseOrderList = React.lazy(() => import('./views/PurchaseOrderList'));
+const SupplierPurchases = React.lazy(() => import('./views/SupplierPurchases'));
+
+// Nuevas vistas para el módulo de ventas
+const Customers = React.lazy(() => import('./views/Customers'));
+const CustomerForm = React.lazy(() => import('./views/CustomerForm'));
+const Invoices = React.lazy(() => import('./views/Invoices'));
+const InvoiceForm = React.lazy(() => import('./views/InvoiceForm'));
+const Returns = React.lazy(() => import('./views/Returns'));
+const InvoiceDetail = React.lazy(() => import('./views/InvoiceDetail'));
+const ReturnForm = React.lazy(() => import('./views/ReturnForm'));
+const ReturnDetail = React.lazy(() => import('./views/ReturnDetail'));
+
+// Gestión de usuarios
+const Users = React.lazy(() => import('./views/Users'));
+const RolePermissions = React.lazy(() => import('./views/RolePermissions'));
+const Login = React.lazy(() => import('./views/Login'));
+const ResetPassword = React.lazy(() => import('./views/ResetPassword'));
+const Settings = React.lazy(() => import('./views/Settings'));
+
+// Componentes de suscripción
+const SubscriptionExpired = React.lazy(() => import('./views/SubscriptionExpired'));
+const SubscriptionRenew = React.lazy(() => import('./views/SubscriptionRenew'));
 
 // Inicializar el tema
 const initializeTheme = () => {
@@ -68,11 +70,20 @@ const initializeTheme = () => {
 // Inicializar el tema cuando se carga la app
 initializeTheme();
 
+// Loading Fallback
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center">
+    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
+  </div>
+);
+
 // Componente contenedor para Layout
 const LayoutWrapper = ({ onOpenConfig }: { onOpenConfig: () => void }) => {
   return (
     <Layout onOpenConfig={onOpenConfig}>
-      <Outlet />
+      <Suspense fallback={<PageLoader />}>
+        <Outlet />
+      </Suspense>
     </Layout>
   );
 };
@@ -82,11 +93,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
-      </div>
-    );
+    return <PageLoader />;
   }
 
   if (!user) {
@@ -100,11 +107,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
-      </div>
-    );
+    return <PageLoader />;
   }
   if (!user) {
     return <Navigate to="/login" replace />;
@@ -128,26 +131,21 @@ const App = () => {
     const win = window as any;
     const forced = sessionStorage.getItem('forceOnboarding') === '1';
     if (forced) {
-  // debug silenciado
       setShowOnboarding(true);
       sessionStorage.removeItem('forceOnboarding');
       return;
     }
     if (win.supabaseConfig && typeof win.supabaseConfig.get === 'function') {
       win.supabaseConfig.get().then((config: any) => {
-  // debug silenciado
         if (config?.url && config?.anonKey) {
           setReady(true);
         } else {
-          // debug silenciado
           setShowOnboarding(true);
         }
       }).catch((e: any) => {
-  // debug silenciado
         setShowOnboarding(true);
       });
     } else {
-  // debug silenciado
       setReady(true);
     }
   }, []);
@@ -306,81 +304,83 @@ const App = () => {
       {showOnboarding && (
         <Onboarding onFinish={handleOnboardingFinish} />
       )}
-      <Routes>
-        {/* Ruta pública para login */}
-        <Route path="/login" element={<Login />} />
-        {/* Ruta pública para recuperación de contraseña */}
-        <Route path="/reset-password" element={<ResetPassword />} />
-        {/* Rutas de suscripción */}
-        <Route path="/subscription/expired" element={
-          <ProtectedRoute>
-            <SubscriptionExpired />
-          </ProtectedRoute>
-        } />
-        <Route path="/subscription/renew" element={
-          <ProtectedRoute>
-            <SubscriptionRenew />
-          </ProtectedRoute>
-        } />
-        {/* Rutas protegidas con verificación de suscripción */}
-        <Route path="/" element={
-          <ProtectedRoute>
-            <SubscriptionGuard>
-              <LayoutWrapper onOpenConfig={handleOpenConfig} />
-            </SubscriptionGuard>
-          </ProtectedRoute>
-        }>
-          <Route index element={<Dashboard />} />
-          <Route path="productos" element={<Products />} />
-          <Route path="categorias" element={<Categories />} />
-          <Route path="almacenes" element={<Warehouses />} />
-          <Route path="ubicaciones" element={<Locations />} />
-          <Route path="proveedores" element={<Suppliers />} />
-          <Route path="proveedores/:id" element={<SupplierDetail />} />
-          <Route path="proveedores/:id/compras" element={<SupplierPurchases />} />
-          <Route path="inventario" element={<Inventory />} />
-          <Route path="inventario/general" element={<InventoryGeneral />} />
-          <Route path="reportes" element={<Reports />} />
-          {/* Rutas de Órdenes de Compra */}
-          <Route path="ordenes-compra" element={<PurchaseOrders />} />
-          <Route path="ordenes-compra/lista" element={<PurchaseOrderList />} />
-          <Route path="ordenes-compra/nueva" element={<PurchaseOrderForm />} />
-          <Route path="ordenes-compra/editar/:id" element={<PurchaseOrderForm />} />
-          <Route path="ordenes-compra/:id" element={<PurchaseOrderDetail />} />
-          <Route path="ordenes-compra/:id/recibir" element={<PurchaseOrderDetail />} />
-          {/* Rutas del módulo de Ventas */}
-          <Route path="ventas" element={<Sales />} />
-          {/* Rutas de Clientes */}
-          <Route path="ventas/clientes" element={<Customers />} />
-          <Route path="ventas/clientes/nuevo" element={<CustomerForm />} />
-          <Route path="ventas/clientes/editar/:id" element={<CustomerForm />} />
-          {/* Rutas de Facturas */}
-          <Route path="ventas/facturas" element={<Invoices />} />
-          <Route path="ventas/facturas/nueva" element={<InvoiceForm />} />
-          <Route path="ventas/facturas/editar/:id" element={<InvoiceForm />} />
-          <Route path="ventas/facturas/:id" element={<InvoiceDetail />} />
-          {/* Rutas de Devoluciones */}
-          <Route path="ventas/devoluciones" element={<Returns />} />
-          <Route path="ventas/devoluciones/nueva" element={<ReturnForm />} />
-          <Route path="ventas/devoluciones/:id" element={<ReturnDetail />} />
-          {/* Rutas de Gestión de Usuarios (solo admin) */}
-          <Route path="usuarios" element={
-            <AdminRoute>
-              <Users />
-            </AdminRoute>
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          {/* Ruta pública para login */}
+          <Route path="/login" element={<Login />} />
+          {/* Ruta pública para recuperación de contraseña */}
+          <Route path="/reset-password" element={<ResetPassword />} />
+          {/* Rutas de suscripción */}
+          <Route path="/subscription/expired" element={
+            <ProtectedRoute>
+              <SubscriptionExpired />
+            </ProtectedRoute>
           } />
-          <Route path="usuarios/permisos" element={
-            <AdminRoute>
-              <RolePermissions />
-            </AdminRoute>
+          <Route path="/subscription/renew" element={
+            <ProtectedRoute>
+              <SubscriptionRenew />
+            </ProtectedRoute>
           } />
-          {/* Ruta de Ajustes */}
-          <Route path="ajustes" element={<Settings />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
+          {/* Rutas protegidas con verificación de suscripción */}
+          <Route path="/" element={
+            <ProtectedRoute>
+              <SubscriptionGuard>
+                <LayoutWrapper onOpenConfig={handleOpenConfig} />
+              </SubscriptionGuard>
+            </ProtectedRoute>
+          }>
+            <Route index element={<Dashboard />} />
+            <Route path="productos" element={<Products />} />
+            <Route path="categorias" element={<Categories />} />
+            <Route path="almacenes" element={<Warehouses />} />
+            <Route path="ubicaciones" element={<Locations />} />
+            <Route path="proveedores" element={<Suppliers />} />
+            <Route path="proveedores/:id" element={<SupplierDetail />} />
+            <Route path="proveedores/:id/compras" element={<SupplierPurchases />} />
+            <Route path="inventario" element={<Inventory />} />
+            <Route path="inventario/general" element={<InventoryGeneral />} />
+            <Route path="reportes" element={<Reports />} />
+            {/* Rutas de Órdenes de Compra */}
+            <Route path="ordenes-compra" element={<PurchaseOrders />} />
+            <Route path="ordenes-compra/lista" element={<PurchaseOrderList />} />
+            <Route path="ordenes-compra/nueva" element={<PurchaseOrderForm />} />
+            <Route path="ordenes-compra/editar/:id" element={<PurchaseOrderForm />} />
+            <Route path="ordenes-compra/:id" element={<PurchaseOrderDetail />} />
+            <Route path="ordenes-compra/:id/recibir" element={<PurchaseOrderDetail />} />
+            {/* Rutas del módulo de Ventas */}
+            <Route path="ventas" element={<Sales />} />
+            {/* Rutas de Clientes */}
+            <Route path="ventas/clientes" element={<Customers />} />
+            <Route path="ventas/clientes/nuevo" element={<CustomerForm />} />
+            <Route path="ventas/clientes/editar/:id" element={<CustomerForm />} />
+            {/* Rutas de Facturas */}
+            <Route path="ventas/facturas" element={<Invoices />} />
+            <Route path="ventas/facturas/nueva" element={<InvoiceForm />} />
+            <Route path="ventas/facturas/editar/:id" element={<InvoiceForm />} />
+            <Route path="ventas/facturas/:id" element={<InvoiceDetail />} />
+            {/* Rutas de Devoluciones */}
+            <Route path="ventas/devoluciones" element={<Returns />} />
+            <Route path="ventas/devoluciones/nueva" element={<ReturnForm />} />
+            <Route path="ventas/devoluciones/:id" element={<ReturnDetail />} />
+            {/* Rutas de Gestión de Usuarios (solo admin) */}
+            <Route path="usuarios" element={
+              <AdminRoute>
+                <Users />
+              </AdminRoute>
+            } />
+            <Route path="usuarios/permisos" element={
+              <AdminRoute>
+                <RolePermissions />
+              </AdminRoute>
+            } />
+            {/* Ruta de Ajustes */}
+            <Route path="ajustes" element={<Settings />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </Suspense>
     </>
   );
 };
 
-export default App; 
+export default App;

@@ -1,7 +1,22 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import { autoUpdater } from 'electron-updater';
-import fs from 'fs';
+import fs from 'fs/promises';
+import Store from 'electron-store';
+
+// Definir tipos para el store
+interface StoreType {
+  windowState: {
+    width: number;
+    height: number;
+    x?: number;
+    y?: number;
+    isMaximized: boolean;
+  };
+}
+
+// Inicializar store
+const store = new Store<StoreType>();
 
 // Mantener una referencia global del objeto window para evitar que se cierre automáticamente
 let mainWindow: BrowserWindow | null = null;
@@ -10,16 +25,44 @@ let mainWindow: BrowserWindow | null = null;
 const configPath = path.join(app.getPath('userData'), 'supabase-config.json');
 
 function createWindow() {
+  // Recuperar estado de la ventana
+  const defaultState = { width: 1200, height: 800, isMaximized: false };
+  const state = store.get('windowState', defaultState);
+
   // Crear ventana del navegador
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: state.width,
+    height: state.height,
+    x: state.x,
+    y: state.y,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, '../dist/preload.js')
     }
   });
+
+  if (state.isMaximized) {
+    mainWindow.maximize();
+  }
+
+  // Guardar estado de la ventana
+  const saveState = () => {
+    if (!mainWindow) return;
+    const bounds = mainWindow.getBounds();
+    store.set('windowState', {
+      width: bounds.width,
+      height: bounds.height,
+      x: bounds.x,
+      y: bounds.y,
+      isMaximized: mainWindow.isMaximized()
+    });
+  };
+
+  // Eventos para guardar estado
+  mainWindow.on('resize', saveState);
+  mainWindow.on('move', saveState);
+  mainWindow.on('close', saveState);
 
   // Limpiar todas las cachés
   mainWindow.webContents.session.clearCache();
@@ -58,10 +101,10 @@ app.whenReady().then(() => {
         console.log('Update feed configurado (GENERIC)');
       } else {
         // Por defecto usamos GitHub Releases del repo público
-        autoUpdater.setFeedURL({ 
-          provider: 'github', 
-          owner: 'Limpi23', 
-          repo: 'inventory-pro-sc' 
+        autoUpdater.setFeedURL({
+          provider: 'github',
+          owner: 'Limpi23',
+          repo: 'inventory-pro-sc'
         });
         console.log('Update feed configurado (GITHUB)');
       }
@@ -138,8 +181,8 @@ ipcMain.on('check-for-updates', () => {
   } else {
     console.log('Actualizaciones deshabilitadas en desarrollo');
     if (mainWindow) {
-      mainWindow.webContents.send('update-error', { 
-        message: 'Las actualizaciones están deshabilitadas en modo desarrollo' 
+      mainWindow.webContents.send('update-error', {
+        message: 'Las actualizaciones están deshabilitadas en modo desarrollo'
       });
     }
   }
@@ -197,7 +240,7 @@ ipcMain.handle('get-sale-notes', async () => {
 // Handler para guardar la configuración
 ipcMain.handle('save-supabase-config', async (_event, config) => {
   try {
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+    await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf-8');
     return { success: true };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -207,11 +250,16 @@ ipcMain.handle('save-supabase-config', async (_event, config) => {
 // Handler para obtener la configuración
 ipcMain.handle('get-supabase-config', async () => {
   try {
-    if (fs.existsSync(configPath)) {
-      const data = fs.readFileSync(configPath, 'utf-8');
+    // Usar try/catch en lugar de existsSync para operaciones asíncronas
+    try {
+      const data = await fs.readFile(configPath, 'utf-8');
       return JSON.parse(data);
+    } catch (e: any) {
+      if (e.code === 'ENOENT') {
+        return {};
+      }
+      throw e;
     }
-    return {};
   } catch (error) {
     return {};
   }
@@ -222,7 +270,7 @@ ipcMain.handle('read-migration-file', async (_event, migrationName: string) => {
   try {
     // Determinar la ruta base dependiendo del entorno
     let migrationsPath: string;
-    
+
     if (process.env.NODE_ENV === 'development') {
       // En desarrollo, leer desde la carpeta del proyecto
       migrationsPath = path.join(__dirname, '../../supabase/migrations');
@@ -232,15 +280,18 @@ ipcMain.handle('read-migration-file', async (_event, migrationName: string) => {
     }
 
     const filePath = path.join(migrationsPath, `${migrationName}.sql`);
-    
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`Archivo de migración no encontrado: ${migrationName}`);
-    }
 
-    const content = fs.readFileSync(filePath, 'utf-8');
-    return content;
+    try {
+      const content = await fs.readFile(filePath, 'utf-8');
+      return content;
+    } catch (e: any) {
+      if (e.code === 'ENOENT') {
+        throw new Error(`Archivo de migración no encontrado: ${migrationName}`);
+      }
+      throw e;
+    }
   } catch (error) {
     console.error('Error leyendo archivo de migración:', error);
     throw error;
   }
-}); 
+});

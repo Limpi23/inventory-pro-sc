@@ -25,33 +25,33 @@ export const categoriesService = {
       .from('categories')
       .select('*')
       .order('name');
-    
+
     if (error) throw error;
     return data;
   },
-  
+
   async getById(id: string) {
     const { data, error } = await supabase
       .from('categories')
       .select('*')
       .eq('id', id)
       .single();
-    
+
     if (error) throw error;
     return data;
   },
-  
+
   async create(category: CategoryInput) {
     const { data, error } = await supabase
       .from('categories')
       .insert([category])
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   },
-  
+
   async update(id: string, category: Partial<CategoryInput>) {
     const { data, error } = await supabase
       .from('categories')
@@ -59,60 +59,60 @@ export const categoriesService = {
       .eq('id', id)
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   },
-  
+
   async delete(id: string) {
     const { error } = await supabase
       .from('categories')
       .delete()
       .eq('id', id);
-    
+
     if (error) throw error;
     return true;
   },
-  
+
   async exportToCSV(): Promise<string> {
     const categories = await this.getAll();
-    
+
     // Crear encabezado CSV
     let csvContent = "Nombre,Descripción\n";
-    
+
     // Añadir filas para cada categoría
     categories.forEach(category => {
       // Escapar comillas y manejar campos vacíos
       const name = category.name.includes(',') ? `"${category.name}"` : category.name;
-      const description = category.description 
+      const description = category.description
         ? (category.description.includes(',') ? `"${category.description}"` : category.description)
         : '';
-      
+
       csvContent += `${name},${description}\n`;
     });
-    
+
     return csvContent;
   },
-  
+
   async importFromCSV(fileContent: string): Promise<{ success: number; errors: number; messages: string[] }> {
     const lines = fileContent.split('\n');
     // Eliminar línea de encabezado y líneas vacías
     const dataLines = lines.slice(1).filter(line => line.trim() !== '');
-    
+
     const categories: CategoryInput[] = [];
     const errorMessages: string[] = [];
-    
+
     // Procesar cada línea del archivo CSV
     for (let i = 0; i < dataLines.length; i++) {
       try {
         const line = dataLines[i].trim();
         const [name, description = ''] = line.split(',').map(item => item.trim().replace(/^"|"$/g, ''));
-        
+
         if (!name) {
           errorMessages.push(`Fila ${i + 2}: El nombre de categoría es obligatorio`);
           continue;
         }
-        
+
         categories.push({
           name,
           description: description || undefined
@@ -121,7 +121,7 @@ export const categoriesService = {
         errorMessages.push(`Error al procesar fila ${i + 2}: ${error instanceof Error ? error.message : 'Formato inválido'}`);
       }
     }
-    
+
     // Si no hay categorías válidas para importar
     if (categories.length === 0) {
       return {
@@ -130,20 +130,20 @@ export const categoriesService = {
         messages: ['No se encontraron categorías válidas para importar', ...errorMessages]
       };
     }
-    
+
     // Insertar categorías en lotes
     const batchSize = 50;
     let successCount = 0;
-    
+
     for (let i = 0; i < categories.length; i += batchSize) {
       const batch = categories.slice(i, i + batchSize);
-      
+
       try {
         const { data, error } = await supabase
           .from('categories')
           .insert(batch)
           .select();
-        
+
         if (error) throw error;
         if (data) successCount += data.length;
       } catch (error: any) {
@@ -154,7 +154,7 @@ export const categoriesService = {
         }
       }
     }
-    
+
     return {
       success: successCount,
       errors: dataLines.length - successCount,
@@ -170,33 +170,33 @@ export const warehousesService = {
       .from('warehouses')
       .select('*')
       .order('name');
-    
+
     if (error) throw error;
     return data;
   },
-  
+
   async getById(id: string) {
     const { data, error } = await supabase
       .from('warehouses')
       .select('*')
       .eq('id', id)
       .single();
-    
+
     if (error) throw error;
     return data;
   },
-  
+
   async create(warehouse: WarehouseInput) {
     const { data, error } = await supabase
       .from('warehouses')
       .insert([warehouse])
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   },
-  
+
   async update(id: string, warehouse: Partial<WarehouseInput>) {
     const { data, error } = await supabase
       .from('warehouses')
@@ -204,17 +204,17 @@ export const warehousesService = {
       .eq('id', id)
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   },
-  
+
   async delete(id: string) {
     const { error } = await supabase
       .from('warehouses')
       .delete()
       .eq('id', id);
-    
+
     if (error) throw error;
     return true;
   }
@@ -222,19 +222,64 @@ export const warehousesService = {
 
 // Funciones de utilidad para el manejo de productos
 export const productsService = {
+  async getProducts({
+    page = 1,
+    pageSize = 50,
+    search = '',
+    warehouseId = '',
+    locationId = ''
+  }: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    warehouseId?: string;
+    locationId?: string;
+  }) {
+    let query = supabase
+      .from('products')
+      .select(`
+        *,
+        category:categories(id, name),
+        location:locations(id, name, warehouse_id)
+      `, { count: 'exact' });
+
+    if (search) {
+      query = query.or(`name.ilike.%${search}%, sku.ilike.%${search}%, barcode.ilike.%${search}%`);
+    }
+
+    if (warehouseId) {
+      query = query.eq('location.warehouse_id', warehouseId);
+    }
+
+    if (locationId) {
+      query = query.eq('location_id', locationId);
+    }
+
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    const { data, error, count } = await query
+      .range(from, to)
+      .order('name');
+
+    if (error) throw error;
+    return { data, count };
+  },
+
   async getAll() {
     const { data, error } = await supabase
       .from('products')
       .select(`
         *,
-        category:categories(id, name)
+        category:categories(id, name),
+        location:locations(id, name, warehouse_id)
       `)
       .order('name');
-    
+
     if (error) throw error;
     return data;
   },
-  
+
   async getById(id: string) {
     const { data, error } = await supabase
       .from('products')
@@ -244,7 +289,7 @@ export const productsService = {
       `)
       .eq('id', id)
       .single();
-    
+
     if (error) throw error;
     return data;
   },
@@ -258,7 +303,7 @@ export const productsService = {
       `)
       .eq('category_id', categoryId)
       .order('name');
-    
+
     if (error) throw error;
     return data;
   },
@@ -272,39 +317,39 @@ export const productsService = {
       `)
       .or(`name.ilike.%${query}%, sku.ilike.%${query}%, barcode.ilike.%${query}%`)
       .order('name');
-    
+
     if (error) throw error;
     return data;
   },
-  
+
   async create(product: ProductInput) {
     const { data, error } = await supabase
       .from('products')
       .insert([product])
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   },
-  
+
   async createBatch(products: ProductInput[]) {
     if (!products.length) return [];
-    
+
     // Supabase tiene un límite de 1000 filas por inserción, por lo que dividimos el array si es necesario
     const batchSize = 100;
     const results = [];
     const errors = [];
-    
+
     for (let i = 0; i < products.length; i += batchSize) {
       const batch = products.slice(i, i + batchSize);
-      
+
       try {
         const { data, error } = await supabase
           .from('products')
           .insert(batch)
           .select();
-        
+
         if (error) throw error;
         if (data) results.push(...data);
       } catch (error) {
@@ -312,14 +357,14 @@ export const productsService = {
         console.error(`Error al insertar lote ${i / batchSize + 1}:`, error);
       }
     }
-    
+
     if (errors.length) {
       console.warn(`Se completó con ${errors.length} errores. Se insertaron ${results.length} de ${products.length} productos.`);
     }
-    
+
     return results;
   },
-  
+
   async update(id: string, product: Partial<ProductInput>) {
     const { data, error } = await supabase
       .from('products')
@@ -327,18 +372,18 @@ export const productsService = {
       .eq('id', id)
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   },
-  
+
   async delete(id: string) {
     const { error } = await supabase
       .from('products')
       .delete()
       .eq('id', id);
-    
+
     if (error) throw error;
     return true;
   }
-}; 
+};

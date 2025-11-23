@@ -88,33 +88,33 @@ const Inventory: React.FC = () => {
   useEffect(() => {
     async function fetchData() {
       try {
-  const client = await supabase.getClient();
+        const client = await supabase.getClient();
         // Cargar productos
-  const { data: productsData, error: productsError } = await client
+        const { data: productsData, error: productsError } = await client
           .from('products')
           .select('*');
         
         if (productsError) throw productsError;
-  setProducts((productsData as unknown as Product[]) || []);
+        setProducts((productsData as unknown as Product[]) || []);
 
         // Cargar almacenes
-  const { data: warehousesData, error: warehousesError } = await client
+        const { data: warehousesData, error: warehousesError } = await client
           .from('warehouses')
           .select('*');
         
         if (warehousesError) throw warehousesError;
-  setWarehouses((warehousesData as unknown as Warehouse[]) || []);
+        setWarehouses((warehousesData as unknown as Warehouse[]) || []);
 
         // Cargar tipos de movimiento
-  const { data: movementTypesData, error: movementTypesError } = await client
+        const { data: movementTypesData, error: movementTypesError } = await client
           .from('movement_types')
           .select('*');
         
         if (movementTypesError) throw movementTypesError;
-  setMovementTypes((movementTypesData as unknown as any[]) || []);
+        setMovementTypes((movementTypesData as unknown as any[]) || []);
 
         // Cargar movimientos recientes (incluyendo ubicación)
-  const { data: movementsData, error: movementsError } = await client
+        const { data: movementsData, error: movementsError } = await client
           .from('stock_movements')
           .select(`
             *,
@@ -127,15 +127,15 @@ const Inventory: React.FC = () => {
           .limit(10);
         
         if (movementsError) throw movementsError;
-  setStockMovements((movementsData as unknown as StockMovement[]) || []);
+        setStockMovements((movementsData as unknown as StockMovement[]) || []);
 
         // Cargar stock actual
-  const { data: stockData, error: stockError } = await client
+        const { data: stockData, error: stockError } = await client
           .from('current_stock')
           .select('*');
         
         if (stockError) throw stockError;
-  setCurrentStock((stockData as unknown as any[]) || []);
+        setCurrentStock((stockData as unknown as any[]) || []);
 
         setIsLoading(false);
       } catch (err: any) {
@@ -313,9 +313,9 @@ const Inventory: React.FC = () => {
     try {
       const client = await supabase.getClient();
 
-      // Validar stock para salidas y transferencias
+      // Validar stock para salidas y transferencias (en paralelo)
       if (!isEntry || isTransfer) {
-        for (const item of movementItems) {
+        const stockChecks = movementItems.map(async (item) => {
           const { data: stockData } = await client
             .from('current_stock_by_location')
             .select('current_quantity')
@@ -328,81 +328,85 @@ const Inventory: React.FC = () => {
           if (item.quantity > currentQty) {
             throw new Error(`Stock insuficiente para ${item.productName}. Solo hay ${currentQty} unidades disponibles.`);
           }
+        });
+        
+        await Promise.all(stockChecks);
+      }
+
+      // Preparar movimientos para inserción masiva
+      const movementsToInsert: any[] = [];
+      
+      // Obtener tipos de movimiento necesarios una sola vez
+      let outMovementType: any;
+      let inMovementType: any;
+      let standardMovementType: any;
+
+      if (isTransfer) {
+        outMovementType = movementTypes.find((t) => t.code === 'OUT_TRANSFER');
+        inMovementType = movementTypes.find((t) => t.code === 'IN_TRANSFER');
+        if (!outMovementType || !inMovementType) {
+          throw new Error('Tipos de movimiento de transferencia no encontrados');
+        }
+      } else {
+        const typeCode = isEntry ? 'IN_PURCHASE' : 'OUT_SALE';
+        standardMovementType = movementTypes.find((t) => t.code === typeCode);
+        if (!standardMovementType) {
+          throw new Error('Tipo de movimiento no encontrado');
         }
       }
 
-      // Procesar cada item de la lista
+      // Construir array de movimientos
       for (const item of movementItems) {
         if (isTransfer) {
-          // Crear movimiento de salida del almacén origen
-          const outMovementType = movementTypes.find((t) => t.code === 'OUT_TRANSFER');
-          if (!outMovementType) {
-            throw new Error('Tipo de movimiento de salida por transferencia no encontrado');
-          }
-          
           const transferId = crypto.randomUUID();
           
-          const { error: outError } = await client
-            .from('stock_movements')
-            .insert({
-              product_id: item.productId,
-              warehouse_id: item.warehouseId,
-              location_id: item.locationId,
-              quantity: item.quantity,
-              movement_type_id: outMovementType.id,
-              movement_date: new Date(date).toISOString(),
-              reference: globalReference || `Transferencia a ${item.destinationWarehouseName}`,
-              notes: globalNotes || null,
-              related_id: transferId
-            });
+          // Salida
+          movementsToInsert.push({
+            product_id: item.productId,
+            warehouse_id: item.warehouseId,
+            location_id: item.locationId,
+            quantity: item.quantity,
+            movement_type_id: outMovementType.id,
+            movement_date: new Date(date).toISOString(),
+            reference: globalReference || `Transferencia a ${item.destinationWarehouseName}`,
+            notes: globalNotes || null,
+            related_id: transferId
+          });
 
-          if (outError) throw outError;
-
-          // Crear movimiento de entrada en el almacén destino
-          const inMovementType = movementTypes.find((t) => t.code === 'IN_TRANSFER');
-          if (!inMovementType) {
-            throw new Error('Tipo de movimiento de entrada por transferencia no encontrado');
-          }
-          
-          const { error: inError } = await client
-            .from('stock_movements')
-            .insert({
-              product_id: item.productId,
-              warehouse_id: item.destinationWarehouseId!,
-              location_id: item.destinationLocationId!,
-              quantity: item.quantity,
-              movement_type_id: inMovementType.id,
-              movement_date: new Date(date).toISOString(),
-              reference: globalReference || `Transferencia desde ${item.warehouseName}`,
-              notes: globalNotes || null,
-              related_id: transferId
-            });
-
-          if (inError) throw inError;
+          // Entrada
+          movementsToInsert.push({
+            product_id: item.productId,
+            warehouse_id: item.destinationWarehouseId!,
+            location_id: item.destinationLocationId!,
+            quantity: item.quantity,
+            movement_type_id: inMovementType.id,
+            movement_date: new Date(date).toISOString(),
+            reference: globalReference || `Transferencia desde ${item.warehouseName}`,
+            notes: globalNotes || null,
+            related_id: transferId
+          });
         } else {
-          // Entradas y salidas normales
-          const typeCode = isEntry ? 'IN_PURCHASE' : 'OUT_SALE';
-          const movementType = movementTypes.find((t) => t.code === typeCode);
-          
-          if (!movementType) {
-            throw new Error('Tipo de movimiento no encontrado');
-          }
-
-          const { error: insertError } = await client
-            .from('stock_movements')
-            .insert({
-              product_id: item.productId,
-              warehouse_id: item.warehouseId,
-              location_id: item.locationId,
-              quantity: item.quantity,
-              movement_type_id: movementType.id,
-              movement_date: new Date(date).toISOString(),
-              reference: globalReference || null,
-              notes: globalNotes || null
-            });
-
-          if (insertError) throw insertError;
+          // Entrada/Salida normal
+          movementsToInsert.push({
+            product_id: item.productId,
+            warehouse_id: item.warehouseId,
+            location_id: item.locationId,
+            quantity: item.quantity,
+            movement_type_id: standardMovementType.id,
+            movement_date: new Date(date).toISOString(),
+            reference: globalReference || null,
+            notes: globalNotes || null
+          });
         }
+      }
+
+      // Inserción masiva
+      if (movementsToInsert.length > 0) {
+        const { error: insertError } = await client
+          .from('stock_movements')
+          .insert(movementsToInsert);
+
+        if (insertError) throw insertError;
       }
 
       // Recargar datos
@@ -802,151 +806,83 @@ const Inventory: React.FC = () => {
                   <textarea
                     value={globalNotes}
                     onChange={(e) => setGlobalNotes(e.target.value)}
-                    placeholder="Información adicional sobre estos movimientos"
+                    placeholder="Notas adicionales para todos los movimientos..."
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                     rows={2}
-                  ></textarea>
+                  />
                 </div>
               </div>
 
-              {/* Botón para guardar todos */}
-              <div className="flex justify-end">
+              <div className="flex justify-end space-x-3">
                 <button
-                  onClick={handleSubmit}
-                  className={`px-6 py-2 rounded-md text-white text-sm font-medium ${
-                    isTransfer
-                      ? 'bg-green-600 hover:bg-green-700'
-                      : 'bg-blue-600 hover:bg-blue-700'
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  type="button"
+                  onClick={() => setMovementItems([])}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm hover:bg-gray-50"
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? (
-                    <>
-                      <i className="fas fa-spinner fa-spin mr-2"></i>
-                      Procesando...
-                    </>
-                  ) : (
-                    <>
-                      <i className="fas fa-save mr-2"></i>
-                      {isTransfer 
-                        ? `Registrar ${movementItems.length} Transferencia${movementItems.length > 1 ? 's' : ''}` 
-                        : `Registrar ${movementItems.length} ${isEntry ? 'Entrada' : 'Salida'}${movementItems.length > 1 ? 's' : ''}`}
-                    </>
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700 disabled:opacity-50 flex items-center"
+                >
+                  {isSubmitting && (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                   )}
+                  Guardar Movimientos
                 </button>
               </div>
             </div>
           )}
         </div>
 
+        {/* Panel lateral con movimientos recientes */}
         <div className="bg-white p-6 rounded-lg shadow">
-          <h2 className="text-xl font-semibold mb-3">Stock Actual</h2>
+          <h2 className="text-xl font-semibold mb-4">Movimientos Recientes</h2>
           
-          <div className="max-h-[400px] overflow-y-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead>
-                <tr>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-2">
-                    Producto
-                  </th>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-2">
-                    Almacén
-                  </th>
-                  <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider py-2">
-                    Cantidad
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {currentStock.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="py-2 text-center text-sm text-gray-500">
-                      No hay datos de inventario
-                    </td>
-                  </tr>
-                ) : (
-                  currentStock.map((item, index) => (
-                    <tr key={index}>
-                      <td className="py-2 text-sm">{item.product_name}</td>
-                      <td className="py-2 text-sm">{item.warehouse_name}</td>
-                      <td className="py-2 text-sm text-right font-medium">{item.current_quantity}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white p-6 rounded-lg shadow mt-6">
-        <h2 className="text-xl font-semibold mb-3">Movimientos Recientes</h2>
-        
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead>
-              <tr>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4">
-                  Fecha
-                </th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4">
-                  Tipo
-                </th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4">
-                  Producto
-                </th>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4">
-                    Almacén
-                  </th>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4">
-                    Ubicación
-                  </th>
-                <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4">
-                  Cantidad
-                </th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4">
-                  Referencia
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-                {stockMovements.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-4 text-center text-sm text-gray-500">
-                    No hay movimientos recientes
-                  </td>
-                </tr>
-              ) : (
-                stockMovements.map((movement) => (
-                  <tr key={movement.id}>
-                    <td className="py-3 px-4 text-sm">
+          <div className="space-y-4">
+            {stockMovements.length === 0 ? (
+              <p className="text-gray-500 text-sm text-center py-4">
+                No hay movimientos registrados
+              </p>
+            ) : (
+              stockMovements.map((movement) => (
+                <div key={movement.id} className="border-b border-gray-100 pb-3 last:border-0">
+                  <div className="flex justify-between items-start mb-1">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                      movement.movement_type?.code.startsWith('IN') 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {movement.movement_type?.description || movement.movement_type?.code}
+                    </span>
+                    <span className="text-xs text-gray-500">
                       {new Date(movement.movement_date).toLocaleDateString()}
-                    </td>
-                    <td className="py-3 px-4 text-sm">
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          movement.movement_type?.code?.startsWith('IN_')
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}
-                      >
-                        {movement.movement_type?.description || 'Desconocido'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-sm">{movement.product?.name}</td>
-                      <td className="py-3 px-4 text-sm">{movement.warehouse?.name}</td>
-                      <td className="py-3 px-4 text-sm">{(movement as any).location?.name || '-'}</td>
-                    <td className="py-3 px-4 text-sm text-right font-medium">{movement.quantity}</td>
-                    <td className="py-3 px-4 text-sm">{movement.reference || '-'}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                    </span>
+                  </div>
+                  <div className="font-medium text-sm mb-1">
+                    {movement.product?.name}
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>{movement.warehouse?.name}</span>
+                    <span className="font-semibold text-gray-700">
+                      {movement.quantity} u.
+                    </span>
+                  </div>
+                  {movement.reference && (
+                    <div className="text-xs text-gray-400 mt-1 truncate">
+                      Ref: {movement.reference}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
 };
 
-export default Inventory; 
+export default Inventory;

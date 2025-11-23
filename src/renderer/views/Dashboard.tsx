@@ -71,307 +71,147 @@ const Dashboard: React.FC = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      
       const client = await supabase.getClient();
-      
-      // Fetch total products count
-      const { count: productsCount, error: productsError } = await client
-        .from('products')
-        .select('*', { count: 'exact', head: true });
-      
-      if (productsError) throw productsError;
-      
-      // Fetch monthly sales total
       const today = new Date();
       const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+
+      // Execute independent queries in parallel
+      const [
+        productsResult,
+        salesResult,
+        lowStockCountResult,
+        movementsCountResult,
+        recentMovementsResult,
+        topProductsResult,
+        lowStockDetailResult
+      ] = await Promise.all([
+        // 1. Total products count
+        client.from('products').select('*', { count: 'exact', head: true }),
+        
+        // 2. Monthly sales (fetch total_amount only)
+        client.from('invoices')
+          .select('total_amount')
+          .gte('invoice_date', firstDayOfMonth.toISOString())
+          .in('status', ['emitida', 'pagada']),
+          
+        // 3. Low stock count (unique products)
+        client.from('current_stock')
+          .select('product_id')
+          .lte('current_quantity', 5),
+          
+        // 4. Today's movements count
+        client.from('stock_movements')
+          .select('*', { count: 'exact', head: true })
+          .gte('movement_date', startOfDay.toISOString()),
+          
+        // 5. Recent movements with joins
+        client.from('stock_movements')
+          .select(`
+            id,
+            quantity,
+            movement_date,
+            movement_type_id,
+            product:products(name),
+            warehouse:warehouses(name),
+            product_id,
+            warehouse_name,
+            product:products(name, sku),
+            movement_type:movement_types(code, description)
+          `)
+          .order('created_at', { ascending: false })
+          .limit(5),
+
+        // 6. Top products (RPC or query)
+        client.rpc('get_top_products', { limit_count: 5 }),
+
+        // 7. Low stock detail
+        client.from('current_stock')
+          .select(`
+            current_quantity,
+            product_id,
+            warehouse_name,
+            product:products(id, name, sku)
+          `)
+          .lte('current_quantity', 5)
+          .order('current_quantity', { ascending: true })
+          .limit(5)
+      ]) as any;
+
+      // Process Results
       
-      const { data: monthlySales, error: salesError } = await client
-        .from('invoices')
-        .select('total_amount')
-        .gte('invoice_date', firstDayOfMonth.toISOString())
-        .in('status', ['emitida', 'pagada']);
+      // Stats
+      const productsCount = productsResult.count || 0;
       
-      if (salesError) throw salesError;
-      
-      const monthlyTotal = (monthlySales as any[])?.reduce(
+      const monthlyTotal = (salesResult.data as any[])?.reduce(
         (sum, invoice: any) => sum + (Number(invoice?.total_amount) || 0),
         0
       ) || 0;
       
-      // Fetch low stock products count
-      const { data: lowStockCount, error: lowStockError } = await client
-        .from('current_stock')
-        .select('product_id')
-        .lte('current_quantity', 5);
+      const uniqueLowStockProducts = [...new Set(lowStockCountResult.data?.map((item: any) => item.product_id) || [])];
       
-      if (lowStockError) throw lowStockError;
+      const movementsCount = movementsCountResult.count || 0;
       
-      const uniqueLowStockProducts = [...new Set(lowStockCount?.map(item => item.product_id) || [])];
-      
-      // Fetch today's movements count
-      const startOfDay = new Date();
-      startOfDay.setHours(0, 0, 0, 0);
-      
-      const { count: movementsCount, error: movementsError } = await client
-        .from('stock_movements')
-        .select('*', { count: 'exact', head: true })
-        .gte('movement_date', startOfDay.toISOString());
-      
-      if (movementsError) throw movementsError;
-      
-      // Update stats
-      const updatedStats = [
-        { title: 'Total Productos', value: productsCount?.toString() || '0', icon: 'fas fa-box', color: 'bg-primary' },
-  { title: 'Ventas del Mes', value: formatCurrency(monthlyTotal), icon: 'fas fa-shopping-cart', color: 'bg-secondary' },
+      setStats([
+        { title: 'Total Productos', value: productsCount.toString(), icon: 'fas fa-box', color: 'bg-primary' },
+        { title: 'Ventas del Mes', value: formatCurrency(monthlyTotal), icon: 'fas fa-shopping-cart', color: 'bg-secondary' },
         { title: 'Productos Agotados', value: uniqueLowStockProducts.length.toString(), icon: 'fas fa-exclamation-triangle', color: 'bg-orange-500' },
-        { title: 'Movimientos Hoy', value: movementsCount?.toString() || '0', icon: 'fas fa-exchange-alt', color: 'bg-blue-500' },
-      ];
-      
-      setStats(updatedStats);
-      
-      // Fetch recent movements
-      const { data: movements, error: recentMovementsError } = await client
-        .from('stock_movements')
-        .select(`
-          id,
-          quantity,
-          movement_date,
-          movement_type_id,
-          product_id,
-          warehouse_id
-        `)
-        .order('movement_date', { ascending: false })
-        .limit(5);
-      
-      if (recentMovementsError) throw recentMovementsError;
-      
-      // Si tenemos movimientos, obtenemos los detalles adicionales necesarios
-      if (movements && movements.length > 0) {
-        // Obtener IDs únicos de productos, almacenes y tipos de movimiento
-        const productIds = [...new Set(movements.map(m => m.product_id))];
-        const warehouseIds = [...new Set(movements.map(m => m.warehouse_id))];
-        const movementTypeIds = [...new Set(movements.map(m => m.movement_type_id))];
-        
-        // Obtener detalles de productos
-        const { data: products, error: productsError } = await client
-          .from('products')
-          .select('id, name, sku')
-          .in('id', productIds);
-          
-        if (productsError) throw productsError;
-        
-        // Obtener detalles de almacenes
-        const { data: warehouses, error: warehousesError } = await client
-          .from('warehouses')
-          .select('id, name')
-          .in('id', warehouseIds);
-          
-        if (warehousesError) throw warehousesError;
-        
-        // Obtener detalles de tipos de movimiento
-        const { data: movementTypes, error: movementTypesError } = await client
-          .from('movement_types')
-          .select('id, code, description')
-          .in('id', movementTypeIds);
-          
-        if (movementTypesError) throw movementTypesError;
-        
-        // Crear mapas para búsqueda rápida
-  const productMap = new Map((products as any[])?.map((p: any) => [p.id, p]));
-  const warehouseMap = new Map((warehouses as any[])?.map((w: any) => [w.id, w]));
-  const movementTypeMap = new Map((movementTypes as any[])?.map((mt: any) => [mt.id, mt]));
-        
-        // Formatear los datos de movimientos correctamente
-  const formattedMovements = (movements as any[]).map((movement: any) => {
-          const product = productMap.get(movement.product_id);
-          const warehouse = warehouseMap.get(movement.warehouse_id);
-          const movementType = movementTypeMap.get(movement.movement_type_id);
-          
-          return {
-            id: movement.id,
-            quantity: Number(movement.quantity),
-            movement_date: movement.movement_date,
-            movement_type_id: movement.movement_type_id,
-            product: {
-              name: product?.name || 'Desconocido'
-            },
-            warehouse: {
-              name: warehouse?.name || 'Desconocido'
-            },
-            movement_type: {
-              code: movementType?.code || '',
-              description: movementType?.description || ''
-            }
-          };
-        });
-        
+        { title: 'Movimientos Hoy', value: movementsCount.toString(), icon: 'fas fa-exchange-alt', color: 'bg-blue-500' },
+      ]);
+
+      // Recent Movements
+      if (recentMovementsResult.data) {
+        const formattedMovements = recentMovementsResult.data.map((m: any) => ({
+          id: m.id,
+          quantity: Number(m.quantity),
+          movement_date: m.movement_date,
+          movement_type_id: m.movement_type_id,
+          product: { name: m.product?.name || 'Desconocido' },
+          warehouse: { name: m.warehouse?.name || 'Desconocido' },
+          movement_type: { 
+            code: m.movement_type?.code || '',
+            description: m.movement_type?.description || ''
+          }
+        }));
         setRecentMovements(formattedMovements);
       } else {
         setRecentMovements([]);
       }
-      
-      // Fetch top 5 products by movement quantity
-      try {
-        // Intentar usar la función RPC
-  const { data: topProductsData, error: topProductsError } = await client
-          .rpc('get_top_selling_products', { limit_count: 5 })
-          .select('*');
-        
-        if (topProductsError) {
-          
-          
-          // Fallback - consultar movimientos y productos directamente
-          // debug silenciado
-          
-          // Obtener todos los productos primero
-          const { data: products, error: productsError } = await client
-            .from('products')
-            .select('id, name, sku');
-            
-          if (productsError) throw productsError;
-          
-          // Mapeo de productos para acceso rápido
-          const productMap = new Map((products as any[])?.map((p: any) => [p.id, p]) || []);
-          
-          // Obtener movimientos de salida
-          const { data: outMovements, error: movementsError } = await client
-            .from('stock_movements')
-            .select(`
-              product_id,
-              quantity,
-              movement_type_id
-            `)
-            .in('movement_type_id', [2, 4, 6, 8]) // IDs para movimientos de salida
-            .limit(500);
-            
-          if (movementsError) throw movementsError;
-          
-          // Agregar cantidades por producto
-          const productQuantityMap: Record<string, number> = {};
-          
-          (outMovements as any[])?.forEach((movement: any) => {
-            const productId = movement.product_id as string;
-            if (!productQuantityMap[productId]) {
-              productQuantityMap[productId] = 0;
-            }
-            productQuantityMap[productId] += Number(movement.quantity) || 0;
-          });
-          
-          // Crear array de productos más vendidos
-          const topProductsList: TopProduct[] = [];
-          
-          Object.entries(productQuantityMap).forEach(([productId, totalQuantity]) => {
-            const product: any = productMap.get(productId);
-            if (product) {
-              topProductsList.push({
-                id: productId,
-                name: product.name,
-                sku: product.sku || 'Sin SKU',
-                totalQuantity
-              });
-            }
-          });
-          
-          // Ordenar y limitar a los 5 más vendidos
-          const sortedProducts = topProductsList
-            .sort((a, b) => b.totalQuantity - a.totalQuantity)
-            .slice(0, 5);
-            
-          setTopProducts(sortedProducts);
-        } else {
-          // Si la función RPC funcionó correctamente
-          const formattedTopProducts = (topProductsData as any[])?.map((item: any) => ({
-            id: item.product_id,
-            name: item.product_name,
-            sku: item.sku || 'Sin SKU',
-            totalQuantity: Number(item.total_quantity)
-          }));
-          
-          setTopProducts(formattedTopProducts);
-        }
-      } catch (error) {
-        
-        setTopProducts([]);
+
+      // Top Products
+      if (topProductsResult.data) {
+        setTopProducts(topProductsResult.data.map((item: any) => ({
+          id: item.product_id,
+          name: item.product_name,
+          sku: item.sku || 'Sin SKU',
+          totalQuantity: Number(item.total_quantity)
+        })));
+      } else {
+        // Fallback or empty if RPC fails
+        setTopProducts([]); 
       }
-      
-      // Fetch low stock products detail
-      try {
-        // Obtener productos con stock bajo directamente
-  const { data: lowStockItems, error: lowStockItemsError } = await client
-          .from('current_stock')
-          .select(`
-            product_id,
-            product_name,
-            sku,
-            warehouse_id,
-            warehouse_name,
-            current_quantity
-          `)
-          .lte('current_quantity', 5)
-          .order('current_quantity', { ascending: true })
-          .limit(5);
-          
-        if (lowStockItemsError) {
-          throw lowStockItemsError;
-        }
-        
-        // Si los datos de la vista no tienen toda la información, obtener los detalles de los productos
-    if (lowStockItems && (lowStockItems as any[]).length > 0 && 
-      ((lowStockItems as any[])[0].product_name === null || (lowStockItems as any[])[0].sku === null)) {
-          
-          const productIds = (lowStockItems as any[]).map((item: any) => item.product_id);
-          
-          // Obtener detalles completos de los productos
-          const { data: productDetails, error: productDetailsError } = await client
-            .from('products')
-            .select('id, name, sku')
-            .in('id', productIds);
-            
-          if (productDetailsError) throw productDetailsError;
-          
-          const productMap = new Map((productDetails as any[])?.map((p: any) => [p.id, p]) || []);
-          
-          // Formatear los datos con la información completa de productos
-          const formattedLowStock = (lowStockItems as any[]).map((item: any) => {
-            const product: any = productMap.get(item.product_id);
-            
-            return {
-              current_quantity: Number(item.current_quantity),
-              product: {
-                id: item.product_id,
-                name: product?.name || item.product_name || 'Desconocido',
-                sku: product?.sku || item.sku || 'Sin SKU'
-              },
-              warehouse: {
-                name: item.warehouse_name || 'Desconocido'
-              }
-            };
-          });
-          
-          setLowStockProducts(formattedLowStock);
-        } else {
-          // Si la vista ya tiene toda la información necesaria
-          const formattedLowStock = (lowStockItems as any[]).map((item: any) => ({
-            current_quantity: Number(item.current_quantity),
-            product: {
-              id: item.product_id,
-              name: item.product_name || 'Desconocido',
-              sku: item.sku || 'Sin SKU'
-            },
-            warehouse: {
-              name: item.warehouse_name || 'Desconocido'
-            }
-          }));
-          
-          setLowStockProducts(formattedLowStock);
-        }
-      } catch (error) {
-        
+
+      // Low Stock Detail
+      if (lowStockDetailResult.data) {
+        const formattedLowStock = lowStockDetailResult.data.map((item: any) => ({
+          current_quantity: Number(item.current_quantity),
+          product: {
+            id: item.product_id,
+            name: item.product?.name || 'Desconocido',
+            sku: item.product?.sku || 'Sin SKU'
+          },
+          warehouse: {
+            name: item.warehouse_name || 'Desconocido'
+          }
+        }));
+        setLowStockProducts(formattedLowStock);
+      } else {
         setLowStockProducts([]);
       }
-      
-    } catch (error: any) {
-      
+
+    } catch (error) {
+      console.error('Dashboard error:', error);
       toast.error('Error al cargar los datos del dashboard');
     } finally {
       setLoading(false);
@@ -595,4 +435,4 @@ const Dashboard: React.FC = () => {
   );
 };
 
-export default Dashboard; 
+export default Dashboard;
