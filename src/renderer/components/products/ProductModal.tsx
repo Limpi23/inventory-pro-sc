@@ -131,8 +131,25 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validaciones de campos requeridos
     if (!formData.name.trim()) {
       setError("El nombre es obligatorio");
+      return;
+    }
+
+    if (!formData.category_id) {
+      setError("La categoría es obligatoria");
+      return;
+    }
+
+    if (!formData.location_id) {
+      setError("La ubicación es obligatoria");
+      return;
+    }
+
+    if (!formData.sku || !formData.sku.trim()) {
+      setError("El SKU es obligatorio");
       return;
     }
 
@@ -183,16 +200,15 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
             
             {/* Categoría */}
             <div className="grid gap-2">
-              <Label htmlFor="category_id">Categoría</Label>
+              <Label htmlFor="category_id">Categoría *</Label>
               <Select
-                value={formData.category_id?.toString() || "null"}
-                onValueChange={(value) => handleSelectChange("category_id", value === "null" ? "" : value)}
+                value={formData.category_id?.toString() || ""}
+                onValueChange={(value) => handleSelectChange("category_id", value)}
               >
                 <SelectTrigger id="category_id">
                   <SelectValue placeholder="Seleccionar categoría" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="null">Sin categoría</SelectItem>
                   {categories.map((category) => (
                     <SelectItem key={category.id} value={category.id}>
                       {category.name}
@@ -204,16 +220,15 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
 
             {/* Ubicación */}
             <div className="grid gap-2">
-              <Label htmlFor="location_id">Ubicación</Label>
+              <Label htmlFor="location_id">Ubicación *</Label>
               <Select
-                value={formData.location_id?.toString() || "null"}
-                onValueChange={(value) => handleSelectChange("location_id", value === "null" ? "" : value)}
+                value={formData.location_id?.toString() || ""}
+                onValueChange={(value) => handleSelectChange("location_id", value)}
               >
                 <SelectTrigger id="location_id">
                   <SelectValue placeholder="Seleccionar ubicación" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="null">Sin ubicación</SelectItem>
                   {locations.map((loc) => (
                     <SelectItem key={loc.id} value={loc.id}>
                       {loc.name}
@@ -242,13 +257,14 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
             
             {/* SKU */}
             <div className="grid gap-2">
-              <Label htmlFor="sku">SKU</Label>
+              <Label htmlFor="sku">SKU *</Label>
               <Input
                 {...keyboardIsolationHandlers}
                 id="sku"
                 name="sku"
                 value={formData.sku || ""}
                 onChange={handleChange}
+                required
                 placeholder="Código SKU"
               />
             </div>
