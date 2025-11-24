@@ -33,7 +33,8 @@ const CustomerForm = () => {
     const fetchCustomerData = async () => {
         try {
             setLoading(true);
-            const { data, error } = await supabase
+            const client = await supabase.getClient();
+            const { data, error } = await client
                 .from('customers')
                 .select('*')
                 .eq('id', id)
@@ -86,7 +87,8 @@ const CustomerForm = () => {
             };
             if (isEditMode) {
                 // Actualizar cliente existente
-                const { error } = await supabase
+                const client = await supabase.getClient();
+                const { error } = await client
                     .from('customers')
                     .update(customerData)
                     .eq('id', id);
@@ -96,7 +98,8 @@ const CustomerForm = () => {
             }
             else {
                 // Crear nuevo cliente
-                const { error } = await supabase
+                const client = await supabase.getClient();
+                const { error } = await client
                     .from('customers')
                     .insert([{
                         ...customerData,

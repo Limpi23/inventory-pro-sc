@@ -139,18 +139,6 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
     try {
       setIsSubmitting(true);
       setError("");
-
-      if (product) {
-        // Actualizar producto existente
-  await productService.update(product.id, formData);
-      } else {
-        // Crear nuevo producto
-  await productService.create(formData);
-      }
-      
-      onClose();
-    } catch (err: any) {
-      setError(err.message || "Error al guardar el producto");
     } finally {
       setIsSubmitting(false);
     }

@@ -19,7 +19,7 @@
     "preview": "vite preview",
     "db:migration:new": "supabase migration new",
     "db:migration:apply": "supabase migration up",
-    "db:link": "supabase link --project-ref nwsnxceydflfkrylyzud",
+    "db:link": "supabase link --project-ref ovtbmbkasdjtjoneyubk",
     "db:migration:apply:remote": "supabase db push",
     "start": "electron-forge start",
     "package": "electron-forge package",

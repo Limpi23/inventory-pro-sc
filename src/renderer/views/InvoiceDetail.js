@@ -31,8 +31,9 @@ const InvoiceDetail = () => {
     const fetchInvoiceDetails = useCallback(async () => {
         try {
             setLoading(true);
+            const client = await supabase.getClient();
             // Fetch invoice with customer and warehouse data
-            const { data: invoiceData, error: invoiceError } = await supabase
+            const { data: invoiceData, error: invoiceError } = await client
                 .from('invoices')
                 .select(`
           *,
@@ -46,7 +47,7 @@ const InvoiceDetail = () => {
             if (invoiceData) {
                 setInvoice(invoiceData);
                 // Fetch invoice items with product data
-                const { data: itemsData, error: itemsError } = await supabase
+                const { data: itemsData, error: itemsError } = await client
                     .from('invoice_items')
                     .select(`
             *,
@@ -81,7 +82,8 @@ const InvoiceDetail = () => {
             return;
         }
         try {
-            const { error } = await supabase
+            const client = await supabase.getClient();
+            const { error } = await client
                 .from('invoices')
                 .update({
                 status: 'anulada',
@@ -103,7 +105,7 @@ const InvoiceDetail = () => {
                     movement_date: new Date().toISOString(),
                     notes: `Anulación de cotización #${invoice.invoice_number}`
                 }));
-                const { error: movementError } = await supabase
+                const { error: movementError } = await client
                     .from('stock_movements')
                     .insert(stockMovements);
                 if (movementError) {
@@ -160,8 +162,9 @@ const InvoiceDetail = () => {
         }
         try {
             setIsGeneratingSale(true);
+            const client = await supabase.getClient();
             const orderDate = new Date().toISOString().split('T')[0];
-            const { data: salesOrder, error: salesOrderError } = await supabase
+            const { data: salesOrder, error: salesOrderError } = await client
                 .from('sales_orders')
                 .insert({
                 customer_id: invoice.customer.id,
@@ -183,7 +186,7 @@ const InvoiceDetail = () => {
                     total_price: item.total_price
                 }));
                 if (saleItemsPayload.length > 0) {
-                    const { error: salesItemsError } = await supabase
+                    const { error: salesItemsError } = await client
                         .from('sales_order_items')
                         .insert(saleItemsPayload);
                     if (salesItemsError)
@@ -191,10 +194,10 @@ const InvoiceDetail = () => {
                 }
             }
             catch (itemsError) {
-                await supabase.from('sales_orders').delete().eq('id', salesOrder.id);
+                await client.from('sales_orders').delete().eq('id', salesOrder.id);
                 throw itemsError;
             }
-            const { data: existingMovements, error: movementCheckError } = await supabase
+            const { data: existingMovements, error: movementCheckError } = await client
                 .from('stock_movements')
                 .select('id')
                 .eq('related_id', invoice.id)
@@ -214,7 +217,7 @@ const InvoiceDetail = () => {
                     notes: `Venta generada desde cotización #${invoice.invoice_number}`
                 }));
                 if (stockMovements.length > 0) {
-                    const { error: movementError } = await supabase
+                    const { error: movementError } = await client
                         .from('stock_movements')
                         .insert(stockMovements);
                     if (movementError) {
@@ -223,7 +226,7 @@ const InvoiceDetail = () => {
                     }
                 }
             }
-            const { error: updateInvoiceError } = await supabase
+            const { error: updateInvoiceError } = await client
                 .from('invoices')
                 .update({
                 status: 'pagada',

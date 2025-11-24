@@ -25,7 +25,8 @@ export default function SerializedInventory() {
     const fetchSerials = async () => {
         try {
             setIsLoading(true);
-            const { data, error } = await supabase
+            const client = await supabase.getClient();
+            const { data, error } = await client
                 .from('product_serials')
                 .select(`
           *,
@@ -49,7 +50,8 @@ export default function SerializedInventory() {
     const handleSearch = async () => {
         try {
             setIsLoading(true);
-            let query = supabase
+            const client = await supabase.getClient();
+            let query = client
                 .from('product_serials')
                 .select(`
           *,

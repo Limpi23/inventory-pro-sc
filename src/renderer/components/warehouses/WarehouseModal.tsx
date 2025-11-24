@@ -62,15 +62,16 @@ export default function WarehouseModal({ open, onClose, warehouse }: WarehouseMo
         // Actualizar almacén existente
         await warehousesService.update(warehouse.id, {
           name: formData.name,
-          location: formData.location || undefined,
-          description: formData.description || undefined
+          // location: formData.location || undefined, // Property doesn't exist in Warehouse type
+          // description: formData.description || undefined // Property doesn't exist in Warehouse type
         });
       } else {
         // Crear nuevo almacén
         await warehousesService.create({
           name: formData.name,
-          location: formData.location || undefined,
-          description: formData.description || undefined
+          is_active: true,
+          // location: formData.location || undefined, // Property doesn't exist in Warehouse type
+          // description: formData.description || undefined // Property doesn't exist in Warehouse type
         });
       }
       

@@ -25,7 +25,8 @@ const Customers = () => {
     const fetchCustomers = async () => {
         try {
             setLoading(true);
-            const { data, error } = await supabase
+            const client = await supabase.getClient();
+            const { data, error } = await client
                 .from('customers')
                 .select('*')
                 .order('name');
@@ -60,7 +61,8 @@ const Customers = () => {
             return;
         }
         try {
-            const { error } = await supabase
+            const client = await supabase.getClient();
+            const { error } = await client
                 .from('customers')
                 .update({
                 is_active: activate,

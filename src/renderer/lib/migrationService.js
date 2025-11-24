@@ -40,7 +40,8 @@ const MIGRATIONS = [
     '20251007000300_prevent_negative_stock',
     '20251010000000_add_serial_id_to_invoice_items',
     '20251024000000_create_generic_admin_user',
-    '20251024000001_create_migration_executor'
+    '20251024000001_create_migration_executor',
+    '20251123105500_optimize_dashboard_and_products'
 ];
 // Contenido de las migraciones embebido (se generará dinámicamente)
 const MIGRATION_CONTENTS = {};

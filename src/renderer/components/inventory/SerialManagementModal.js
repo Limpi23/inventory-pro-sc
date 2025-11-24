@@ -25,7 +25,8 @@ export default function SerialManagementModal({ productId, productName, productS
     const fetchSerials = async () => {
         try {
             setIsLoading(true);
-            const { data, error } = await supabase
+            const client = await supabase.getClient();
+            const { data, error } = await client
                 .from('product_serials')
                 .select(`
           *,
@@ -48,7 +49,8 @@ export default function SerialManagementModal({ productId, productName, productS
     };
     const fetchWarehouses = async () => {
         try {
-            const { data, error } = await supabase
+            const client = await supabase.getClient();
+            const { data, error } = await client
                 .from('warehouses')
                 .select('*')
                 .order('name');
@@ -62,7 +64,8 @@ export default function SerialManagementModal({ productId, productName, productS
     };
     const fetchLocations = async (warehouseId) => {
         try {
-            const { data, error } = await supabase
+            const client = await supabase.getClient();
+            const { data, error } = await client
                 .from('locations')
                 .select('*')
                 .eq('warehouse_id', warehouseId)
@@ -143,7 +146,8 @@ export default function SerialManagementModal({ productId, productName, productS
             };
             if (editingId) {
                 // Actualizar
-                const { error } = await supabase
+                const client = await supabase.getClient();
+                const { error } = await client
                     .from('product_serials')
                     .update(serialData)
                     .eq('id', editingId);
@@ -153,7 +157,8 @@ export default function SerialManagementModal({ productId, productName, productS
             }
             else {
                 // Crear
-                const { error } = await supabase
+                const client = await supabase.getClient();
+                const { error } = await client
                     .from('product_serials')
                     .insert([serialData]);
                 if (error)
@@ -173,7 +178,8 @@ export default function SerialManagementModal({ productId, productName, productS
         if (!confirm('¿Está seguro de eliminar este serial?'))
             return;
         try {
-            const { error } = await supabase
+            const client = await supabase.getClient();
+            const { error } = await client
                 .from('product_serials')
                 .delete()
                 .eq('id', id);

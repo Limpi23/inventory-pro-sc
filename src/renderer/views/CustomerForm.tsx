@@ -38,15 +38,16 @@ const CustomerForm: React.FC = () => {
   const fetchCustomerData = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const client = await supabase.getClient();
+      const { data, error} = await client
         .from('customers')
         .select('*')
         .eq('id', id)
         .single();
 
       if (error) throw error;
-  // Cast porque select('*') retorna any
-  setFormData((data as CustomerInput) || formData);
+      // Cast porque select('*') retorna any
+      setFormData((data as CustomerInput) || formData);
     } catch (error: any) {
       console.error('Error al cargar datos del cliente:', error.message);
       toast.error(`Error al cargar datos del cliente: ${error.message}`);
@@ -98,7 +99,8 @@ const CustomerForm: React.FC = () => {
       
       if (isEditMode) {
         // Actualizar cliente existente
-        const { error } = await supabase
+        const client = await supabase.getClient();
+        const { error } = await client
           .from('customers')
           .update(customerData)
           .eq('id', id);
@@ -107,7 +109,8 @@ const CustomerForm: React.FC = () => {
         toast.success('Cliente actualizado correctamente');
       } else {
         // Crear nuevo cliente
-        const { error } = await supabase
+        const client = await supabase.getClient();
+        const { error } = await client
           .from('customers')
           .insert([{
             ...customerData,
@@ -467,4 +470,4 @@ const CustomerForm: React.FC = () => {
   );
 };
 
-export default CustomerForm; 
+export default CustomerForm;

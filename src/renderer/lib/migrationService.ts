@@ -50,7 +50,8 @@ const MIGRATIONS = [
   '20251007000300_prevent_negative_stock',
   '20251010000000_add_serial_id_to_invoice_items',
   '20251024000000_create_generic_admin_user',
-  '20251024000001_create_migration_executor'
+  '20251024000001_create_migration_executor',
+  '20251123105500_optimize_dashboard_and_products'
 ];
 
 // Contenido de las migraciones embebido (se generará dinámicamente)
@@ -63,27 +64,27 @@ export const migrationService = {
   async needsInitialSetup(): Promise<boolean> {
     try {
       const client = await supabase.getClient();
-      
+
       // Primero verificar si existe la función execute_migration
-      const { data: funcData, error: funcError } = await client.rpc('execute_migration', { 
-        migration_sql: 'SELECT 1' 
+      const { data: funcData, error: funcError } = await client.rpc('execute_migration', {
+        migration_sql: 'SELECT 1'
       });
-      
+
       if (funcError && funcError.code === 'PGRST202') {
         return true;
       }
-      
+
       // Si la función existe, verificar si existe la tabla de usuarios
       const { data, error } = await client
         .from('users')
         .select('id')
         .limit(1);
-      
+
       // Si hay error PGRST116 (tabla no encontrada) o error de relación, necesita setup
       if (error && (error.code === 'PGRST116' || error.message.includes('relation') || error.message.includes('does not exist'))) {
         return true;
       }
-      
+
       return false;
     } catch (error) {
       // En caso de error, asumimos que necesita setup
@@ -118,14 +119,14 @@ export const migrationService = {
       });
 
       // Probar si la función execute_migration existe
-      const { error: testError } = await client.rpc('execute_migration', { 
-        migration_sql: 'SELECT 1' 
+      const { error: testError } = await client.rpc('execute_migration', {
+        migration_sql: 'SELECT 1'
       });
 
       if (testError && testError.code === 'PGRST202') {
         // La función no existe - necesitamos que el usuario la cree manualmente
         const bootstrapSQL = await this.getBootstrapSQL();
-        
+
         throw new Error(
           'BOOTSTRAP_REQUIRED: Primero debes ejecutar el SQL de bootstrap en Supabase.\n\n' +
           'Ve a https://supabase.com/dashboard → SQL Editor y ejecuta:\n\n' +
@@ -136,7 +137,7 @@ export const migrationService = {
       // PASO 2: Ejecutar cada migración
       for (let i = 0; i < MIGRATIONS.length; i++) {
         const migrationName = MIGRATIONS[i];
-        
+
         // Actualizar progreso
         onProgress({
           currentMigration: migrationName,
@@ -148,16 +149,16 @@ export const migrationService = {
 
         // Obtener contenido de la migración
         const sqlContent = await this.getMigrationContent(migrationName);
-        
+
         if (!sqlContent) {
           continue;
         }
 
         // Ejecutar la migración usando la función RPC execute_migration
-        const { data, error } = await client.rpc('execute_migration', { 
-          migration_sql: sqlContent 
+        const { data, error } = await client.rpc('execute_migration', {
+          migration_sql: sqlContent
         });
-        
+
         if (error) {
           // Algunas migraciones pueden fallar por dependencias, continuamos
           continue;

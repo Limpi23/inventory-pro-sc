@@ -79,9 +79,25 @@ export interface ProductSerial {
   id: string;
   product_id: string;
   serial_number: string;
-  status: 'available' | 'sold' | 'returned' | 'defective' | 'lost';
+  status: 'available' | 'sold' | 'returned' | 'defective' | 'lost' | 'in_stock' | 'reserved' | 'maintenance' | 'scrapped' | 'in_transit';
   purchase_order_id?: string;
   sales_order_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  vin?: string;
+  engine_number?: string;
+  year?: number;
+  color?: string;
+  warehouse_id?: string;
+  location_id?: string;
+  acquired_at?: string;
+  sold_at?: string;
+}
+
+export interface Supplier {
+  id: string;
+  name: string;
+  contact_info?: any;
   created_at?: string;
   updated_at?: string;
 }
@@ -104,12 +120,29 @@ let supabaseInstance: SupabaseClient | null = null;
 export const getSupabaseClient = async () => {
   if (supabaseInstance) return supabaseInstance;
 
-  // En una aplicación real, estas credenciales vendrían de variables de entorno
-  // o de un proceso de configuración seguro.
-  // Para este ejemplo, asumimos que están disponibles en window.env o similar
-  // O usamos valores por defecto para desarrollo
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  // Intentar obtener credenciales desde electron-store primero (configuración guardada por el usuario)
+  let supabaseUrl: string | undefined;
+  let supabaseKey: string | undefined;
+
+  // En ambiente Electron, usar la configuración guardada
+  const win: any = typeof window !== 'undefined' ? (window as any) : {};
+  if (win.supabaseConfig && typeof win.supabaseConfig.get === 'function') {
+    try {
+      const config = await win.supabaseConfig.get();
+      if (config?.url && config?.anonKey) {
+        supabaseUrl = config.url;
+        supabaseKey = config.anonKey;
+      }
+    } catch (e) {
+      console.warn('[getSupabaseClient] Error obteniendo configuración de electron-store:', e);
+    }
+  }
+
+  // Fallback a variables de entorno si no hay configuración guardada
+  if (!supabaseUrl || !supabaseKey) {
+    supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  }
 
   if (!supabaseUrl || !supabaseKey) {
     throw new Error('Faltan credenciales de Supabase');
@@ -119,8 +152,18 @@ export const getSupabaseClient = async () => {
   return supabaseInstance;
 };
 
+// Función para reinicializar el cliente (útil después de cambiar credenciales)
+export const reinitializeSupabaseClient = () => {
+  supabaseInstance = null;
+};
+
+export const supabase = {
+  getClient: getSupabaseClient,
+  reinitialize: reinitializeSupabaseClient
+};
+
 // Helper para logs
-const logAppEvent = async (action: string, entity: string, entityId: string | null, details: any) => {
+export const logAppEvent = async (action: string, entity: string, entityId: string | null, details: any) => {
   try {
     const client = await getSupabaseClient();
     const { data: { user } } = await client.auth.getUser();
@@ -162,8 +205,8 @@ export const productService = {
   },
 
   getRange: async (from: number, to: number): Promise<Product[]> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('products')
       .select(`*, category:categories(id, name), location:locations(id, name, warehouse_id)`)
       .order('name')
@@ -173,8 +216,8 @@ export const productService = {
   },
 
   getProducts: async ({ page = 1, pageSize = 10, search = '', warehouseId = '', locationId = '' }) => {
-    const supabase = await getSupabaseClient();
-    let query = supabase
+    const client = await getSupabaseClient();
+    let query = client
       .from('products')
       .select(`*, category:categories(id, name), location:locations(id, name, warehouse_id)`, { count: 'exact' });
 
@@ -202,8 +245,8 @@ export const productService = {
   },
 
   getById: async (id: string): Promise<Product | null> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('products')
       .select(`*, category:categories(id, name), location:locations(id, name, warehouse_id)`)
       .eq('id', id)
@@ -213,8 +256,8 @@ export const productService = {
   },
 
   create: async (product: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Promise<Product> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('products')
       .insert([product])
       .select()
@@ -227,14 +270,14 @@ export const productService = {
 
   createBatch: async (products: Omit<Product, 'id' | 'created_at' | 'updated_at'>[]): Promise<Product[]> => {
     if (!products.length) return [];
-    const supabase = await getSupabaseClient();
+    const client = await getSupabaseClient();
     const batchSize = 100;
     const results: Product[] = [];
     const errors: any[] = [];
     for (let i = 0; i < products.length; i += batchSize) {
       const batch = products.slice(i, i + batchSize);
       try {
-        const { data, error } = await supabase
+        const { data, error } = await client
           .from('products')
           .insert(batch as any)
           .select();
@@ -249,8 +292,8 @@ export const productService = {
   },
 
   update: async (id: string, updates: Partial<Product>): Promise<Product> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('products')
       .update(updates)
       .eq('id', id)
@@ -263,8 +306,8 @@ export const productService = {
   },
 
   delete: async (id: string): Promise<void> => {
-    const supabase = await getSupabaseClient();
-    const { error } = await supabase
+    const client = await getSupabaseClient();
+    const { error } = await client
       .from('products')
       .delete()
       .eq('id', id);
@@ -273,21 +316,57 @@ export const productService = {
   },
 
   search: async (query: string): Promise<Product[]> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('products')
       .select(`*, category:categories(id, name), location:locations(id, name, warehouse_id)`)
       .or(`name.ilike.%${query}%, sku.ilike.%${query}%, barcode.ilike.%${query}%`)
       .order('name');
     if (error) throw error;
     return data || [];
+  },
+
+  getLowStockProducts: async ({ page = 1, pageSize = 10, search = '', threshold = 0 }) => {
+    const client = await getSupabaseClient();
+    let query = client
+      .from('current_stock')
+      .select('product_id, product_name, sku, warehouse_name, current_quantity', { count: 'exact' })
+      .lte('current_quantity', threshold);
+
+    if (search) {
+      query = query.or(`product_name.ilike.%${search}%, sku.ilike.%${search}%`);
+    }
+
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    const { data, count, error } = await query
+      .order('current_quantity', { ascending: true })
+      .range(from, to);
+
+    if (error) throw error;
+    
+    // Transformar los datos para mantener compatibilidad con el componente
+    const transformedData = data?.map(item => ({
+      current_quantity: item.current_quantity,
+      warehouse_name: item.warehouse_name,
+      product: {
+        id: item.product_id,
+        name: item.product_name,
+        sku: item.sku,
+        barcode: null,
+        image_url: null
+      }
+    })) || [];
+    
+    return { data: transformedData, count: count || 0 };
   }
 };
 
 export const categoriesService = {
   getAll: async (): Promise<Category[]> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('categories')
       .select('*')
       .order('name');
@@ -295,8 +374,8 @@ export const categoriesService = {
     return data || [];
   },
   getById: async (id: string): Promise<Category | null> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('categories')
       .select('*')
       .eq('id', id)
@@ -305,8 +384,8 @@ export const categoriesService = {
     return data;
   },
   create: async (category: Omit<Category, 'id' | 'created_at' | 'updated_at'>): Promise<Category> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('categories')
       .insert([category])
       .select()
@@ -316,8 +395,8 @@ export const categoriesService = {
     return data;
   },
   update: async (id: string, updates: Partial<Category>): Promise<Category> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('categories')
       .update(updates)
       .eq('id', id)
@@ -328,8 +407,8 @@ export const categoriesService = {
     return data;
   },
   delete: async (id: string): Promise<void> => {
-    const supabase = await getSupabaseClient();
-    const { error } = await supabase
+    const client = await getSupabaseClient();
+    const { error } = await client
       .from('categories')
       .delete()
       .eq('id', id);
@@ -388,12 +467,12 @@ export const categoriesService = {
     if (!categories.length) {
       return { success: 0, errors: dataLines.length, messages: ['Sin categorías válidas', ...errors] };
     }
-    const supabase = await getSupabaseClient();
+    const client = await getSupabaseClient();
     let successCount = 0;
     for (let i = 0; i < categories.length; i += 50) {
       const batch = categories.slice(i, i + 50);
       try {
-        const { data, error } = await supabase
+        const { data, error } = await client
           .from('categories')
           .insert(batch)
           .select();
@@ -404,13 +483,65 @@ export const categoriesService = {
       }
     }
     return { success: successCount, errors: errors.length, messages: errors };
+  },
+  importFromExcel: async (file: File): Promise<{ success: number; errors: number; messages: string[] }> => {
+    try {
+      const XLSX = await import('xlsx');
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as any[];
+
+      const categories: any[] = [];
+      const errors: string[] = [];
+
+      rows.forEach((row, idx) => {
+        try {
+          // Adaptar según las columnas de tu Excel
+          const name = row['Nombre'] || row['nombre'] || row['Name'] || row['name'];
+          const description = row['Descripción'] || row['descripcion'] || row['Description'] || row['description'] || '';
+
+          if (!name) {
+            errors.push(`Fila ${idx + 2}: nombre requerido`);
+            return;
+          }
+          categories.push({ name, description });
+        } catch (e: any) {
+          errors.push(`Fila ${idx + 2}: ${e.message || 'error'}`);
+        }
+      });
+
+      if (!categories.length) {
+        return { success: 0, errors: rows.length, messages: ['Sin categorías válidas', ...errors] };
+      }
+
+      const client = await getSupabaseClient();
+      let successCount = 0;
+      for (let i = 0; i < categories.length; i += 50) {
+        const batch = categories.slice(i, i + 50);
+        try {
+          const { data, error } = await client
+            .from('categories')
+            .insert(batch)
+            .select();
+          if (error) throw error;
+          if (data) successCount += data.length;
+        } catch (e: any) {
+          if (e.code === '23505') errors.push('Algunas categorías ya existían'); else errors.push(e.message || 'Error al importar lote');
+        }
+      }
+      return { success: successCount, errors: errors.length, messages: errors };
+    } catch (e: any) {
+      return { success: 0, errors: 1, messages: [e.message || 'Error al leer el archivo Excel'] };
+    }
   }
 };
 
 export const warehousesService = {
   getAll: async (): Promise<Warehouse[]> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('warehouses')
       .select('*')
       .order('name');
@@ -418,8 +549,8 @@ export const warehousesService = {
     return data || [];
   },
   getById: async (id: string): Promise<Warehouse | null> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('warehouses')
       .select('*')
       .eq('id', id)
@@ -428,8 +559,8 @@ export const warehousesService = {
     return data;
   },
   create: async (warehouse: Omit<Warehouse, 'id' | 'created_at' | 'updated_at'>): Promise<Warehouse> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('warehouses')
       .insert([warehouse])
       .select()
@@ -439,8 +570,8 @@ export const warehousesService = {
     return data;
   },
   update: async (id: string, updates: Partial<Warehouse>): Promise<Warehouse> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('warehouses')
       .update(updates)
       .eq('id', id)
@@ -451,8 +582,8 @@ export const warehousesService = {
     return data;
   },
   delete: async (id: string): Promise<void> => {
-    const supabase = await getSupabaseClient();
-    const { error } = await supabase
+    const client = await getSupabaseClient();
+    const { error } = await client
       .from('warehouses')
       .delete()
       .eq('id', id);
@@ -463,8 +594,8 @@ export const warehousesService = {
 
 export const locationsService = {
   getAll: async (): Promise<Location[]> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('locations')
       .select('*')
       .order('name');
@@ -472,8 +603,8 @@ export const locationsService = {
     return data || [];
   },
   getById: async (id: string): Promise<Location | null> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('locations')
       .select('*')
       .eq('id', id)
@@ -482,8 +613,8 @@ export const locationsService = {
     return data;
   },
   create: async (location: Omit<Location, 'id' | 'created_at' | 'updated_at'>): Promise<Location> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('locations')
       .insert([location])
       .select()
@@ -493,8 +624,8 @@ export const locationsService = {
     return data;
   },
   update: async (id: string, updates: Partial<Location>): Promise<Location> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('locations')
       .update(updates)
       .eq('id', id)
@@ -505,8 +636,8 @@ export const locationsService = {
     return data;
   },
   delete: async (id: string): Promise<void> => {
-    const supabase = await getSupabaseClient();
-    const { error } = await supabase
+    const client = await getSupabaseClient();
+    const { error } = await client
       .from('locations')
       .delete()
       .eq('id', id);
@@ -517,8 +648,8 @@ export const locationsService = {
 
 export const stockMovementService = {
   getAll: async (): Promise<StockMovement[]> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('stock_movements')
       .select(`
         *,
@@ -540,8 +671,8 @@ export const stockMovementService = {
     start_date?: string;
     end_date?: string;
   }): Promise<StockMovement[]> => {
-    const supabase = await getSupabaseClient();
-    let query = supabase
+    const client = await getSupabaseClient();
+    let query = client
       .from('stock_movements')
       .select(`
         *,
@@ -564,8 +695,8 @@ export const stockMovementService = {
   },
 
   getById: async (id: string): Promise<StockMovement | null> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('stock_movements')
       .select(`
         *,
@@ -581,8 +712,8 @@ export const stockMovementService = {
   },
 
   create: async (movement: Omit<StockMovement, 'id' | 'created_at'>): Promise<StockMovement> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('stock_movements')
       .insert([movement])
       .select()
@@ -597,12 +728,12 @@ export const stockMovementService = {
     opts?: { chunkSize?: number; onProgress?: (processed: number, total: number) => void }
   ): Promise<number> => {
     if (!movements.length) return 0;
-    const supa = await getSupabaseClient();
+    const client = await getSupabaseClient();
     const batchSize = opts?.chunkSize ?? 100;
     let created = 0;
     for (let i = 0; i < movements.length; i += batchSize) {
       const batch = movements.slice(i, i + batchSize);
-      const { data, error } = await supa.from('stock_movements').insert(batch as any).select('id');
+      const { data, error } = await client.from('stock_movements').insert(batch as any).select('id');
       if (error) throw error;
       created += data?.length || 0;
       const processed = Math.min(i + batch.length, movements.length);
@@ -613,8 +744,8 @@ export const stockMovementService = {
   },
 
   getMovementTypes: async (): Promise<MovementType[]> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('movement_types')
       .select('*')
       .order('id');
@@ -645,8 +776,8 @@ export const stockMovementService = {
     if (movementTypeCache.has(cacheKey)) {
       return movementTypeCache.get(cacheKey)!;
     }
-    const supabaseClient = await getSupabaseClient();
-    const { data, error } = await supabaseClient
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('movement_types')
       .select('id, code')
       .eq('code', normalized)
@@ -662,8 +793,8 @@ export const stockMovementService = {
   getOutboundSaleTypeId: async (): Promise<number> => stockMovementService.getMovementTypeIdByCode('OUT_SALE'),
 
   getCurrentStock: async (product_id: string, warehouse_id: string): Promise<number> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('current_stock')
       .select('current_quantity')
       .eq('product_id', product_id)
@@ -679,8 +810,8 @@ export const stockMovementService = {
   },
 
   getCurrentStockByLocation: async (product_id: string, warehouse_id?: string) => {
-    const supabase = await getSupabaseClient();
-    let query = supabase.from('current_stock_by_location').select('*').eq('product_id', product_id);
+    const client = await getSupabaseClient();
+    let query = client.from('current_stock_by_location').select('*').eq('product_id', product_id);
     if (warehouse_id) query = query.eq('warehouse_id', warehouse_id);
     const { data, error } = await query;
     if (error) throw error;
@@ -688,8 +819,8 @@ export const stockMovementService = {
   },
 
   getAllCurrentStock: async (): Promise<any[]> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('current_stock')
       .select('*')
       .order('product_name');
@@ -701,8 +832,8 @@ export const stockMovementService = {
 
 export const serialsService = {
   getByProductId: async (productId: string): Promise<ProductSerial[]> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('product_serials')
       .select('*')
       .eq('product_id', productId)
@@ -711,8 +842,8 @@ export const serialsService = {
     return data || [];
   },
   create: async (serial: Omit<ProductSerial, 'id' | 'created_at' | 'updated_at'>): Promise<ProductSerial> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('product_serials')
       .insert([serial])
       .select()
@@ -720,24 +851,48 @@ export const serialsService = {
     if (error) throw error;
     return data;
   },
+  createMany: async (
+    serials: Array<Omit<ProductSerial, 'id' | 'created_at' | 'updated_at'>>,
+    opts?: { onProgress?: (processed: number, total: number) => void }
+  ): Promise<ProductSerial[]> => {
+    if (!serials.length) return [];
+    const client = await getSupabaseClient();
+    const batchSize = 50;
+    const results: ProductSerial[] = [];
+
+    for (let i = 0; i < serials.length; i += batchSize) {
+      const batch = serials.slice(i, i + batchSize);
+      const { data, error } = await client
+        .from('product_serials')
+        .insert(batch as any)
+        .select();
+
+      if (error) throw error;
+      if (data) results.push(...(data as ProductSerial[]));
+
+      const processed = Math.min(i + batch.length, serials.length);
+      opts?.onProgress?.(processed, serials.length);
+    }
+    return results;
+  },
   updateStatus: async (id: string, status: ProductSerial['status']): Promise<void> => {
-    const supabase = await getSupabaseClient();
-    const { error } = await supabase
+    const client = await getSupabaseClient();
+    const { error } = await client
       .from('product_serials')
       .update({ status })
       .eq('id', id);
     if (error) throw error;
   },
   getBySerial: async (serialNumber: string): Promise<ProductSerial | null> => {
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
+    const client = await getSupabaseClient();
+    const { data, error } = await client
       .from('product_serials')
       .select('*')
       .eq('serial_number', serialNumber)
       .single();
     if (error && error.code !== 'PGRST116') throw error;
     return data;
-  }
+  },
 };
 
 export const eventLogService = {
@@ -807,8 +962,4 @@ export const maintenanceService = {
 
     await logAppEvent('maintenance.reset', 'maintenance', null, { tables: tablesInOrder });
   }
-};
-
-export const supabase = {
-  getClient: getSupabaseClient
 };

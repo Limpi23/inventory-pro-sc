@@ -355,7 +355,7 @@ const InventoryInitialImport = ({ onImported, trigger }) => {
                 setProgressMessage('Creando seriales...');
                 const serials = preview.map((r) => ({
                     product_id: r.product_id,
-                    serial_code: r.serial_code,
+                    serial_number: r.serial_code,
                     vin: r.vin || null,
                     engine_number: r.engine_number || null,
                     year: r.year || null,
@@ -376,7 +376,7 @@ const InventoryInitialImport = ({ onImported, trigger }) => {
                         }
                     },
                 });
-                const byCode = new Map(inserted.map((s) => [s.serial_code, s]));
+                const byCode = new Map(inserted.map((s) => [s.serial_number, s]));
                 setProgressMessage('Generando movimientos...');
                 const moves = preview.map((r) => ({
                     product_id: r.product_id,

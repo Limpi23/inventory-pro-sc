@@ -135,89 +135,56 @@ const RolePermissions: React.FC = () => {
     fetchPermissions();
   }, []);
 
-  useEffect(() => {
-    if (selectedRole) {
-      fetchRolePermissions(selectedRole.id);
-    }
-  }, [selectedRole]);
-
   const fetchRoles = async () => {
     try {
-      // Intentar cargar roles de localStorage primero
       const localRoles = localStorage.getItem('localRoles');
       if (localRoles) {
         const roles = JSON.parse(localRoles);
         setRoles(roles);
-        
-        // Seleccionar automáticamente el primer rol
-        if (roles.length > 0) {
-          setSelectedRole(roles[0]);
-        }
-        return;
+        if (roles.length > 0 && !selectedRole) setSelectedRole(roles[0]);
       }
-      
-      const { data, error } = await supabase
-        .from('roles')
-        .select('*')
-        .order('id');
 
+      const client = await supabase.getClient();
+      const { data, error } = await client.from('roles').select('*').order('id');
       if (error) throw error;
-      setRoles(data || []);
       
-      // Seleccionar automáticamente el primer rol
-      if (data && data.length > 0) {
-        setSelectedRole(data[0]);
-      }
+      setRoles(data || []);
+      localStorage.setItem('localRoles', JSON.stringify(data || []));
+      if (data && data.length > 0 && !selectedRole) setSelectedRole(data[0]);
     } catch (error: any) {
       console.error('Error al cargar roles:', error.message);
       toast.error(`Error al cargar roles: ${error.message}`);
-      
-      // Crear roles predeterminados en caso de error
-      const defaultRoles: Role[] = [
-        { id: 1, name: 'admin', description: 'Administrador con acceso completo', created_at: new Date().toISOString() },
-        { id: 2, name: 'operador', description: 'Operador con acceso limitado a funciones específicas', created_at: new Date().toISOString() }
-      ];
-      localStorage.setItem('localRoles', JSON.stringify(defaultRoles));
-      setRoles(defaultRoles);
-      setSelectedRole(defaultRoles[0]);
+      if (roles.length === 0) {
+        const defaultRoles: Role[] = [
+          { id: 1, name: 'admin', description: 'Administrador', created_at: new Date().toISOString() },
+          { id: 2, name: 'operador', description: 'Operador', created_at: new Date().toISOString() }
+        ];
+        setRoles(defaultRoles);
+        setSelectedRole(defaultRoles[0]);
+      }
     }
   };
 
   const fetchPermissions = async () => {
     try {
       setLoading(true);
-      
-      // Intentar cargar permisos de localStorage primero
       const localPermissions = localStorage.getItem('localPermissions');
-      if (localPermissions) {
-        setPermissions(JSON.parse(localPermissions));
-        setLoading(false);
-        return;
-      }
+      if (localPermissions) setPermissions(JSON.parse(localPermissions));
       
-      const { data, error } = await supabase
-        .from('permissions')
-        .select('*')
-        .order('resource', { ascending: true });
-
+      const client = await supabase.getClient();
+      const { data, error } = await client.from('permissions').select('*').order('id');
       if (error) throw error;
       
       if (data && data.length > 0) {
         localStorage.setItem('localPermissions', JSON.stringify(data));
         setPermissions(data);
       } else {
-        // Si no hay datos, crear permisos predeterminados
         const defaultPermissions = generateDefaultPermissions();
-        localStorage.setItem('localPermissions', JSON.stringify(defaultPermissions));
         setPermissions(defaultPermissions);
       }
     } catch (error: any) {
       console.error('Error al cargar permisos:', error.message);
-      toast.error(`Error al cargar permisos: ${error.message}`);
-      
-      // Crear permisos predeterminados en caso de error
       const defaultPermissions = generateDefaultPermissions();
-      localStorage.setItem('localPermissions', JSON.stringify(defaultPermissions));
       setPermissions(defaultPermissions);
     } finally {
       setLoading(false);
@@ -225,19 +192,10 @@ const RolePermissions: React.FC = () => {
   };
 
   const generateDefaultPermissions = (): Permission[] => {
-    // Generar permisos predeterminados para todos los recursos
-    const resources = [
-      'products', 'categories', 'warehouses', 'stock',
-      'suppliers', 'purchase_orders',
-      'customers', 'invoices', 'returns',
-      'reports', 'settings', 'users'
-    ];
-    
+    const resources = ['products', 'categories', 'warehouses', 'stock', 'suppliers', 'purchase_orders', 'customers', 'invoices', 'returns', 'reports', 'settings', 'users'];
     const actions = ['view', 'create', 'edit', 'delete'];
-    
     let permissionId = 1;
     const permissions: Permission[] = [];
-    
     resources.forEach(resource => {
       actions.forEach(action => {
         permissions.push({
@@ -249,68 +207,47 @@ const RolePermissions: React.FC = () => {
         });
       });
     });
-    
     return permissions;
   };
 
   const fetchRolePermissions = async (roleId: number) => {
     try {
       setLoading(true);
-      
-      // Intentar cargar de localStorage primero
       const localRolePermissions = localStorage.getItem('localRolePermissions');
       if (localRolePermissions) {
         const allRolePermissions = JSON.parse(localRolePermissions);
-        const filteredPermissions = allRolePermissions.filter((rp: RolePermission) => rp.role_id === roleId);
-        setRolePermissions(filteredPermissions);
-        setChangedPermissions(new Set()); // Reiniciar cambios
-        setLoading(false);
-        return;
+        setRolePermissions(allRolePermissions.filter((rp: RolePermission) => rp.role_id === roleId));
       }
       
-      const { data, error } = await supabase
-        .from('role_permissions')
-        .select('*')
-        .eq('role_id', roleId);
-
+      const client = await supabase.getClient();
+      const { data, error } = await client.from('role_permissions').select('*').eq('role_id', roleId);
       if (error) throw error;
       
       if (data) {
-        // Si hay datos en Supabase, guardarlos en localStorage
-        localStorage.setItem('localRolePermissions', JSON.stringify(data));
+        const currentLocal = localStorage.getItem('localRolePermissions');
+        let allLocal = currentLocal ? JSON.parse(currentLocal) : [];
+        allLocal = allLocal.filter((rp: RolePermission) => rp.role_id !== roleId);
+        allLocal = [...allLocal, ...data];
+        localStorage.setItem('localRolePermissions', JSON.stringify(allLocal));
         setRolePermissions(data);
       } else {
-        // Si no hay datos, inicializar un array vacío (excepto para admin)
         let defaultRolePermissions: RolePermission[] = [];
-        
-        if (roleId === 1) { // Admin role
-          // Dar todos los permisos al admin
-          defaultRolePermissions = permissions.map(p => ({
-            role_id: 1,
-            permission_id: p.id,
-            created_at: new Date().toISOString()
-          }));
+        if (roleId === 1) {
+          defaultRolePermissions = permissions.map(p => ({ role_id: 1, permission_id: p.id, created_at: new Date().toISOString() }));
         }
-        
-        localStorage.setItem('localRolePermissions', JSON.stringify(defaultRolePermissions));
         setRolePermissions(defaultRolePermissions);
       }
-      
-      setChangedPermissions(new Set()); // Reiniciar cambios
+      setChangedPermissions(new Set());
     } catch (error: any) {
       console.error('Error al cargar permisos del rol:', error.message);
-      toast.error(`Error al cargar permisos del rol: ${error.message}`);
     } finally {
       setLoading(false);
     }
   };
 
   const handleRoleSelect = (role: Role) => {
-    // Preguntar si hay cambios sin guardar
     if (changedPermissions.size > 0) {
-      if (!confirm('Hay cambios sin guardar. ¿Desea continuar y perder estos cambios?')) {
-        return;
-      }
+      if (!confirm('Hay cambios sin guardar. ¿Desea continuar y perder estos cambios?')) return;
     }
     setSelectedRole(role);
   };
@@ -321,10 +258,7 @@ const RolePermissions: React.FC = () => {
 
   const togglePermission = (permissionId: number) => {
     if (!canEdit) return;
-    
     const key = `${selectedRole?.id}-${permissionId}`;
-    
-    // Actualizar el conjunto de cambios
     const newChangedPermissions = new Set(changedPermissions);
     if (newChangedPermissions.has(key)) {
       newChangedPermissions.delete(key);
@@ -590,27 +524,28 @@ const RolePermissions: React.FC = () => {
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
                         {permissionProfiles.map(profile => (
                           <Card key={profile.id} className="overflow-hidden">
-                            <CardHeader className="pb-2">
-                              <CardTitle>{profile.name}</CardTitle>
+                            <CardHeader className="bg-gray-50 dark:bg-gray-700 pb-2">
+                              <CardTitle className="text-lg">{profile.name}</CardTitle>
                               <CardDescription>{profile.description}</CardDescription>
                             </CardHeader>
                             <CardContent className="p-4">
-                              <div className="text-sm space-y-2 mb-4">
-                                <p className="font-medium">Incluye permisos para:</p>
-                                <ul className="list-disc list-inside pl-2 space-y-1">
-                                  {profile.permissions.map(permission => (
-                                    <li key={`${profile.id}-${permission.resource}`} className="capitalize">
-                                      {permission.resource.replace('_', ' ')}: {permission.actions.join(', ')}
+                              <div className="mb-4">
+                                <h4 className="text-sm font-semibold mb-2">Incluye permisos para:</h4>
+                                <ul className="list-disc list-inside text-sm text-gray-600 dark:text-gray-400">
+                                  {profile.permissions.map((p, idx) => (
+                                    <li key={idx} className="capitalize">
+                                      {p.resource.replace('_', ' ')} ({p.actions.join(', ')})
                                     </li>
                                   ))}
                                 </ul>
                               </div>
                               <Button 
                                 onClick={() => applyPermissionProfile(profile)}
-                                disabled={!canEdit || selectedRole.name === 'admin'}
                                 className="w-full"
+                                variant="secondary"
+                                disabled={!canEdit || selectedRole.name === 'admin'}
                               >
-                                Aplicar perfil
+                                Aplicar Perfil
                               </Button>
                             </CardContent>
                           </Card>
@@ -619,40 +554,35 @@ const RolePermissions: React.FC = () => {
                     </TabsContent>
                     
                     <TabsContent value="all">
-                      <div className="overflow-x-auto mt-4">
+                      <div className="bg-white rounded-md border">
                         <Table>
-                          <TableCaption>Permisos disponibles en el sistema</TableCaption>
                           <TableHeader>
                             <TableRow>
-                              <TableHead className="w-[300px]">Recurso</TableHead>
-                              <TableHead>Permisos</TableHead>
+                              <TableHead>Recurso</TableHead>
+                              <TableHead>Acción</TableHead>
+                              <TableHead>Estado</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {Object.entries(groupedPermissions).map(([resource, resourcePermissions]) => (
-                              <TableRow key={resource}>
-                                <TableCell className="font-medium capitalize">
-                                  {resource.replace('_', ' ')}
-                                </TableCell>
+                            {permissions.map(permission => (
+                              <TableRow key={permission.id}>
+                                <TableCell className="font-medium capitalize">{permission.resource.replace('_', ' ')}</TableCell>
+                                <TableCell className="capitalize">{permission.action}</TableCell>
                                 <TableCell>
-                                  <div className="flex flex-wrap gap-6">
-                                    {resourcePermissions.map(permission => (
-                                      <div key={permission.id} className="flex items-center space-x-2">
-                                        <Checkbox
-                                          id={`all-permission-${permission.id}`}
-                                          checked={getEffectivePermissionState(permission.id)}
-                                          onCheckedChange={() => togglePermission(permission.id)}
-                                          disabled={!canEdit || selectedRole.name === 'admin'}
-                                          className={isPermissionChanged(permission.id) ? 'bg-amber-500 text-white' : ''}
-                                        />
-                                        <label
-                                          htmlFor={`all-permission-${permission.id}`}
-                                          className={`text-sm cursor-pointer capitalize ${isPermissionChanged(permission.id) ? 'text-amber-600 font-semibold' : ''}`}
-                                        >
-                                          {permission.action}
-                                        </label>
-                                      </div>
-                                    ))}
+                                  <div className="flex items-center space-x-2">
+                                    <Checkbox
+                                      id={`table-permission-${permission.id}`}
+                                      checked={getEffectivePermissionState(permission.id)}
+                                      onCheckedChange={() => togglePermission(permission.id)}
+                                      disabled={!canEdit || selectedRole?.name === 'admin'}
+                                      className={isPermissionChanged(permission.id) ? 'bg-amber-500 text-white' : ''}
+                                    />
+                                    <label
+                                      htmlFor={`table-permission-${permission.id}`}
+                                      className={`text-sm cursor-pointer ${isPermissionChanged(permission.id) ? 'text-amber-600 font-semibold' : ''}`}
+                                    >
+                                      {getEffectivePermissionState(permission.id) ? 'Permitido' : 'Denegado'}
+                                    </label>
                                   </div>
                                 </TableCell>
                               </TableRow>
@@ -665,37 +595,35 @@ const RolePermissions: React.FC = () => {
                 )}
                 
                 {selectedRole.name === 'admin' && (
-                  <div className="bg-blue-50 text-blue-800 p-4 rounded-md mb-6 dark:bg-blue-900 dark:text-blue-200">
+                  <div className="p-4 bg-blue-50 text-blue-700 rounded-md border border-blue-200">
                     <p className="flex items-center">
                       <i className="fas fa-info-circle mr-2"></i>
-                      El rol de Administrador tiene todos los permisos por defecto y no puede ser modificado.
+                      El rol de Administrador tiene acceso completo a todos los módulos y recursos del sistema. No es necesario configurar permisos individuales.
                     </p>
-                  </div>
-                )}
-
-                {canEdit && selectedRole.name !== 'admin' && (
-                  <div className="mt-6 flex justify-end">
-                    <Button
-                      onClick={saveChanges}
-                      disabled={changedPermissions.size === 0 || saving}
-                      className="bg-green-500 hover:bg-green-600"
-                    >
-                      {saving ? (
-                        <>
-                          <i className="fas fa-spinner animate-spin mr-2"></i>
-                          Guardando...
-                        </>
-                      ) : (
-                        <>
-                          <i className="fas fa-save mr-2"></i>
-                          Guardar Cambios
-                        </>
-                      )}
-                    </Button>
                   </div>
                 )}
               </>
             )}
+            
+            <div className="mt-6 flex justify-end">
+              <Button
+                onClick={saveChanges}
+                disabled={changedPermissions.size === 0 || saving}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                {saving ? (
+                  <>
+                    <i className="fas fa-spinner fa-spin mr-2"></i>
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <i className="fas fa-save mr-2"></i>
+                    Guardar Cambios
+                  </>
+                )}
+              </Button>
+            </div>
           </>
         )}
       </div>
@@ -703,4 +631,4 @@ const RolePermissions: React.FC = () => {
   );
 };
 
-export default RolePermissions; 
+export default RolePermissions;

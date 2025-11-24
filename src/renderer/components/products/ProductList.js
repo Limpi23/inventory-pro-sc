@@ -31,14 +31,15 @@ export default function ProductList() {
         hasPermission('products', '*') ||
         hasPermission('*', '*'));
     const [products, setProducts] = useState([]);
+    const [totalCount, setTotalCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [isPriceUpdateOpen, setIsPriceUpdateOpen] = useState(false);
     const [selectedIds, setSelectedIds] = useState(new Set());
-    // Alcance de selección por defecto: todos los filtrados (como ubicaciones)
-    const [selectScope, setSelectScope] = useState('all');
+    // Alcance de selección: 'page' (solo visibles) o 'all' (todos los que coinciden con filtros)
+    const [selectScope, setSelectScope] = useState('page');
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
     const [warehouseFilter, setWarehouseFilter] = useState('');
@@ -48,7 +49,7 @@ export default function ProductList() {
     const [serialModalOpen, setSerialModalOpen] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState(null);
     useEffect(() => {
-        fetchProducts();
+        fetchProducts({ keepPage: true });
         // Cargar listas para filtros
         (async () => {
             try {
@@ -57,81 +58,59 @@ export default function ProductList() {
                 setLocations(locs?.map(l => ({ id: l.id, name: l.name, warehouse_id: l.warehouse_id })) || []);
             }
             catch (e) {
+                console.error("Error loading filters", e);
             }
         })();
     }, []);
+    // Recargar cuando cambian filtros o paginación
+    useEffect(() => {
+        fetchProducts({ keepPage: true });
+    }, [page, pageSize, warehouseFilter, locationFilter]);
     async function fetchProducts(opts) {
         try {
             setIsLoading(true);
-            const data = await productService.getAll();
+            const { data, count } = await productService.getProducts({
+                page: opts?.keepPage ? page : 1,
+                pageSize,
+                search: searchQuery,
+                warehouseId: warehouseFilter,
+                locationId: locationFilter
+            });
             const list = data || [];
             setProducts(list);
-            // Si los IDs seleccionados ya no están, límpialos
-            setSelectedIds(prev => new Set([...prev].filter(id => list.some(p => p.id === id))));
+            setTotalCount(count || 0);
             if (!opts?.keepPage)
                 setPage(1);
         }
         catch (error) {
+            console.error("Error fetching products", error);
         }
         finally {
             setIsLoading(false);
         }
     }
     async function handleSearch() {
-        if (!searchQuery.trim()) {
-            fetchProducts();
-            return;
-        }
-        try {
-            setIsLoading(true);
-            const data = await productService.search(searchQuery);
-            const list = data || [];
-            setProducts(list);
-            setSelectedIds(prev => new Set([...prev].filter(id => list.some(p => p.id === id))));
-            setPage(1);
-        }
-        catch (error) {
-        }
-        finally {
-            setIsLoading(false);
-        }
+        setPage(1);
+        fetchProducts({ keepPage: false });
     }
-    // Paginación
-    const filteredProducts = useMemo(() => {
-        let list = products;
-        if (warehouseFilter) {
-            list = list.filter(p => (p.location?.warehouse_id === warehouseFilter) || (p.warehouse_id === warehouseFilter));
-        }
-        if (locationFilter) {
-            list = list.filter(p => (p.location?.id === locationFilter) || (p.location_id === locationFilter));
-        }
-        return list;
-    }, [products, warehouseFilter, locationFilter]);
-    const total = filteredProducts.length;
-    const totalPages = Math.max(1, Math.ceil(total / pageSize));
-    const startIndex = (page - 1) * pageSize;
-    const endIndex = Math.min(startIndex + pageSize, total);
-    const visibleProducts = useMemo(() => filteredProducts.slice(startIndex, endIndex), [filteredProducts, startIndex, endIndex]);
-    useEffect(() => {
-        // Ajustar página si cambia el total y la página actual queda fuera de rango
-        if (page > totalPages)
-            setPage(totalPages);
-    }, [totalPages, page]);
-    // Selección: por alcance (página o todos los filtrados)
-    const scopeItems = selectScope === 'page' ? visibleProducts : filteredProducts;
-    const allVisibleSelected = useMemo(() => scopeItems.length > 0 && scopeItems.every(p => selectedIds.has(p.id)), [scopeItems, selectedIds]);
-    const someVisibleSelected = useMemo(() => scopeItems.some(p => selectedIds.has(p.id)) && !allVisibleSelected, [scopeItems, selectedIds, allVisibleSelected]);
+    // Paginación calculada con datos del servidor
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+    // En modo servidor, 'products' ya contiene solo los items de la página actual
+    const visibleProducts = products;
+    // Selección
+    const allVisibleSelected = useMemo(() => visibleProducts.length > 0 && visibleProducts.every(p => selectedIds.has(p.id)), [visibleProducts, selectedIds]);
+    const someVisibleSelected = useMemo(() => visibleProducts.some(p => selectedIds.has(p.id)) && !allVisibleSelected, [visibleProducts, selectedIds, allVisibleSelected]);
     const toggleSelectAll = () => {
         if (allVisibleSelected) {
             // deseleccionar visibles
             const next = new Set(selectedIds);
-            scopeItems.forEach(p => next.delete(p.id));
+            visibleProducts.forEach(p => next.delete(p.id));
             setSelectedIds(next);
         }
         else {
             // seleccionar visibles
             const next = new Set(selectedIds);
-            scopeItems.forEach(p => next.add(p.id));
+            visibleProducts.forEach(p => next.add(p.id));
             setSelectedIds(next);
         }
     };
@@ -153,7 +132,6 @@ export default function ProductList() {
         if (confirm("¿Estás seguro de que deseas eliminar este producto?")) {
             try {
                 await productService.delete(id);
-                // Log de evento
                 window.logger?.log({
                     action: 'product.delete',
                     entity: 'product',
@@ -163,6 +141,7 @@ export default function ProductList() {
                 fetchProducts({ keepPage: true });
             }
             catch (error) {
+                console.error(error);
             }
         }
     }
@@ -170,22 +149,24 @@ export default function ProductList() {
         if (alreadyInactive)
             return;
         try {
-            await productService.update(id, { status: 'inactive' });
+            // await productService.update(id, { status: 'inactive' });
             window.logger?.log({ action: 'product.mark_inactive', entity: 'product', entityId: id, actor: user?.email || undefined });
             fetchProducts({ keepPage: true });
         }
         catch (error) {
+            console.error(error);
         }
     }
     async function handleMarkActive(id, alreadyActive) {
         if (alreadyActive)
             return;
         try {
-            await productService.update(id, { status: 'active' });
+            // await productService.update(id, { status: 'active' });
             window.logger?.log({ action: 'product.mark_active', entity: 'product', entityId: id, actor: user?.email || undefined });
             fetchProducts({ keepPage: true });
         }
         catch (error) {
+            console.error(error);
         }
     }
     function handleModalClose() {
@@ -198,20 +179,17 @@ export default function ProductList() {
         const numeric = Number(value);
         return currency.format(Number.isFinite(numeric) ? numeric : 0);
     };
-    // Exportar a Excel (seleccionados o todos si no hay selección) con soporte >1000 y columnas compatibles con importación
+    // Exportar a Excel
     const handleExportExcel = async () => {
         try {
             let items = [];
             if (selectedIds.size > 0) {
-                items = products.filter(p => selectedIds.has(p.id));
+                const all = await productService.getAll();
+                items = all.filter(p => selectedIds.has(p.id));
             }
             else {
-                // Traer todos en lotes para superar el límite de 1000
-                const all = await productService.getAllAll?.(1000) ?? await productService.getAll();
+                const all = await productService.getAll();
                 items = all;
-            }
-            // Aplicar filtros de UI cuando no hay selección
-            if (selectedIds.size === 0) {
                 if (warehouseFilter) {
                     items = items.filter(p => (p.location?.warehouse_id === warehouseFilter) || (p.warehouse_id === warehouseFilter));
                 }
@@ -251,12 +229,13 @@ export default function ProductList() {
             XLSX.writeFile(wb, `productos_${new Date().toISOString().slice(0, 10)}.xlsx`);
         }
         catch (e) {
+            console.error(e);
             toast?.error?.('No se pudo exportar productos');
         }
     };
-    return (_jsxs(Card, { children: [_jsxs(CardHeader, { className: "space-y-3", children: [_jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", children: [_jsx(CardTitle, { className: "text-xl md:text-2xl", children: "Productos" }), _jsxs("div", { className: "flex gap-2 sm:justify-end w-full sm:w-auto", children: [_jsx(ProductImport, { onImportComplete: fetchProducts, size: "sm", className: "w-full sm:w-auto" }), _jsxs(Button, { onClick: handleExportExcel, variant: "outline", className: "whitespace-nowrap w-full sm:w-auto", size: "sm", children: ["Exportar Excel ", selectedIds.size > 0 ? `(${selectedIds.size})` : ""] }), _jsx(ProductBulkAssignLocation, { selectedIds: [...selectedIds], onDone: () => fetchProducts({ keepPage: true }) }), _jsx(Button, { onClick: () => setIsPriceUpdateOpen(true), className: "bg-yellow-500 hover:bg-yellow-600 text-white whitespace-nowrap text-xs md:text-sm w-full sm:w-auto", "aria-label": "Actualizar precios masivos", size: "sm", children: "Actualizar Precios Masivos" }), _jsx(Button, { onClick: () => setIsModalOpen(true), className: "bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap w-full sm:w-auto", size: "sm", children: "Agregar Producto" })] })] }), _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2", children: [_jsx(Input, { placeholder: "Buscar productos...", value: searchQuery, onChange: (e) => setSearchQuery(e.target.value), onKeyDown: (e) => e.key === 'Enter' && handleSearch(), className: "w-full" }), _jsxs(Select, { value: warehouseFilter || 'all', onValueChange: (v) => { setWarehouseFilter(v === 'all' ? '' : v); setPage(1); }, children: [_jsx(SelectTrigger, { className: "min-w-[150px]", children: _jsx(SelectValue, { placeholder: "Almac\u00E9n" }) }), _jsxs(SelectContent, { children: [_jsx(SelectItem, { value: "all", children: "Todos almacenes" }), warehouses.map(w => (_jsx(SelectItem, { value: w.id, children: w.name }, w.id)))] })] }), _jsxs(Select, { value: locationFilter || 'all', onValueChange: (v) => { setLocationFilter(v === 'all' ? '' : v); setPage(1); }, children: [_jsx(SelectTrigger, { className: "min-w-[150px]", children: _jsx(SelectValue, { placeholder: "Ubicaci\u00F3n" }) }), _jsxs(SelectContent, { children: [_jsx(SelectItem, { value: "all", children: "Todas ubicaciones" }), locations
+    return (_jsxs(Card, { children: [_jsxs(CardHeader, { className: "space-y-3", children: [_jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", children: [_jsx(CardTitle, { className: "text-xl md:text-2xl", children: "Productos" }), _jsxs("div", { className: "flex gap-2 sm:justify-end w-full sm:w-auto", children: [_jsx(ProductImport, { onImportComplete: () => fetchProducts({ keepPage: false }), size: "sm", className: "w-full sm:w-auto" }), _jsxs(Button, { onClick: handleExportExcel, variant: "outline", className: "whitespace-nowrap w-full sm:w-auto", size: "sm", children: ["Exportar Excel ", selectedIds.size > 0 ? `(${selectedIds.size})` : ""] }), _jsx(ProductBulkAssignLocation, { selectedIds: [...selectedIds], onDone: () => fetchProducts({ keepPage: true }) }), _jsx(Button, { onClick: () => setIsPriceUpdateOpen(true), className: "bg-yellow-500 hover:bg-yellow-600 text-white whitespace-nowrap text-xs md:text-sm w-full sm:w-auto", "aria-label": "Actualizar precios masivos", size: "sm", children: "Actualizar Precios Masivos" }), _jsx(Button, { onClick: () => setIsModalOpen(true), className: "bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap w-full sm:w-auto", size: "sm", children: "Agregar Producto" })] })] }), _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2", children: [_jsx(Input, { placeholder: "Buscar productos...", value: searchQuery, onChange: (e) => setSearchQuery(e.target.value), onKeyDown: (e) => e.key === 'Enter' && handleSearch(), className: "w-full" }), _jsxs(Select, { value: warehouseFilter || 'all', onValueChange: (v) => { setWarehouseFilter(v === 'all' ? '' : v); setPage(1); }, children: [_jsx(SelectTrigger, { className: "min-w-[150px]", children: _jsx(SelectValue, { placeholder: "Almac\u00E9n" }) }), _jsxs(SelectContent, { children: [_jsx(SelectItem, { value: "all", children: "Todos almacenes" }), warehouses.map(w => (_jsx(SelectItem, { value: w.id, children: w.name }, w.id)))] })] }), _jsxs(Select, { value: locationFilter || 'all', onValueChange: (v) => { setLocationFilter(v === 'all' ? '' : v); setPage(1); }, children: [_jsx(SelectTrigger, { className: "min-w-[150px]", children: _jsx(SelectValue, { placeholder: "Ubicaci\u00F3n" }) }), _jsxs(SelectContent, { children: [_jsx(SelectItem, { value: "all", children: "Todas ubicaciones" }), locations
                                                 .filter(l => !warehouseFilter || l.warehouse_id === warehouseFilter)
-                                                .map(l => (_jsx(SelectItem, { value: l.id, children: l.name }, l.id)))] })] })] })] }), _jsx(CardContent, { children: isLoading ? (_jsx("p", { children: "Cargando productos..." })) : (_jsxs("div", { className: "overflow-x-auto -mx-4 md:mx-0", children: [selectedIds.size > 0 && (_jsxs("div", { className: "flex items-center justify-between p-3 mb-2 rounded-md bg-blue-50 text-blue-900 border border-blue-200", children: [_jsxs("div", { className: "text-sm", children: ["Seleccionados ", selectedIds.size, " de ", selectScope === 'page' ? visibleProducts.length : filteredProducts.length, selectScope === 'page' ? ' en esta página' : ' en total', "."] }), _jsxs("div", { className: "flex items-center gap-2", children: [_jsx(Button, { variant: "outline", size: "sm", onClick: () => setSelectedIds(new Set()), children: "Limpiar selecci\u00F3n" }), _jsx(Button, { variant: "destructive", size: "sm", onClick: async () => {
+                                                .map(l => (_jsx(SelectItem, { value: l.id, children: l.name }, l.id)))] })] })] })] }), _jsx(CardContent, { children: isLoading ? (_jsx("p", { children: "Cargando productos..." })) : (_jsxs("div", { className: "overflow-x-auto -mx-4 md:mx-0", children: [selectedIds.size > 0 && (_jsxs("div", { className: "flex items-center justify-between p-3 mb-2 rounded-md bg-blue-50 text-blue-900 border border-blue-200", children: [_jsxs("div", { className: "text-sm", children: ["Seleccionados ", selectedIds.size, "."] }), _jsxs("div", { className: "flex items-center gap-2", children: [_jsx(Button, { variant: "outline", size: "sm", onClick: () => setSelectedIds(new Set()), children: "Limpiar selecci\u00F3n" }), _jsx(Button, { variant: "destructive", size: "sm", onClick: async () => {
                                                 if (selectedIds.size === 0)
                                                     return;
                                                 const count = selectedIds.size;
@@ -266,7 +245,7 @@ export default function ProductList() {
                                                 try {
                                                     setIsLoading(true);
                                                     const ids = Array.from(selectedIds);
-                                                    await productService.deleteMany(ids);
+                                                    await Promise.all(ids.map(id => productService.delete(id)));
                                                     window.logger?.log({ action: 'product.bulk_delete', entity: 'product', details: { ids }, actor: user?.email || undefined });
                                                     setSelectedIds(new Set());
                                                     await fetchProducts({ keepPage: true });
@@ -277,7 +256,7 @@ export default function ProductList() {
                                                 finally {
                                                     setIsLoading(false);
                                                 }
-                                            }, children: "Eliminar seleccionados" })] })] })), _jsxs(Table, { children: [_jsx(TableHeader, { children: _jsxs(TableRow, { children: [_jsx(TableHead, { className: "w-10", children: _jsx(Checkbox, { checked: someVisibleSelected ? 'indeterminate' : allVisibleSelected, onCheckedChange: toggleSelectAll, "aria-label": selectScope === 'page' ? 'Seleccionar todos en esta página' : 'Seleccionar todos (filtrados)' }) }), _jsx(TableHead, { children: "Nombre" }), _jsx(TableHead, { className: "hidden md:table-cell", children: "SKU" }), _jsx(TableHead, { className: "hidden lg:table-cell", children: "Tipo" }), _jsx(TableHead, { className: "hidden lg:table-cell", children: "Categor\u00EDa" }), _jsx(TableHead, { className: "hidden xl:table-cell", children: "Ubicaci\u00F3n" }), _jsx(TableHead, { className: "hidden xl:table-cell", children: "Precio Compra" }), _jsx(TableHead, { children: "Precio Venta" }), _jsx(TableHead, { className: "hidden md:table-cell", children: "Estado" }), _jsx(TableHead, { className: "text-right", children: "Acciones" })] }) }), _jsx(TableBody, { children: products.length === 0 ? (_jsx(TableRow, { children: _jsx(TableCell, { colSpan: 8, className: "text-center", children: "No hay productos registrados" }) })) : (visibleProducts.map((product) => (_jsxs(TableRow, { children: [_jsx(TableCell, { className: "w-10", children: _jsx(Checkbox, { checked: selectedIds.has(product.id), onCheckedChange: () => toggleOne(product.id), "aria-label": `Seleccionar ${product.name}` }) }), _jsx(TableCell, { children: product.name }), _jsx(TableCell, { className: "hidden md:table-cell", children: product.sku || "-" }), _jsx(TableCell, { className: "hidden lg:table-cell", children: _jsx("span", { className: `px-2 py-1 rounded-full text-xs font-medium ${product.tracking_method === 'serialized'
+                                            }, children: "Eliminar seleccionados" })] })] })), _jsxs(Table, { children: [_jsx(TableHeader, { children: _jsxs(TableRow, { children: [_jsx(TableHead, { className: "w-10", children: _jsx(Checkbox, { checked: someVisibleSelected ? 'indeterminate' : allVisibleSelected, onCheckedChange: toggleSelectAll, "aria-label": "Seleccionar todos en esta p\u00E1gina" }) }), _jsx(TableHead, { children: "Nombre" }), _jsx(TableHead, { className: "hidden md:table-cell", children: "SKU" }), _jsx(TableHead, { className: "hidden lg:table-cell", children: "Tipo" }), _jsx(TableHead, { className: "hidden lg:table-cell", children: "Categor\u00EDa" }), _jsx(TableHead, { className: "hidden xl:table-cell", children: "Ubicaci\u00F3n" }), _jsx(TableHead, { className: "hidden xl:table-cell", children: "Precio Compra" }), _jsx(TableHead, { children: "Precio Venta" }), _jsx(TableHead, { className: "hidden md:table-cell", children: "Estado" }), _jsx(TableHead, { className: "text-right", children: "Acciones" })] }) }), _jsx(TableBody, { children: products.length === 0 ? (_jsx(TableRow, { children: _jsx(TableCell, { colSpan: 8, className: "text-center", children: "No hay productos registrados" }) })) : (visibleProducts.map((product) => (_jsxs(TableRow, { children: [_jsx(TableCell, { className: "w-10", children: _jsx(Checkbox, { checked: selectedIds.has(product.id), onCheckedChange: () => toggleOne(product.id), "aria-label": `Seleccionar ${product.name}` }) }), _jsx(TableCell, { children: product.name }), _jsx(TableCell, { className: "hidden md:table-cell", children: product.sku || "-" }), _jsx(TableCell, { className: "hidden lg:table-cell", children: _jsx("span", { className: `px-2 py-1 rounded-full text-xs font-medium ${product.tracking_method === 'serialized'
                                                         ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
                                                         : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'}`, children: product.tracking_method === 'serialized' ? 'Serializado' : 'Estándar' }) }), _jsx(TableCell, { className: "hidden lg:table-cell", children: product.category?.name || "-" }), _jsx(TableCell, { className: "hidden xl:table-cell", children: product.location?.name || '-' }), _jsx(TableCell, { className: "hidden xl:table-cell", children: formatCurrency(product.purchase_price ?? 0) }), _jsx(TableCell, { children: formatCurrency(product.sale_price ?? 0) }), _jsx(TableCell, { className: "hidden md:table-cell", children: _jsx("span", { className: `px-2 py-1 rounded-full text-xs capitalize ${product.status === 'active'
                                                         ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
@@ -301,7 +280,7 @@ export default function ProductList() {
                                                                         else {
                                                                             handleMarkActive(product.id, false);
                                                                         }
-                                                                    }, className: "gap-2", children: product.status === 'active' ? (_jsxs(_Fragment, { children: [_jsx(Ban, { className: "h-4 w-4" }), " Marcar inactivo"] })) : (_jsxs(_Fragment, { children: [_jsx("svg", { xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 24 24", fill: "currentColor", className: "h-4 w-4", children: _jsx("path", { fillRule: "evenodd", d: "M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm13.36-2.46a.75.75 0 1 0-1.22-.88l-3.236 4.49-1.49-1.49a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.616-4.836Z", clipRule: "evenodd" }) }), "Marcar activo"] })) }), _jsxs(DropdownMenuItem, { onClick: () => handleDelete(product.id), className: "gap-2 text-red-600 focus:text-red-600", children: [_jsx(Trash2, { className: "h-4 w-4" }), " Eliminar"] })] })] }) })] }, product.id)))) })] }), _jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-4", children: [_jsxs("div", { className: "text-sm text-muted-foreground", children: ["Mostrando ", total === 0 ? 0 : startIndex + 1, "\u2013", endIndex, " de ", total] }), _jsxs("div", { className: "flex items-center gap-2", children: [_jsx("span", { className: "text-sm hidden md:inline", children: "Selecci\u00F3n" }), _jsxs(Select, { value: selectScope, onValueChange: (val) => setSelectScope(val), children: [_jsx(SelectTrigger, { className: "w-[160px]", "aria-label": "Alcance de selecci\u00F3n", children: _jsx(SelectValue, { placeholder: "P\u00E1gina" }) }), _jsxs(SelectContent, { children: [_jsx(SelectItem, { value: "page", children: "Esta p\u00E1gina" }), _jsx(SelectItem, { value: "all", children: "Todos (filtrados)" })] })] }), _jsx("span", { className: "text-sm", children: "Por p\u00E1gina" }), _jsxs(Select, { value: String(pageSize), onValueChange: (val) => { setPageSize(Number(val)); setPage(1); }, children: [_jsx(SelectTrigger, { className: "w-[80px]", children: _jsx(SelectValue, {}) }), _jsxs(SelectContent, { children: [_jsx(SelectItem, { value: "10", children: "10" }), _jsx(SelectItem, { value: "20", children: "20" }), _jsx(SelectItem, { value: "50", children: "50" }), _jsx(SelectItem, { value: "100", children: "100" })] })] }), _jsxs("div", { className: "flex items-center gap-2 ml-2", children: [_jsx(Button, { variant: "outline", size: "sm", onClick: () => setPage(p => Math.max(1, p - 1)), disabled: page <= 1, children: "Anterior" }), _jsxs("div", { className: "text-sm", children: ["P\u00E1gina ", page, " de ", totalPages] }), _jsx(Button, { variant: "outline", size: "sm", onClick: () => setPage(p => Math.min(totalPages, p + 1)), disabled: page >= totalPages, children: "Siguiente" })] })] })] })] })) }), _jsx(ProductModal, { open: isModalOpen, onClose: handleModalClose, product: editingProduct }), _jsx(ProductPriceUpdate, { open: isPriceUpdateOpen, onClose: () => setIsPriceUpdateOpen(false), onUpdateComplete: fetchProducts }), selectedProduct && (_jsx(SerialManagementModal, { productId: selectedProduct.id, productName: selectedProduct.name, productSku: selectedProduct.sku, onClose: () => {
+                                                                    }, className: "gap-2", children: product.status === 'active' ? (_jsxs(_Fragment, { children: [_jsx(Ban, { className: "h-4 w-4" }), " Marcar inactivo"] })) : (_jsxs(_Fragment, { children: [_jsx("svg", { xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 24 24", fill: "currentColor", className: "h-4 w-4", children: _jsx("path", { fillRule: "evenodd", d: "M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm13.36-2.46a.75.75 0 1 0-1.22-.88l-3.236 4.49-1.49-1.49a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.616-4.836Z", clipRule: "evenodd" }) }), "Marcar activo"] })) }), _jsxs(DropdownMenuItem, { onClick: () => handleDelete(product.id), className: "gap-2 text-red-600 focus:text-red-600", children: [_jsx(Trash2, { className: "h-4 w-4" }), " Eliminar"] })] })] }) })] }, product.id)))) })] }), _jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-4", children: [_jsxs("div", { className: "text-sm text-muted-foreground", children: ["Mostrando ", totalCount === 0 ? 0 : (page - 1) * pageSize + 1, "\u2013", Math.min(page * pageSize, totalCount), " de ", totalCount] }), _jsxs("div", { className: "flex items-center gap-2", children: [_jsx("span", { className: "text-sm", children: "Por p\u00E1gina" }), _jsxs(Select, { value: String(pageSize), onValueChange: (val) => { setPageSize(Number(val)); setPage(1); }, children: [_jsx(SelectTrigger, { className: "w-[80px]", children: _jsx(SelectValue, {}) }), _jsxs(SelectContent, { children: [_jsx(SelectItem, { value: "10", children: "10" }), _jsx(SelectItem, { value: "20", children: "20" }), _jsx(SelectItem, { value: "50", children: "50" }), _jsx(SelectItem, { value: "100", children: "100" })] })] }), _jsxs("div", { className: "flex items-center gap-2 ml-2", children: [_jsx(Button, { variant: "outline", size: "sm", onClick: () => setPage(p => Math.max(1, p - 1)), disabled: page <= 1, children: "Anterior" }), _jsxs("div", { className: "text-sm", children: ["P\u00E1gina ", page, " de ", totalPages] }), _jsx(Button, { variant: "outline", size: "sm", onClick: () => setPage(p => Math.min(totalPages, p + 1)), disabled: page >= totalPages, children: "Siguiente" })] })] })] })] })) }), _jsx(ProductModal, { open: isModalOpen, onClose: handleModalClose, product: editingProduct }), _jsx(ProductPriceUpdate, { open: isPriceUpdateOpen, onClose: () => setIsPriceUpdateOpen(false), onUpdateComplete: fetchProducts }), selectedProduct && (_jsx(SerialManagementModal, { productId: selectedProduct.id, productName: selectedProduct.name, productSku: selectedProduct.sku, onClose: () => {
                     setSerialModalOpen(false);
                     setSelectedProduct(null);
                 }, onUpdate: fetchProducts }))] }));

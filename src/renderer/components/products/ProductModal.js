@@ -1,6 +1,6 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useState, useEffect } from "react";
-import { productService, categoriesService, locationsService } from "../../lib/supabase";
+import { categoriesService, locationsService } from "../../lib/supabase";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -126,18 +126,6 @@ export default function ProductModal({ open, onClose, product }) {
         try {
             setIsSubmitting(true);
             setError("");
-            if (product) {
-                // Actualizar producto existente
-                await productService.update(product.id, formData);
-            }
-            else {
-                // Crear nuevo producto
-                await productService.create(formData);
-            }
-            onClose();
-        }
-        catch (err) {
-            setError(err.message || "Error al guardar el producto");
         }
         finally {
             setIsSubmitting(false);

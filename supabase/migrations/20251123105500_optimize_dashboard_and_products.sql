@@ -36,11 +36,8 @@ $$;
 CREATE INDEX IF NOT EXISTS idx_products_name_search ON products (name);
 CREATE INDEX IF NOT EXISTS idx_products_sku ON products (sku);
 CREATE INDEX IF NOT EXISTS idx_products_barcode ON products (barcode);
-CREATE INDEX IF NOT EXISTS idx_products_warehouse_id ON products (warehouse_id);
-CREATE INDEX IF NOT EXISTS idx_products_location_id ON products (location_id);
 
 -- Índices para optimizar las consultas del Dashboard (Movimientos y Stock)
 CREATE INDEX IF NOT EXISTS idx_stock_movements_date ON stock_movements (movement_date);
 CREATE INDEX IF NOT EXISTS idx_stock_movements_product_id ON stock_movements (product_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_date_status ON invoices (invoice_date, status);
-CREATE INDEX IF NOT EXISTS idx_current_stock_quantity ON current_stock (current_quantity);

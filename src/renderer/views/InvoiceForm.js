@@ -161,7 +161,8 @@ const InvoiceForm = () => {
     }, [isLoading, isEditing]);
     const fetchCustomers = async () => {
         try {
-            const { data, error } = await supabase
+            const client = await supabase.getClient();
+            const { data, error } = await client
                 .from('customers')
                 .select('id, name, identification_number')
                 .eq('is_active', true)
@@ -176,7 +177,8 @@ const InvoiceForm = () => {
     };
     const fetchWarehouses = async () => {
         try {
-            const { data, error } = await supabase
+            const client = await supabase.getClient();
+            const { data, error } = await client
                 .from('warehouses')
                 .select('id, name')
                 .order('name');
@@ -190,7 +192,8 @@ const InvoiceForm = () => {
     };
     const fetchProducts = async () => {
         try {
-            const { data, error } = await supabase
+            const client = await supabase.getClient();
+            const { data, error } = await client
                 .from('products')
                 .select('id, name, sku, sale_price, tax_rate, tracking_method')
                 .order('name');
@@ -212,7 +215,8 @@ const InvoiceForm = () => {
             const queryConfig = {
                 count: 'exact'
             };
-            let queryBuilder = supabase
+            const client = await supabase.getClient();
+            let queryBuilder = client
                 .from('current_stock')
                 .select('product_id, product_name, sku, current_quantity, warehouse_id, warehouse_name', queryConfig);
             // Si hay almacén seleccionado, filtrar por ese almacén
@@ -291,7 +295,8 @@ const InvoiceForm = () => {
         }
         try {
             setIsLoadingStock(true);
-            const { data, error } = await supabase
+            const client = await supabase.getClient();
+            const { data, error } = await client
                 .from('current_stock')
                 .select('sku, current_quantity')
                 .eq('warehouse_id', warehouseId)
@@ -324,7 +329,8 @@ const InvoiceForm = () => {
             return;
         }
         try {
-            const { data, error } = await supabase
+            const client = await supabase.getClient();
+            const { data, error } = await client
                 .from('product_serials')
                 .select('id, serial_code, vin, engine_number, year, color, status')
                 .eq('product_id', productId)
@@ -346,8 +352,9 @@ const InvoiceForm = () => {
     const fetchInvoiceDetails = async () => {
         try {
             setIsLoading(true);
+            const client = await supabase.getClient();
             // Obtener la cotización
-            const { data: invoiceData, error: invoiceError } = await supabase
+            const { data: invoiceData, error: invoiceError } = await client
                 .from('invoices')
                 .select('*')
                 .eq('id', id)
@@ -368,7 +375,7 @@ const InvoiceForm = () => {
                     setDueDate(invoiceData.due_date);
                 }
                 // Obtener los items de la cotización
-                const { data: itemsData, error: itemsError } = await supabase
+                const { data: itemsData, error: itemsError } = await client
                     .from('invoice_items')
                     .select(`
             id,
@@ -642,9 +649,10 @@ const InvoiceForm = () => {
             if (status === 'emitida') {
                 outboundMovementTypeId = await stockMovementService.getOutboundSaleTypeId();
             }
+            const client = await supabase.getClient();
             if (isEditing) {
                 // Actualizar cotización existente
-                const { error: invoiceError } = await supabase
+                const { error: invoiceError } = await client
                     .from('invoices')
                     .update({
                     status: status,
@@ -660,7 +668,7 @@ const InvoiceForm = () => {
                 if (invoiceError)
                     throw invoiceError;
                 // Eliminar items existentes
-                const { error: deleteError } = await supabase
+                const { error: deleteError } = await client
                     .from('invoice_items')
                     .delete()
                     .eq('invoice_id', id);
@@ -679,13 +687,13 @@ const InvoiceForm = () => {
                     total_price: item.total_price,
                     serial_id: item.serial_id || null
                 }));
-                const { error: itemsError } = await supabase
+                const { error: itemsError } = await client
                     .from('invoice_items')
                     .insert(itemsToInsert);
                 if (itemsError)
                     throw itemsError;
                 // Sincronizar movimientos de stock según el estado actual
-                const { error: purgeMovementsError } = await supabase
+                const { error: purgeMovementsError } = await client
                     .from('stock_movements')
                     .delete()
                     .eq('related_id', id);
@@ -704,7 +712,7 @@ const InvoiceForm = () => {
                         serial_id: item.serial_id || null
                     }));
                     if (stockMovements.length) {
-                        const { error: movementError } = await supabase
+                        const { error: movementError } = await client
                             .from('stock_movements')
                             .insert(stockMovements);
                         if (movementError)
@@ -715,7 +723,7 @@ const InvoiceForm = () => {
                         .filter(item => item.serial_id)
                         .map(item => item.serial_id);
                     if (serialIds.length > 0) {
-                        const { error: serialUpdateError } = await supabase
+                        const { error: serialUpdateError } = await client
                             .from('product_serials')
                             .update({ status: 'sold' })
                             .in('id', serialIds);
@@ -727,7 +735,7 @@ const InvoiceForm = () => {
             }
             else {
                 // Crear nueva cotización
-                const { data: invoiceData, error: invoiceError } = await supabase
+                const { data: invoiceData, error: invoiceError } = await client
                     .from('invoices')
                     .insert({
                     customer_id: formData.customer_id,
@@ -763,7 +771,7 @@ const InvoiceForm = () => {
                         total_price: item.total_price,
                         serial_id: item.serial_id || null
                     }));
-                    const { error: itemsError } = await supabase
+                    const { error: itemsError } = await client
                         .from('invoice_items')
                         .insert(itemsToInsert);
                     if (itemsError)
@@ -782,7 +790,7 @@ const InvoiceForm = () => {
                             serial_id: item.serial_id || null
                         }));
                         if (stockMovements.length) {
-                            const { error: movementError } = await supabase
+                            const { error: movementError } = await client
                                 .from('stock_movements')
                                 .insert(stockMovements);
                             if (movementError)
@@ -793,7 +801,7 @@ const InvoiceForm = () => {
                             .filter(item => item.serial_id)
                             .map(item => item.serial_id);
                         if (serialIds.length > 0) {
-                            const { error: serialUpdateError } = await supabase
+                            const { error: serialUpdateError } = await client
                                 .from('product_serials')
                                 .update({ status: 'sold' })
                                 .in('id', serialIds);

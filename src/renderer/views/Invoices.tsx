@@ -51,7 +51,7 @@ const Invoices: React.FC = () => {
   }, [selectedInvoice]);
 
   useEffect(() => {
-  // Detectar cotizaciones próximas a vencer (en los próximos 7 días)
+    // Detectar cotizaciones próximas a vencer (en los próximos 7 días)
     const checkUpcomingDueInvoices = () => {
       const today = new Date();
       const nextWeek = new Date();
@@ -73,7 +73,8 @@ const Invoices: React.FC = () => {
   const fetchInvoices = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const client = await supabase.getClient();
+      const { data, error } = await client
         .from('invoices')
         .select(`
           *,
@@ -84,9 +85,9 @@ const Invoices: React.FC = () => {
 
       if (error) throw error;
       
-  // Actualizar el estado de cotizaciones vencidas
+      // Actualizar el estado de cotizaciones vencidas
       const today = new Date();
-      const updatedInvoices = (data || []).map(invoice => {
+      const updatedInvoices = (data || []).map((invoice: any) => {
         if (invoice.status === 'emitida' && invoice.due_date) {
           const dueDate = new Date(invoice.due_date);
           if (dueDate < today) {
@@ -96,14 +97,14 @@ const Invoices: React.FC = () => {
         return invoice;
       });
       
-  // Actualizar cotizaciones vencidas en la base de datos
+      // Actualizar cotizaciones vencidas en la base de datos
       const overdueInvoices = updatedInvoices.filter(
-        invoice => invoice.status === 'vencida' && data?.find(i => i.id === invoice.id)?.status !== 'vencida'
+        (invoice: any) => invoice.status === 'vencida' && data?.find((i: any) => i.id === invoice.id)?.status !== 'vencida'
       );
       
       if (overdueInvoices.length > 0) {
         for (const invoice of overdueInvoices) {
-          await supabase
+          await client
             .from('invoices')
             .update({ 
               status: 'vencida',
@@ -121,8 +122,8 @@ const Invoices: React.FC = () => {
       
       setInvoices(updatedInvoices);
     } catch (error: any) {
-      
-  toast.error(`Error al cargar cotizaciones: ${error.message}`);
+      console.error('Error fetching invoices:', error);
+      toast.error(`Error al cargar cotizaciones: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -131,7 +132,8 @@ const Invoices: React.FC = () => {
   const fetchInvoiceItems = async (invoiceId: string) => {
     try {
       setDrawerLoading(true);
-      const { data, error } = await supabase
+      const client = await supabase.getClient();
+      const { data, error } = await client
         .from('invoice_items')
         .select(`
           *,
@@ -142,8 +144,8 @@ const Invoices: React.FC = () => {
       if (error) throw error;
       setInvoiceItems(data || []);
     } catch (error: any) {
-  console.error('Error al cargar items de cotización:', error.message);
-  toast.error(`Error al cargar detalles de cotización: ${error.message}`);
+      console.error('Error al cargar items de cotización:', error.message);
+      toast.error(`Error al cargar detalles de cotización: ${error.message}`);
     } finally {
       setDrawerLoading(false);
     }
@@ -193,8 +195,9 @@ const Invoices: React.FC = () => {
     }
 
     try {
+      const client = await supabase.getClient();
       // En vez de eliminar, anulamos la cotización
-      const { error } = await supabase
+      const { error } = await client
         .from('invoices')
         .update({ 
           status: 'anulada',
@@ -402,187 +405,105 @@ const Invoices: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {currentInvoices.map((invoice) => {
-                    // Calcular días restantes para cotizaciones emitidas
-                    const daysRemaining = invoice.due_date && invoice.status === 'emitida' 
-                      ? getDaysRemaining(invoice.due_date)
-                      : null;
-                    
-                    // Determinar si esta cotización está próxima a vencer (menos de 7 días)
-                    const isUpcomingDue = daysRemaining !== null && daysRemaining > 0 && daysRemaining <= 7;
-                    
-                    const showDetail = canViewInvoices;
-                    const showGenerateSale = isAdmin && invoice.status !== 'anulada' && invoice.status !== 'pagada' && !invoice.sales_order_id;
-                    const showEdit = canEditInvoices && invoice.status === 'borrador';
-                    const showCancel = canDeleteInvoices && invoice.status !== 'anulada';
-                    const showPrint = canViewInvoices;
-                    const hasPrimaryActions = showDetail || showGenerateSale || showEdit;
-                    const shouldShowCancelSeparator = showCancel && hasPrimaryActions;
-                    const shouldShowPrintSeparator = showPrint && (hasPrimaryActions || showCancel);
-
-                    return (
-                      <tr 
-                        key={invoice.id} 
-                        className={`hover:bg-gray-50 ${isUpcomingDue ? 'bg-amber-50' : ''} cursor-pointer`}
-                        onClick={() => handleInvoiceRowClick(invoice)}
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="font-medium text-gray-900">{invoice.invoice_number}</div>
-                          <div className="text-sm text-gray-500">Almacén: {invoice.warehouse?.name}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="font-medium text-gray-900">{invoice.customer?.name}</div>
-                          {invoice.customer?.identification_number && (
-                            <div className="text-sm text-gray-500">ID: {invoice.customer.identification_number}</div>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{formatDate(invoice.invoice_date)}</div>
-                          {invoice.due_date && (
-                            <div className={`text-sm ${isUpcomingDue ? 'text-amber-600 font-medium' : 'text-gray-500'}`}>
-                              Vence: {formatDate(invoice.due_date)}
-                              {isUpcomingDue && (
-                                <span className="ml-1 text-xs font-medium bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">
-                                  {daysRemaining === 1 ? '¡Mañana!' : `${daysRemaining} días`}
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
-                          {formatCurrency(invoice.total_amount)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {renderStatusBadge(invoice.status)}
-                        </td>
-                        {hasActionPermissions && (
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-8 px-2"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <i className="fas fa-ellipsis-v mr-2"></i>
-                                  Acciones
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="min-w-[200px]" onClick={(e) => e.stopPropagation()}>
-                                {showDetail && (
-                                  <DropdownMenuItem asChild>
-                                    <Link
-                                      to={`/ventas/facturas/${invoice.id}`}
-                                      className="flex items-center gap-2 w-full"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <i className="fas fa-eye text-muted-foreground"></i>
-                                      <span>Ver detalle</span>
-                                    </Link>
-                                  </DropdownMenuItem>
-                                )}
-
-                                {showGenerateSale && (
-                                  <DropdownMenuItem asChild>
-                                    <Link
-                                      to={`/ventas/facturas/${invoice.id}?generar-venta=1`}
-                                      className="flex items-center gap-2 w-full"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <i className="fas fa-cash-register text-emerald-600"></i>
-                                      <span>Generar venta</span>
-                                    </Link>
-                                  </DropdownMenuItem>
-                                )}
-
-                                {showEdit && (
-                                  <DropdownMenuItem asChild>
-                                    <Link
-                                      to={`/ventas/facturas/editar/${invoice.id}`}
-                                      className="flex items-center gap-2 w-full"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <i className="fas fa-edit text-yellow-600"></i>
-                                      <span>Editar</span>
-                                    </Link>
-                                  </DropdownMenuItem>
-                                )}
-
-                                {shouldShowCancelSeparator && <DropdownMenuSeparator />}
-
-                                {showCancel && (
-                                  <DropdownMenuItem
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      handleDeleteInvoice(invoice.id);
-                                    }}
-                                    className="text-red-600 focus:text-red-700"
-                                  >
-                                    <i className="fas fa-ban"></i>
-                                    <span>Anular</span>
-                                  </DropdownMenuItem>
-                                )}
-
-                                {shouldShowPrintSeparator && <DropdownMenuSeparator />}
-
-                                {showPrint && (
-                                  <DropdownMenuItem asChild>
-                                    <Link
-                                      to={`/ventas/facturas/${invoice.id}`}
-                                      className="flex items-center gap-2 w-full"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <i className="fas fa-print text-green-600"></i>
-                                      <span>Imprimir</span>
-                                    </Link>
-                                  </DropdownMenuItem>
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </td>
+                  {currentInvoices.map((invoice) => (
+                    <tr 
+                      key={invoice.id} 
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => handleInvoiceRowClick(invoice)}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="font-medium text-blue-600">{invoice.invoice_number}</div>
+                        {invoice.due_date && (
+                          <div className={`text-xs ${getDaysRemaining(invoice.due_date) < 3 ? 'text-red-500 font-bold' : 'text-gray-500'}`}>
+                            Vence: {formatDate(invoice.due_date)}
+                          </div>
                         )}
-                      </tr>
-                    );
-                  })}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">{invoice.customer?.name}</div>
+                        <div className="text-xs text-gray-500">{invoice.customer?.identification_number}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(invoice.invoice_date)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {formatCurrency(invoice.total_amount)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {renderStatusBadge(invoice.status)}
+                      </td>
+                      {hasActionPermissions && (
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <span className="sr-only">Abrir menú</span>
+                                <i className="fas fa-ellipsis-v"></i>
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {canViewInvoices && (
+                                <DropdownMenuItem onClick={() => handleInvoiceRowClick(invoice)}>
+                                  <i className="fas fa-eye mr-2"></i> Ver detalles
+                                </DropdownMenuItem>
+                              )}
+                              {canEditInvoices && invoice.status === 'borrador' && (
+                                <DropdownMenuItem asChild>
+                                  <Link to={`/ventas/facturas/editar/${invoice.id}`}>
+                                    <i className="fas fa-edit mr-2"></i> Editar
+                                  </Link>
+                                </DropdownMenuItem>
+                              )}
+                              {canDeleteInvoices && invoice.status !== 'anulada' && invoice.status !== 'pagada' && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem 
+                                    onClick={() => handleDeleteInvoice(invoice.id)}
+                                    className="text-red-600"
+                                  >
+                                    <i className="fas fa-times-circle mr-2"></i> Anular
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
 
             {/* Paginación */}
             {totalPages > 1 && (
-              <div className="px-4 py-3 flex items-center justify-between border-t">
-                <div className="hidden sm:block">
-                  <p className="text-sm text-gray-700">
-                    Mostrando <span className="font-medium">{indexOfFirstInvoice + 1}</span> a{' '}
-                    <span className="font-medium">
-                      {Math.min(indexOfLastInvoice, filteredInvoices.length)}
-                    </span>{' '}
-                    de <span className="font-medium">{filteredInvoices.length}</span> cotizaciones
-                  </p>
+              <div className="px-6 py-4 border-t flex items-center justify-between">
+                <div className="text-sm text-gray-500">
+                  Mostrando {indexOfFirstInvoice + 1} a {Math.min(indexOfLastInvoice, filteredInvoices.length)} de {filteredInvoices.length} cotizaciones
                 </div>
                 <div className="flex space-x-2">
-                  <button 
+                  <button
                     onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                     disabled={currentPage === 1}
-                    className={`px-3 py-1 rounded-md ${
-                      currentPage === 1 
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
+                    className={`px-3 py-1 rounded-md ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white border hover:bg-gray-50'}`}
                   >
-                    <i className="fas fa-chevron-left"></i>
+                    Anterior
                   </button>
-                  <button 
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`px-3 py-1 rounded-md ${currentPage === page ? 'bg-blue-600 text-white' : 'bg-white border hover:bg-gray-50'}`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                  <button
                     onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                     disabled={currentPage === totalPages}
-                    className={`px-3 py-1 rounded-md ${
-                      currentPage === totalPages 
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
+                    className={`px-3 py-1 rounded-md ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white border hover:bg-gray-50'}`}
                   >
-                    <i className="fas fa-chevron-right"></i>
+                    Siguiente
                   </button>
                 </div>
               </div>
@@ -591,201 +512,137 @@ const Invoices: React.FC = () => {
         )}
       </div>
 
-      <div className={`fixed inset-y-0 right-0 max-w-lg w-full bg-white shadow-xl transform ${isDrawerOpen ? 'translate-x-0' : 'translate-x-full'} transition-transform duration-300 ease-in-out z-50 flex flex-col`}>
-        <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-          <h2 className="text-lg font-medium">Vista Previa de Cotización</h2>
-          <button 
-            onClick={closeDrawer}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            <i className="fas fa-times"></i>
-          </button>
-        </div>
-        
-        <div className="flex-1 overflow-y-auto p-4">
-          {drawerLoading ? (
-            <div className="flex justify-center items-center h-full">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
-            </div>
-          ) : selectedInvoice ? (
-            <div className="space-y-6 print:p-0 print:shadow-none">
-              <div className="bg-white p-6 rounded-lg shadow-sm border">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
-                  <div>
-                    {settings.logoUrl ? (
-                      <img 
-                        src={settings.logoUrl} 
-                        alt={settings.name || "Logo"} 
-                        className="h-16 object-contain mb-4 md:mb-0"
-                      />
-                    ) : (
-                      <h1 className="text-xl font-bold text-gray-800 mb-2">
-                        {settings.name || "Empresa"}
-                      </h1>
-                    )}
-                  </div>
-                  <div className="bg-blue-50 p-4 rounded-md text-right">
-                    <h2 className="text-lg font-bold text-blue-800 mb-1">COTIZACIÓN</h2>
-                    <p className="text-md font-semibold text-blue-700">
-                      # {selectedInvoice.invoice_number}
-                    </p>
-                    <div className={`mt-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(selectedInvoice.status)}`}>
-                      {getStatusText(selectedInvoice.status)}
-                    </div>
-                  </div>
-                </div>
-                
-                <hr className="my-6" />
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <h3 className="text-gray-500 font-medium mb-2">Cliente</h3>
-                    <p className="font-semibold">{selectedInvoice.customer?.name}</p>
-                    <p>{selectedInvoice.customer?.identification_type}: {selectedInvoice.customer?.identification_number}</p>
-                    <p>{selectedInvoice.customer?.address}</p>
-                    <p>{selectedInvoice.customer?.phone} | {selectedInvoice.customer?.email}</p>
-                  </div>
-                  <div>
-                    <h3 className="text-gray-500 font-medium mb-2">Información de la Cotización</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      <p className="text-gray-600">Fecha de Emisión:</p>
-                      <p className="font-medium">{formatDate(selectedInvoice.invoice_date)}</p>
-                      
-                      {selectedInvoice.due_date && (
-                        <>
-                          <p className="text-gray-600">Fecha de Vencimiento:</p>
-                          <p className="font-medium">{formatDate(selectedInvoice.due_date)}</p>
-                        </>
-                      )}
-                      
-                      <p className="text-gray-600">Almacén:</p>
-                      <p className="font-medium">{selectedInvoice.warehouse?.name}</p>
-                      
-                      {selectedInvoice.payment_method && (
-                        <>
-                          <p className="text-gray-600">Método de Pago:</p>
-                          <p className="font-medium">{selectedInvoice.payment_method}</p>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
-                <div className="p-4 border-b">
-                  <h3 className="font-medium">Detalle de Productos</h3>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Cantidad</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Precio Unit.</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Impuesto</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {invoiceItems.map((item) => (
-                        <tr key={item.id}>
-                          <td className="px-4 py-3">
-                            <div className="font-medium">{item.product?.name}</div>
-                            <div className="text-sm text-gray-500">SKU: {item.product?.sku}</div>
-                          </td>
-                          <td className="px-4 py-3 text-right">{item.quantity}</td>
-                          <td className="px-4 py-3 text-right">{formatCurrency(item.unit_price)}</td>
-                          <td className="px-4 py-3 text-right">{formatCurrency(item.tax_amount)}</td>
-                          <td className="px-4 py-3 text-right font-medium">{formatCurrency(item.total_price)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              
-              <div className="bg-white p-6 rounded-lg shadow-sm border">
-                <div className="flex justify-end">
-                  <div className="w-full md:w-64">
-                    <div className="flex justify-between py-2">
-                      <span className="text-gray-600">Subtotal:</span>
-                      <span>{formatCurrency(selectedInvoice.subtotal ?? 0)}</span>
-                    </div>
-                    {(selectedInvoice.discount_amount ?? 0) > 0 && (
-                      <div className="flex justify-between py-2">
-                        <span className="text-gray-600">Descuento:</span>
-                        <span>-{formatCurrency(selectedInvoice.discount_amount ?? 0)}</span>
+      {/* Drawer de detalles */}
+      {isDrawerOpen && selectedInvoice && (
+        <div className="fixed inset-0 overflow-hidden z-50">
+          <div className="absolute inset-0 overflow-hidden">
+            <div className="absolute inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={closeDrawer}></div>
+            <div className="fixed inset-y-0 right-0 pl-10 max-w-full flex">
+              <div className="w-screen max-w-md transform transition-all ease-in-out duration-500 sm:duration-700 bg-white shadow-xl flex flex-col">
+                <div className="flex-1 flex flex-col overflow-y-auto">
+                  <div className="py-6 px-4 bg-blue-600 sm:px-6">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-lg font-medium text-white">
+                        Cotización #{selectedInvoice.invoice_number}
+                      </h2>
+                      <div className="ml-3 h-7 flex items-center">
+                        <button
+                          type="button"
+                          className="bg-blue-600 rounded-md text-blue-200 hover:text-white focus:outline-none"
+                          onClick={closeDrawer}
+                        >
+                          <span className="sr-only">Cerrar panel</span>
+                          <i className="fas fa-times text-xl"></i>
+                        </button>
                       </div>
-                    )}
-                    <div className="flex justify-between py-2">
-                      <span className="text-gray-600">Impuestos:</span>
-                      <span>{formatCurrency(selectedInvoice.tax_amount ?? 0)}</span>
                     </div>
-                    <div className="flex justify-between py-2 font-bold text-lg border-t border-gray-200 mt-2 pt-2">
-                      <span>Total:</span>
-                      <span>{formatCurrency(selectedInvoice.total_amount)}</span>
+                    <div className="mt-1">
+                      <p className="text-sm text-blue-100">
+                        {formatDate(selectedInvoice.invoice_date)}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex-1 py-6 px-4 sm:px-6">
+                    <div className="flex flex-col space-y-6">
+                      {/* Estado */}
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-500">Estado</h3>
+                        <div className="mt-1">
+                          {renderStatusBadge(selectedInvoice.status)}
+                        </div>
+                      </div>
+                      
+                      {/* Cliente */}
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-500">Cliente</h3>
+                        <div className="mt-1 text-sm text-gray-900 font-medium">
+                          {selectedInvoice.customer?.name}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {selectedInvoice.customer?.identification_number}
+                        </div>
+                      </div>
+                      
+                      {/* Almacén */}
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-500">Almacén</h3>
+                        <div className="mt-1 text-sm text-gray-900">
+                          {selectedInvoice.warehouse?.name || 'No especificado'}
+                        </div>
+                      </div>
+                      
+                      {/* Items */}
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-500 mb-2">Productos</h3>
+                        {drawerLoading ? (
+                          <div className="flex justify-center py-4">
+                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                          </div>
+                        ) : (
+                          <div className="border rounded-md overflow-hidden">
+                            <table className="min-w-full divide-y divide-gray-200">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Prod</th>
+                                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Cant</th>
+                                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                {invoiceItems.map((item) => (
+                                  <tr key={item.id}>
+                                    <td className="px-3 py-2 text-sm text-gray-900">
+                                      <div className="truncate w-32">{item.product?.name}</div>
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-gray-500 text-right">{item.quantity}</td>
+                                    <td className="px-3 py-2 text-sm text-gray-900 text-right font-medium">
+                                      {formatCurrency(item.total_price)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot className="bg-gray-50">
+                                <tr>
+                                  <td colSpan={2} className="px-3 py-2 text-sm font-medium text-gray-900 text-right">Total:</td>
+                                  <td className="px-3 py-2 text-sm font-bold text-gray-900 text-right">
+                                    {formatCurrency(selectedInvoice.total_amount)}
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Notas */}
+                      {selectedInvoice.notes && (
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-500">Notas</h3>
+                          <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded-md">
+                            {selectedInvoice.notes}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
-              </div>
-              
-              {selectedInvoice.notes && (
-                <div className="bg-white p-6 rounded-lg shadow-sm border">
-                  <h3 className="font-medium mb-2">Notas</h3>
-                  <p className="text-gray-700">{selectedInvoice.notes}</p>
+                
+                <div className="flex-shrink-0 px-4 py-4 flex justify-end space-x-2 bg-gray-50 border-t">
+                  <Link
+                    to={`/ventas/facturas/${selectedInvoice.id}`}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
+                  >
+                    Ver Detalle Completo
+                  </Link>
                 </div>
-              )}
-              
-              <div className="text-center text-gray-500 text-sm mt-8">
-                <p>
-                  {settings.name ? `${settings.name} - ` : ''}
-                  {settings.taxId ? `NIT: ${settings.taxId}` : ''}
-                </p>
-                <p>{settings.address}</p>
-                <p>
-                  {settings.phone && `Tel: ${settings.phone}`}
-                  {settings.email && settings.phone && ' | '}
-                  {settings.email && `Email: ${settings.email}`}
-                </p>
-                {settings.footerText && <p className="mt-2">{settings.footerText}</p>}
               </div>
             </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500">
-              <i className="fas fa-file-invoice text-6xl mb-4"></i>
-              <p>Seleccione una cotización para ver su detalle</p>
-            </div>
-          )}
-        </div>
-        
-        <div className="p-4 border-t border-gray-200">
-          <div className="flex justify-between">
-            <Link 
-              to={selectedInvoice ? `/ventas/facturas/${selectedInvoice.id}` : '#'}
-              className={`px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors ${!selectedInvoice ? 'opacity-50 cursor-not-allowed' : ''}`}
-              onClick={(e) => !selectedInvoice && e.preventDefault()}
-            >
-              <i className="fas fa-external-link-alt mr-2"></i> Ver Completo
-            </Link>
-            <button 
-              onClick={closeDrawer}
-              className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
-            >
-              Cerrar
-            </button>
           </div>
         </div>
-      </div>
-      
-      {isDrawerOpen && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40"
-          onClick={closeDrawer}
-        ></div>
       )}
     </div>
   );
 };
 
-export default Invoices; 
+export default Invoices;

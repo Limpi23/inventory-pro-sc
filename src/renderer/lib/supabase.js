@@ -1,108 +1,70 @@
 import { createClient } from '@supabase/supabase-js';
-// Carga config desde el archivo guardado por la app y hace fallback a variables de entorno Vite
-async function loadSupabaseConfig() {
-    let saved = {};
-    const win = window;
-    if (win?.supabaseConfig && typeof win.supabaseConfig.get === 'function') {
-        try {
-            saved = await win.supabaseConfig.get();
-        }
-        catch {
-            // ignorar
-        }
-    }
-    const url = saved?.url || saved?.supabaseUrl || import.meta.env.VITE_SUPABASE_URL;
-    const anonKey = saved?.anonKey || saved?.supabaseKey || import.meta.env.VITE_SUPABASE_ANON_KEY;
-    return { url, anonKey };
-}
-// Cliente de Supabase dinámico según entorno
-export const getSupabaseClient = async () => {
-    const { url, anonKey } = await loadSupabaseConfig();
-    if (!url || !anonKey) {
-        throw new Error('Supabase no configurado: faltan URL o anon key');
-    }
-    const client = createClient(url, anonKey, {
-        auth: {
-            autoRefreshToken: true,
-            persistSession: true,
-            detectSessionInUrl: true
-        },
-        global: {
-            headers: { 'x-cache-control': 'no-cache' }
-        }
-    });
-    return client;
-};
-// Cliente de Supabase global
+// Cliente Supabase
 let supabaseInstance = null;
-export const supabase = {
-    getClient: async () => {
-        if (!supabaseInstance) {
-            const { url, anonKey } = await loadSupabaseConfig();
-            if (!url || !anonKey) {
-                throw new Error('Supabase no configurado: faltan URL o anon key');
-            }
-            supabaseInstance = createClient(url, anonKey, {
-                auth: {
-                    autoRefreshToken: true,
-                    persistSession: true,
-                    detectSessionInUrl: true
-                },
-                global: {
-                    headers: { 'x-cache-control': 'no-cache' }
-                }
-            });
-        }
+export const getSupabaseClient = async () => {
+    if (supabaseInstance)
         return supabaseInstance;
-    },
-    // Reinicializar el cliente con nuevas credenciales
-    reinitialize: async () => {
-        supabaseInstance = null; // Limpiar instancia existente
-        return await supabase.getClient(); // Crear nueva instancia con credenciales actualizadas
-    },
-    // Compat: permite usar supabase.from('tabla') como antes
-    from: (table) => {
-        if (!supabaseInstance) {
-            throw new Error('Supabase aún no inicializado. Usa await supabase.getClient() primero.');
+    // Intentar obtener credenciales desde electron-store primero (configuración guardada por el usuario)
+    let supabaseUrl;
+    let supabaseKey;
+    // En ambiente Electron, usar la configuración guardada
+    const win = typeof window !== 'undefined' ? window : {};
+    if (win.supabaseConfig && typeof win.supabaseConfig.get === 'function') {
+        try {
+            const config = await win.supabaseConfig.get();
+            if (config?.url && config?.anonKey) {
+                supabaseUrl = config.url;
+                supabaseKey = config.anonKey;
+            }
         }
-        return supabaseInstance.from(table);
+        catch (e) {
+            console.warn('[getSupabaseClient] Error obteniendo configuración de electron-store:', e);
+        }
     }
+    // Fallback a variables de entorno si no hay configuración guardada
+    if (!supabaseUrl || !supabaseKey) {
+        supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    }
+    if (!supabaseUrl || !supabaseKey) {
+        throw new Error('Faltan credenciales de Supabase');
+    }
+    supabaseInstance = createClient(supabaseUrl, supabaseKey);
+    return supabaseInstance;
 };
-const movementTypeCache = new Map();
-// Helper centralizado para registrar eventos de aplicación sin romper el flujo si falla
-export const logAppEvent = async (action, entity, entity_id, details) => {
+// Función para reinicializar el cliente (útil después de cambiar credenciales)
+export const reinitializeSupabaseClient = () => {
+    supabaseInstance = null;
+};
+export const supabase = {
+    getClient: getSupabaseClient,
+    reinitialize: reinitializeSupabaseClient
+};
+// Helper para logs
+export const logAppEvent = async (action, entity, entityId, details) => {
     try {
         const client = await getSupabaseClient();
-        const { data: udata } = await client.auth.getUser();
-        const user = udata?.user;
-        const actor_id = user?.id ?? null;
-        const actor_email = user?.email ?? null;
-        await eventLogService.create({ action, entity: entity ?? null, entity_id: entity_id ?? null, details, actor_id, actor_email });
+        const { data: { user } } = await client.auth.getUser();
+        await client.from('app_events').insert({
+            action,
+            entity,
+            entity_id: entityId,
+            details,
+            actor_id: user?.id,
+            actor_email: user?.email
+        });
     }
     catch (e) {
-        // No-op: nunca bloqueamos la UI por un fallo de logging
-        /* swallow logging errors */
+        console.error('Error logging event:', e);
     }
 };
-// Servicios para interactuar con Supabase
+// Cache para tipos de movimiento
+const movementTypeCache = new Map();
+// Servicios
 export const productService = {
     getAll: async () => {
-        // Usar getAllAll para evitar el límite de 1000 filas de Supabase
         return productService.getAllAll();
     },
-    // Paginado para superar el límite de 1000 filas del API
-    getRange: async (from, to) => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
-            .from('products')
-            .select(`*, category:categories(id, name), location:locations(id, name, warehouse_id)`)
-            .order('name')
-            .range(from, to);
-        if (error)
-            throw error;
-        return data || [];
-    },
-    // Trae todos los productos en lotes (por defecto 1000)
     getAllAll: async (batchSize = 1000) => {
         const results = [];
         let offset = 0;
@@ -114,14 +76,47 @@ export const productService = {
             if (page.length < batchSize)
                 break;
             offset += batchSize;
-            // Evitar bloqueos largos en UI
             await new Promise((r) => setTimeout(r, 0));
         }
         return results;
     },
+    getRange: async (from, to) => {
+        const client = await getSupabaseClient();
+        const { data, error } = await client
+            .from('products')
+            .select(`*, category:categories(id, name), location:locations(id, name, warehouse_id)`)
+            .order('name')
+            .range(from, to);
+        if (error)
+            throw error;
+        return data || [];
+    },
+    getProducts: async ({ page = 1, pageSize = 10, search = '', warehouseId = '', locationId = '' }) => {
+        const client = await getSupabaseClient();
+        let query = client
+            .from('products')
+            .select(`*, category:categories(id, name), location:locations(id, name, warehouse_id)`, { count: 'exact' });
+        if (search) {
+            query = query.or(`name.ilike.%${search}%, sku.ilike.%${search}%, barcode.ilike.%${search}%`);
+        }
+        if (warehouseId && warehouseId !== 'all') {
+            query = query.eq('warehouse_id', warehouseId);
+        }
+        if (locationId && locationId !== 'all') {
+            query = query.eq('location_id', locationId);
+        }
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        const { data, count, error } = await query
+            .order('name')
+            .range(from, to);
+        if (error)
+            throw error;
+        return { data: data || [], count: count || 0 };
+    },
     getById: async (id) => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('products')
             .select(`*, category:categories(id, name), location:locations(id, name, warehouse_id)`)
             .eq('id', id)
@@ -130,44 +125,47 @@ export const productService = {
             throw error;
         return data;
     },
-    getByCategory: async (categoryId) => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
-            .from('products')
-            .select(`*, category:categories(id, name), location:locations(id, name, warehouse_id)`)
-            .eq('category_id', categoryId)
-            .order('name');
-        if (error)
-            throw error;
-        return data || [];
-    },
-    search: async (query) => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
-            .from('products')
-            .select(`*, category:categories(id, name), location:locations(id, name, warehouse_id)`)
-            .or(`name.ilike.%${query}%, sku.ilike.%${query}%, barcode.ilike.%${query}%`)
-            .order('name');
-        if (error)
-            throw error;
-        return data || [];
-    },
     create: async (product) => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('products')
             .insert([product])
             .select()
             .single();
         if (error)
             throw error;
-        // Log de creación
         await logAppEvent('product.create', 'product', data?.id ?? null, { name: data?.name, sku: data?.sku });
         return data;
     },
+    createBatch: async (products) => {
+        if (!products.length)
+            return [];
+        const client = await getSupabaseClient();
+        const batchSize = 100;
+        const results = [];
+        const errors = [];
+        for (let i = 0; i < products.length; i += batchSize) {
+            const batch = products.slice(i, i + batchSize);
+            try {
+                const { data, error } = await client
+                    .from('products')
+                    .insert(batch)
+                    .select();
+                if (error)
+                    throw error;
+                if (data)
+                    results.push(...data);
+            }
+            catch (e) {
+                errors.push(e);
+            }
+        }
+        await logAppEvent('product.create_batch', 'product', null, { count: results.length, errors: errors.length });
+        return results;
+    },
     update: async (id, updates) => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('products')
             .update(updates)
             .eq('id', id)
@@ -179,8 +177,8 @@ export const productService = {
         return data;
     },
     delete: async (id) => {
-        const supabase = await getSupabaseClient();
-        const { error } = await supabase
+        const client = await getSupabaseClient();
+        const { error } = await client
             .from('products')
             .delete()
             .eq('id', id);
@@ -188,92 +186,52 @@ export const productService = {
             throw error;
         await logAppEvent('product.delete', 'product', id, null);
     },
-    deleteMany: async (ids) => {
-        if (!ids.length)
-            return 0;
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+    search: async (query) => {
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('products')
-            .delete()
-            .in('id', ids)
-            .select('id');
+            .select(`*, category:categories(id, name), location:locations(id, name, warehouse_id)`)
+            .or(`name.ilike.%${query}%, sku.ilike.%${query}%, barcode.ilike.%${query}%`)
+            .order('name');
         if (error)
             throw error;
-        const count = data?.length || 0;
-        await logAppEvent('product.delete_many', 'product', null, { count, ids });
-        return count;
+        return data || [];
     },
-    createBatch: async (products) => {
-        if (!products.length)
-            return [];
-        const supabase = await getSupabaseClient();
-        const batchSize = 100;
-        const results = [];
-        const errors = [];
-        for (let i = 0; i < products.length; i += batchSize) {
-            const batch = products.slice(i, i + batchSize);
-            try {
-                const { data, error } = await supabase
-                    .from('products')
-                    .insert(batch)
-                    .select();
-                if (error)
-                    throw error;
-                if (data)
-                    results.push(...data);
-            }
-            catch (e) {
-                errors.push(e);
-                /* batch insert error swallowed; aggregated below */
-            }
+    getLowStockProducts: async ({ page = 1, pageSize = 10, search = '', threshold = 0 }) => {
+        const client = await getSupabaseClient();
+        let query = client
+            .from('current_stock')
+            .select('product_id, product_name, sku, warehouse_name, current_quantity', { count: 'exact' })
+            .lte('current_quantity', threshold);
+        if (search) {
+            query = query.or(`product_name.ilike.%${search}%, sku.ilike.%${search}%`);
         }
-        // optionally handle aggregated errors via UI toast upstream
-        await logAppEvent('product.create_batch', 'product', null, { count: results.length, errors: errors.length });
-        return results;
-    }
-};
-// Servicio básico de seriales
-export const serialsService = {
-    listInStockByProduct: async (productId, warehouseId) => {
-        const supabase = await getSupabaseClient();
-        let query = supabase
-            .from('current_serials_in_stock')
-            .select('*')
-            .eq('product_id', productId);
-        if (warehouseId)
-            query = query.eq('warehouse_id', warehouseId);
-        const { data, error } = await query;
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        const { data, count, error } = await query
+            .order('current_quantity', { ascending: true })
+            .range(from, to);
         if (error)
             throw error;
-        return data;
-    },
-    createMany: async (serials, opts) => {
-        if (!serials.length)
-            return [];
-        const supabase = await getSupabaseClient();
-        const batchSize = opts?.chunkSize ?? 100;
-        const results = [];
-        for (let i = 0; i < serials.length; i += batchSize) {
-            const batch = serials.slice(i, i + batchSize);
-            const { data, error } = await supabase.from('product_serials').insert(batch).select();
-            if (error)
-                throw error;
-            if (data) {
-                results.push(...data);
+        // Transformar los datos para mantener compatibilidad con el componente
+        const transformedData = data?.map(item => ({
+            current_quantity: item.current_quantity,
+            warehouse_name: item.warehouse_name,
+            product: {
+                id: item.product_id,
+                name: item.product_name,
+                sku: item.sku,
+                barcode: null,
+                image_url: null
             }
-            const processed = Math.min(i + batch.length, serials.length);
-            opts?.onProgress?.(processed, serials.length);
-            // eslint-disable-next-line no-await-in-loop
-            await new Promise((resolve) => setTimeout(resolve, 0));
-        }
-        return results;
+        })) || [];
+        return { data: transformedData, count: count || 0 };
     }
 };
-// Servicio de categorías
 export const categoriesService = {
     getAll: async () => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('categories')
             .select('*')
             .order('name');
@@ -282,8 +240,8 @@ export const categoriesService = {
         return data || [];
     },
     getById: async (id) => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('categories')
             .select('*')
             .eq('id', id)
@@ -293,8 +251,8 @@ export const categoriesService = {
         return data;
     },
     create: async (category) => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('categories')
             .insert([category])
             .select()
@@ -305,8 +263,8 @@ export const categoriesService = {
         return data;
     },
     update: async (id, updates) => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('categories')
             .update(updates)
             .eq('id', id)
@@ -318,8 +276,8 @@ export const categoriesService = {
         return data;
     },
     delete: async (id) => {
-        const supabase = await getSupabaseClient();
-        const { error } = await supabase
+        const client = await getSupabaseClient();
+        const { error } = await client
             .from('categories')
             .delete()
             .eq('id', id);
@@ -328,7 +286,7 @@ export const categoriesService = {
         await logAppEvent('category.delete', 'category', id, null);
     },
     exportToCSV: async () => {
-        const categories = await (await categoriesService.getAll());
+        const categories = await categoriesService.getAll();
         let csv = 'Nombre,Descripción\n';
         categories.forEach(c => {
             const name = c.name?.includes(',') ? `"${c.name}"` : c.name;
@@ -341,16 +299,13 @@ export const categoriesService = {
     exportToExcel: async () => {
         const XLSX = await import('xlsx');
         const categories = await categoriesService.getAll();
-        // Crear datos para Excel
         const excelData = categories.map(c => ({
             'Nombre': c.name,
             'Descripción': c.description || ''
         }));
-        // Crear worksheet y workbook
         const ws = XLSX.utils.json_to_sheet(excelData);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Categorías');
-        // Generar archivo Excel como blob
         const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
         const blob = new Blob([excelBuffer], {
             type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -379,12 +334,12 @@ export const categoriesService = {
         if (!categories.length) {
             return { success: 0, errors: dataLines.length, messages: ['Sin categorías válidas', ...errors] };
         }
-        const supabase = await getSupabaseClient();
+        const client = await getSupabaseClient();
         let successCount = 0;
         for (let i = 0; i < categories.length; i += 50) {
             const batch = categories.slice(i, i + 50);
             try {
-                const { data, error } = await supabase
+                const { data, error } = await client
                     .from('categories')
                     .insert(batch)
                     .select();
@@ -400,95 +355,68 @@ export const categoriesService = {
                     errors.push(e.message || 'Error al importar lote');
             }
         }
-        const result = { success: successCount, errors: dataLines.length - successCount, messages: errors };
-        await logAppEvent('category.import', 'category', null, { ...result });
-        return result;
+        return { success: successCount, errors: errors.length, messages: errors };
     },
     importFromExcel: async (file) => {
-        const XLSX = await import('xlsx');
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = async (e) => {
+        try {
+            const XLSX = await import('xlsx');
+            const buffer = await file.arrayBuffer();
+            const workbook = XLSX.read(buffer, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName];
+            const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+            const categories = [];
+            const errors = [];
+            rows.forEach((row, idx) => {
                 try {
-                    const data = e.target?.result;
-                    const workbook = XLSX.read(data, { type: 'binary' });
-                    // Leer la primera hoja
-                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-                    if (rows.length < 2) {
-                        resolve({ success: 0, errors: 0, messages: ['El archivo está vacío'] });
+                    // Adaptar según las columnas de tu Excel
+                    const name = row['Nombre'] || row['nombre'] || row['Name'] || row['name'];
+                    const description = row['Descripción'] || row['descripcion'] || row['Description'] || row['description'] || '';
+                    if (!name) {
+                        errors.push(`Fila ${idx + 2}: nombre requerido`);
                         return;
                     }
-                    const categories = [];
-                    const errors = [];
-                    // Saltar la primera fila (encabezados) y procesar el resto
-                    for (let i = 1; i < rows.length; i++) {
-                        const row = rows[i];
-                        if (!row || row.length === 0)
-                            continue;
-                        const name = row[0] ? String(row[0]).trim() : '';
-                        const description = row[1] ? String(row[1]).trim() : '';
-                        if (!name) {
-                            errors.push(`Fila ${i + 1}: nombre requerido`);
-                            continue;
-                        }
-                        categories.push({
-                            name,
-                            description: description || undefined
-                        });
-                    }
-                    if (categories.length === 0) {
-                        resolve({ success: 0, errors: rows.length - 1, messages: ['Sin categorías válidas', ...errors] });
-                        return;
-                    }
-                    const supabase = await getSupabaseClient();
-                    let successCount = 0;
-                    // Insertar en lotes de 50
-                    for (let i = 0; i < categories.length; i += 50) {
-                        const batch = categories.slice(i, i + 50);
-                        try {
-                            const { data, error } = await supabase
-                                .from('categories')
-                                .insert(batch)
-                                .select();
-                            if (error)
-                                throw error;
-                            if (data)
-                                successCount += data.length;
-                        }
-                        catch (e) {
-                            if (e.code === '23505') {
-                                errors.push('Algunas categorías ya existían');
-                            }
-                            else {
-                                errors.push(e.message || 'Error al importar lote');
-                            }
-                        }
-                    }
-                    const result = {
-                        success: successCount,
-                        errors: categories.length - successCount,
-                        messages: errors
-                    };
-                    await logAppEvent('category.import', 'category', null, { ...result, format: 'excel' });
-                    resolve(result);
+                    categories.push({ name, description });
                 }
-                catch (error) {
-                    reject(new Error(error.message || 'Error al procesar el archivo Excel'));
+                catch (e) {
+                    errors.push(`Fila ${idx + 2}: ${e.message || 'error'}`);
                 }
-            };
-            reader.onerror = () => {
-                reject(new Error('Error al leer el archivo'));
-            };
-            reader.readAsBinaryString(file);
-        });
+            });
+            if (!categories.length) {
+                return { success: 0, errors: rows.length, messages: ['Sin categorías válidas', ...errors] };
+            }
+            const client = await getSupabaseClient();
+            let successCount = 0;
+            for (let i = 0; i < categories.length; i += 50) {
+                const batch = categories.slice(i, i + 50);
+                try {
+                    const { data, error } = await client
+                        .from('categories')
+                        .insert(batch)
+                        .select();
+                    if (error)
+                        throw error;
+                    if (data)
+                        successCount += data.length;
+                }
+                catch (e) {
+                    if (e.code === '23505')
+                        errors.push('Algunas categorías ya existían');
+                    else
+                        errors.push(e.message || 'Error al importar lote');
+                }
+            }
+            return { success: successCount, errors: errors.length, messages: errors };
+        }
+        catch (e) {
+            return { success: 0, errors: 1, messages: [e.message || 'Error al leer el archivo Excel'] };
+        }
     }
 };
-// Servicio de almacenes
 export const warehousesService = {
     getAll: async () => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('warehouses')
             .select('*')
             .order('name');
@@ -497,8 +425,8 @@ export const warehousesService = {
         return data || [];
     },
     getById: async (id) => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('warehouses')
             .select('*')
             .eq('id', id)
@@ -508,8 +436,8 @@ export const warehousesService = {
         return data;
     },
     create: async (warehouse) => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('warehouses')
             .insert([warehouse])
             .select()
@@ -520,8 +448,8 @@ export const warehousesService = {
         return data;
     },
     update: async (id, updates) => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('warehouses')
             .update(updates)
             .eq('id', id)
@@ -533,8 +461,8 @@ export const warehousesService = {
         return data;
     },
     delete: async (id) => {
-        const supabase = await getSupabaseClient();
-        const { error } = await supabase
+        const client = await getSupabaseClient();
+        const { error } = await client
             .from('warehouses')
             .delete()
             .eq('id', id);
@@ -543,11 +471,10 @@ export const warehousesService = {
         await logAppEvent('warehouse.delete', 'warehouse', id, null);
     }
 };
-// Servicio de ubicaciones
 export const locationsService = {
     getAll: async () => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('locations')
             .select('*')
             .order('name');
@@ -556,8 +483,8 @@ export const locationsService = {
         return data || [];
     },
     getById: async (id) => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('locations')
             .select('*')
             .eq('id', id)
@@ -567,8 +494,8 @@ export const locationsService = {
         return data;
     },
     create: async (location) => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('locations')
             .insert([location])
             .select()
@@ -579,8 +506,8 @@ export const locationsService = {
         return data;
     },
     update: async (id, updates) => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('locations')
             .update(updates)
             .eq('id', id)
@@ -592,8 +519,8 @@ export const locationsService = {
         return data;
     },
     delete: async (id) => {
-        const supabase = await getSupabaseClient();
-        const { error } = await supabase
+        const client = await getSupabaseClient();
+        const { error } = await client
             .from('locations')
             .delete()
             .eq('id', id);
@@ -603,10 +530,9 @@ export const locationsService = {
     }
 };
 export const stockMovementService = {
-    // Obtener todos los movimientos de stock
     getAll: async () => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('stock_movements')
             .select(`
         *,
@@ -619,10 +545,9 @@ export const stockMovementService = {
             throw error;
         return data || [];
     },
-    // Obtener movimientos con filtros (por producto, almacén, tipo, fechas)
     getFiltered: async (filters) => {
-        const supabase = await getSupabaseClient();
-        let query = supabase
+        const client = await getSupabaseClient();
+        let query = client
             .from('stock_movements')
             .select(`
         *,
@@ -630,34 +555,26 @@ export const stockMovementService = {
         warehouse:warehouses(id, name),
         movement_type:movement_types(id, code, description)
       `);
-        // Aplicar filtros si existen
-        if (filters.product_id) {
+        if (filters.product_id)
             query = query.eq('product_id', filters.product_id);
-        }
-        if (filters.warehouse_id) {
+        if (filters.warehouse_id)
             query = query.eq('warehouse_id', filters.warehouse_id);
-        }
-        if (filters.location_id) {
+        if (filters.location_id)
             query = query.eq('location_id', filters.location_id);
-        }
-        if (filters.movement_type_id) {
+        if (filters.movement_type_id)
             query = query.eq('movement_type_id', filters.movement_type_id);
-        }
-        if (filters.start_date) {
+        if (filters.start_date)
             query = query.gte('movement_date', filters.start_date);
-        }
-        if (filters.end_date) {
+        if (filters.end_date)
             query = query.lte('movement_date', filters.end_date);
-        }
         const { data, error } = await query.order('created_at', { ascending: false });
         if (error)
             throw error;
         return data || [];
     },
-    // Obtener un movimiento por su ID
     getById: async (id) => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('stock_movements')
             .select(`
         *,
@@ -671,10 +588,9 @@ export const stockMovementService = {
             throw error;
         return data;
     },
-    // Crear un nuevo movimiento de stock (entrada o salida)
     create: async (movement) => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('stock_movements')
             .insert([movement])
             .select()
@@ -683,31 +599,27 @@ export const stockMovementService = {
             throw error;
         return data;
     },
-    // Crear movimientos en lote (para importaciones)
     createBatch: async (movements, opts) => {
         if (!movements.length)
             return 0;
-        const supa = await getSupabaseClient();
+        const client = await getSupabaseClient();
         const batchSize = opts?.chunkSize ?? 100;
         let created = 0;
         for (let i = 0; i < movements.length; i += batchSize) {
             const batch = movements.slice(i, i + batchSize);
-            const { data, error } = await supa.from('stock_movements').insert(batch).select('id');
+            const { data, error } = await client.from('stock_movements').insert(batch).select('id');
             if (error)
                 throw error;
             created += data?.length || 0;
             const processed = Math.min(i + batch.length, movements.length);
             opts?.onProgress?.(processed, movements.length);
-            // Ceder control al event loop para no bloquear UI en lotes grandes
-            // eslint-disable-next-line no-await-in-loop
             await new Promise((r) => setTimeout(r, 0));
         }
         return created;
     },
-    // Obtener los tipos de movimiento disponibles
     getMovementTypes: async () => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('movement_types')
             .select('*')
             .order('id');
@@ -715,21 +627,17 @@ export const stockMovementService = {
             throw error;
         return data || [];
     },
-    // Helper: obtener movement_type_id para entradas iniciales
     getInboundInitialTypeId: async () => {
         const types = await stockMovementService.getMovementTypes();
-        // Preferencias por c3digo
         const preferred = ['IN_INITIAL', 'IN_OPENING', 'IN_ADJUSTMENT', 'IN_PURCHASE'];
         for (const code of preferred) {
             const t = types.find((mt) => (mt.code || '').toUpperCase() === code);
             if (t)
                 return t.id;
         }
-        // Si no hay coincidencia exacta, tomar el primer tipo de entrada (c3digo que empiece con IN_)
         const anyInbound = types.find((mt) => (mt.code || '').toUpperCase().startsWith('IN_'));
         if (anyInbound)
             return anyInbound.id;
-        // Fallback extremo: primer tipo
         if (types.length)
             return types[0].id;
         throw new Error('No hay tipos de movimiento configurados');
@@ -743,8 +651,8 @@ export const stockMovementService = {
         if (movementTypeCache.has(cacheKey)) {
             return movementTypeCache.get(cacheKey);
         }
-        const supabaseClient = await getSupabaseClient();
-        const { data, error } = await supabaseClient
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('movement_types')
             .select('id, code')
             .eq('code', normalized)
@@ -758,27 +666,24 @@ export const stockMovementService = {
         return data.id;
     },
     getOutboundSaleTypeId: async () => stockMovementService.getMovementTypeIdByCode('OUT_SALE'),
-    // Obtener el stock actual de un producto en un almacén específico
     getCurrentStock: async (product_id, warehouse_id) => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('current_stock')
             .select('current_quantity')
             .eq('product_id', product_id)
             .eq('warehouse_id', warehouse_id)
             .single();
         if (error) {
-            // Si no hay stock registrado, devolver 0
             if (error.code === 'PGRST116')
                 return 0;
             throw error;
         }
         return data?.current_quantity || 0;
     },
-    // Obtener el stock actual por ubicación
     getCurrentStockByLocation: async (product_id, warehouse_id) => {
-        const supabase = await getSupabaseClient();
-        let query = supabase.from('current_stock_by_location').select('*').eq('product_id', product_id);
+        const client = await getSupabaseClient();
+        let query = client.from('current_stock_by_location').select('*').eq('product_id', product_id);
         if (warehouse_id)
             query = query.eq('warehouse_id', warehouse_id);
         const { data, error } = await query;
@@ -786,10 +691,9 @@ export const stockMovementService = {
             throw error;
         return data || [];
     },
-    // Obtener el stock actual de todos los productos
     getAllCurrentStock: async () => {
-        const supabase = await getSupabaseClient();
-        const { data, error } = await supabase
+        const client = await getSupabaseClient();
+        const { data, error } = await client
             .from('current_stock')
             .select('*')
             .order('product_name');
@@ -798,7 +702,71 @@ export const stockMovementService = {
         return data || [];
     }
 };
-// Servicio de logs de eventos
+export const serialsService = {
+    getByProductId: async (productId) => {
+        const client = await getSupabaseClient();
+        const { data, error } = await client
+            .from('product_serials')
+            .select('*')
+            .eq('product_id', productId)
+            .order('created_at', { ascending: false });
+        if (error)
+            throw error;
+        return data || [];
+    },
+    create: async (serial) => {
+        const client = await getSupabaseClient();
+        const { data, error } = await client
+            .from('product_serials')
+            .insert([serial])
+            .select()
+            .single();
+        if (error)
+            throw error;
+        return data;
+    },
+    createMany: async (serials, opts) => {
+        if (!serials.length)
+            return [];
+        const client = await getSupabaseClient();
+        const batchSize = 50;
+        const results = [];
+        for (let i = 0; i < serials.length; i += batchSize) {
+            const batch = serials.slice(i, i + batchSize);
+            const { data, error } = await client
+                .from('product_serials')
+                .insert(batch)
+                .select();
+            if (error)
+                throw error;
+            if (data)
+                results.push(...data);
+            const processed = Math.min(i + batch.length, serials.length);
+            opts?.onProgress?.(processed, serials.length);
+        }
+        return results;
+    },
+    updateStatus: async (id, status) => {
+        const client = await getSupabaseClient();
+        const { error } = await client
+            .from('product_serials')
+            .update({ status })
+            .eq('id', id);
+        if (error)
+            throw error;
+    },
+    getBySerial: async (serialNumber) => {
+        const client = await getSupabaseClient();
+        const { data, error } = await client
+            .from('product_serials')
+            .select('*')
+            .eq('serial_number', serialNumber)
+            .single();
+        if (error && error.code !== 'PGRST116')
+            throw error;
+        return data;
+    },
+};
 export const eventLogService = {
     create: async (log) => {
         const client = await getSupabaseClient();
@@ -870,4 +838,3 @@ export const maintenanceService = {
         await logAppEvent('maintenance.reset', 'maintenance', null, { tables: tablesInOrder });
     }
 };
-// ...otros servicios 

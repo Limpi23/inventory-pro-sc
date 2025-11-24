@@ -159,7 +159,7 @@ export default function ProductList() {
   async function handleMarkInactive(id: string, alreadyInactive: boolean) {
     if (alreadyInactive) return;
     try {
-      await productService.update(id, { status: 'inactive' });
+      // await productService.update(id, { status: 'inactive' });
       window.logger?.log({ action: 'product.mark_inactive', entity: 'product', entityId: id, actor: user?.email || undefined });
       fetchProducts({ keepPage: true });
     } catch (error) {
@@ -170,7 +170,7 @@ export default function ProductList() {
   async function handleMarkActive(id: string, alreadyActive: boolean) {
     if (alreadyActive) return;
     try {
-      await productService.update(id, { status: 'active' });
+      // await productService.update(id, { status: 'active' });
       window.logger?.log({ action: 'product.mark_active', entity: 'product', entityId: id, actor: user?.email || undefined });
       fetchProducts({ keepPage: true });
     } catch (error) {

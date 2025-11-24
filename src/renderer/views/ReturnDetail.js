@@ -3,102 +3,84 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
+import { useAuth } from '../lib/auth';
 import { useCurrency } from '../hooks/useCurrency';
 const ReturnDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
-    const [loading, setLoading] = useState(true);
+    const { user } = useAuth();
+    const currency = useCurrency();
     const [returnData, setReturnData] = useState(null);
     const [returnItems, setReturnItems] = useState([]);
-    const currency = useCurrency();
+    const [loading, setLoading] = useState(true);
     useEffect(() => {
-        if (id) {
-            fetchReturnDetails();
-        }
+        fetchReturnDetails();
     }, [id]);
     const fetchReturnDetails = async () => {
         try {
             setLoading(true);
-            // Obtener datos de la devolución
-            const { data: returnData, error: returnError } = await supabase
+            const client = await supabase.getClient();
+            // Obtener detalles de la devolución
+            const { data: returnResult, error: returnError } = await client
                 .from('returns')
                 .select(`
           *,
-          invoice:invoices(
-            id, 
-            invoice_number, 
-            invoice_date, 
-            customer_id, 
-            customer:customers(id, name, identification_number, phone, email)
-          )
+          invoice:invoices(invoice_number),
+          customer:customers(name, email, phone)
         `)
                 .eq('id', id)
                 .single();
             if (returnError)
                 throw returnError;
-            if (!returnData) {
-                throw new Error('Devolución no encontrada');
-            }
-            setReturnData(returnData);
+            setReturnData(returnResult);
             // Obtener items de la devolución
-            const { data: itemsData, error: itemsError } = await supabase
+            const { data: itemsResult, error: itemsError } = await client
                 .from('return_items')
                 .select(`
           *,
-          product:products(id, name, sku)
+          product:products(name, sku)
         `)
                 .eq('return_id', id);
             if (itemsError)
                 throw itemsError;
-            setReturnItems(itemsData || []);
+            setReturnItems(itemsResult || []);
         }
         catch (error) {
-            console.error('Error al cargar detalles de devolución:', error.message);
-            toast.error(`Error al cargar detalles: ${error.message}`);
-            navigate('/ventas/devoluciones');
+            console.error('Error al cargar devolución:', error.message);
+            toast.error('Error al cargar los detalles de la devolución');
         }
         finally {
             setLoading(false);
         }
     };
     const handleUpdateStatus = async (newStatus) => {
-        if (!returnData || !id)
-            return;
-        if (!confirm(`¿Está seguro que desea cambiar el estado de esta devolución a "${newStatus}"?`)) {
-            return;
-        }
         try {
-            setLoading(true);
-            const { error } = await supabase
+            const client = await supabase.getClient();
+            const { error } = await client
                 .from('returns')
-                .update({
-                status: newStatus,
-                updated_at: new Date().toISOString()
-            })
+                .update({ status: newStatus })
                 .eq('id', id);
             if (error)
                 throw error;
-            toast.success(`Estado de devolución actualizado a ${newStatus}`);
-            fetchReturnDetails();
+            setReturnData({ ...returnData, status: newStatus });
+            toast.success('Estado actualizado correctamente');
         }
         catch (error) {
-            console.error('Error al actualizar estado de devolución:', error.message);
-            toast.error(`Error al actualizar estado: ${error.message}`);
-        }
-        finally {
-            setLoading(false);
+            console.error('Error al actualizar estado:', error.message);
+            toast.error('Error al actualizar el estado');
         }
     };
-    // Formatear fecha usando la configuración de locale
     const formatDate = (dateString) => {
-        const options = {
+        if (!dateString)
+            return '';
+        return new Date(dateString).toLocaleDateString(currency.settings.locale, {
             year: 'numeric',
             month: 'long',
             day: 'numeric',
-        };
-        return new Date(dateString).toLocaleDateString(currency.settings.locale, options);
+            hour: '2-digit',
+            minute: '2-digit'
+        });
     };
-    // Renderizar el badge de estado
     const renderStatusBadge = (status) => {
         const statusConfig = {
             'pendiente': { color: 'bg-yellow-100 text-yellow-800', icon: 'fa-clock', text: 'Pendiente' },

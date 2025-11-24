@@ -56,9 +56,9 @@ const InvoiceForm: React.FC = () => {
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
   const preselectedCustomerId = queryParams.get('customer');
-  
+
   const isEditing = !!id;
-  
+
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -72,20 +72,20 @@ const InvoiceForm: React.FC = () => {
     unit_price: string;
     discount_percent: string;
   } | null>(null);
-  
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [invoiceDate, setInvoiceDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [dueDate, setDueDate] = useState<string>('');
-  
+
   // Estados para descuento global
   const [discountMode, setDiscountMode] = useState<'product' | 'global'>('product');
   const [globalDiscountPercent, setGlobalDiscountPercent] = useState<number>(0);
-  
+
   // Estado para mostrar/ocultar columna de IVA
   const [showTaxColumn, setShowTaxColumn] = useState<boolean>(true);
-  
+
   const [formData, setFormData] = useState({
     customer_id: '',
     warehouse_id: '',
@@ -94,7 +94,7 @@ const InvoiceForm: React.FC = () => {
     invoice_number: `INV-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
     notes: ''
   });
-  
+
   const [currentItem, setCurrentItem] = useState<{
     product_id: string;
     quantity: number;
@@ -110,23 +110,23 @@ const InvoiceForm: React.FC = () => {
     tax_rate: 0,
     discount_percent: 0
   });
-  
+
   const [productSearchTerm, setProductSearchTerm] = useState('');
   const [availableSerials, setAvailableSerials] = useState<Record<string, ProductSerial[]>>({});
   const [selectedSerialId, setSelectedSerialId] = useState<string>('');
   const [inputKey, setInputKey] = useState(0); // Key para forzar re-render del input
-  
+
   // Ref para el campo de búsqueda de productos
   const productSearchInputRef = useRef<HTMLInputElement>(null);
-  
+
   useEffect(() => {
     fetchCustomers();
     fetchWarehouses();
     fetchProducts();
-    
+
     // NO cargar stock inicial - solo se cargará cuando se seleccione un almacén
     // fetchProductStock(''); // ← REMOVIDO
-    
+
     if (isEditing) {
       fetchInvoiceDetails();
     } else if (preselectedCustomerId) {
@@ -136,7 +136,7 @@ const InvoiceForm: React.FC = () => {
       }));
     }
   }, [id]);
-  
+
   useEffect(() => {
     // Filtrar productos basados en el término de búsqueda
     if (productSearchTerm) {
@@ -165,7 +165,7 @@ const InvoiceForm: React.FC = () => {
       const skus = filteredProducts
         .map(p => p.sku)
         .filter((sku): sku is string => sku !== null && sku !== undefined);
-      
+
       if (skus.length > 0) {
         fetchStockForProducts(skus, formData.warehouse_id);
       }
@@ -210,7 +210,7 @@ const InvoiceForm: React.FC = () => {
       const skus = invoiceItems
         .map(item => item.product_sku)
         .filter((sku): sku is string => sku !== null && sku !== undefined);
-      
+
       if (skus.length > 0) {
         fetchStockForProducts(skus, formData.warehouse_id);
       }
@@ -233,7 +233,7 @@ const InvoiceForm: React.FC = () => {
     if (!isLoading && !isEditing && productSearchInputRef.current) {
       // Forzar re-render del input para evitar problemas de focus en Windows
       setInputKey(prev => prev + 1);
-      
+
       // Delay más largo para asegurar que todo el componente esté renderizado
       const timer = setTimeout(() => {
         productSearchInputRef.current?.focus();
@@ -241,49 +241,52 @@ const InvoiceForm: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [isLoading, isEditing]);
-  
+
   const fetchCustomers = async () => {
     try {
-      const { data, error } = await supabase
+      const client = await supabase.getClient();
+      const { data, error } = await client
         .from('customers')
         .select('id, name, identification_number')
         .eq('is_active', true)
         .order('name');
-      
+
       if (error) throw error;
       setCustomers(data || []);
     } catch (err: any) {
-      
+
       setError(err.message);
     }
   };
-  
+
   const fetchWarehouses = async () => {
     try {
-      const { data, error } = await supabase
+      const client = await supabase.getClient();
+      const { data, error } = await client
         .from('warehouses')
         .select('id, name')
         .order('name');
-      
+
       if (error) throw error;
       setWarehouses(data || []);
     } catch (err: any) {
-      
+
       setError(err.message);
     }
   };
-  
+
   const fetchProducts = async () => {
     try {
-      const { data, error } = await supabase
+      const client = await supabase.getClient();
+      const { data, error } = await client
         .from('products')
         .select('id, name, sku, sale_price, tax_rate, tracking_method')
         .order('name');
-      
+
       if (error) throw error;
       setProducts(data || []);
     } catch (err: any) {
-      
+
       setError(err.message);
     } finally {
       setIsLoading(false);
@@ -293,44 +296,45 @@ const InvoiceForm: React.FC = () => {
   const fetchProductStock = async (warehouseId: string) => {
     try {
       setIsLoadingStock(true);
-      
+
       // Construir query sin encadenar - aplicar todo de una vez
       const queryConfig: any = {
         count: 'exact'
       };
-      
-      let queryBuilder = supabase
+
+      const client = await supabase.getClient();
+      let queryBuilder = client
         .from('current_stock')
         .select('product_id, product_name, sku, current_quantity, warehouse_id, warehouse_name', queryConfig);
-      
+
       // Si hay almacén seleccionado, filtrar por ese almacén
       if (warehouseId) {
         queryBuilder = queryBuilder.eq('warehouse_id', warehouseId);
       }
-      
+
       // Hacer múltiples consultas si es necesario (paginación manual)
       const BATCH_SIZE = 1000;
       let allData: any[] = [];
       let offset = 0;
       let hasMore = true;
-      
+
       while (hasMore) {
         const { data, error, count } = await queryBuilder.range(offset, offset + BATCH_SIZE - 1);
-        
+
         if (error) {
           console.error('[fetchProductStock] Error en query:', error);
           throw error;
         }
-        
+
         if (data && data.length > 0) {
           allData = allData.concat(data);
           offset += BATCH_SIZE;
-          
+
           // Si recibimos menos de BATCH_SIZE, ya no hay más datos
           if (data.length < BATCH_SIZE) {
             hasMore = false;
           }
-          
+
           // Límite de seguridad: máximo 50 batches (50,000 registros)
           if (offset >= 50000) {
             console.warn('[fetchProductStock] Alcanzado límite de seguridad de 50,000 registros');
@@ -340,17 +344,17 @@ const InvoiceForm: React.FC = () => {
           hasMore = false;
         }
       }
-      
+
       const data = allData;
       const error = null;
-      
+
       if (error) {
         console.error('[fetchProductStock] Error en query:', error);
         throw error;
       }
-      
+
       const stockMap: Record<string, number> = {};
-      
+
       if (warehouseId) {
         // Stock específico del almacén seleccionado
         // USAR SKU como clave en lugar de product_id
@@ -369,7 +373,7 @@ const InvoiceForm: React.FC = () => {
           }
         });
       }
-      
+
       setProductStock(stockMap);
     } catch (err: any) {
       console.error('[fetchProductStock] Error fatal:', err);
@@ -388,18 +392,19 @@ const InvoiceForm: React.FC = () => {
 
     try {
       setIsLoadingStock(true);
-      
-      const { data, error } = await supabase
+
+      const client = await supabase.getClient();
+      const { data, error } = await client
         .from('current_stock')
         .select('sku, current_quantity')
         .eq('warehouse_id', warehouseId)
         .in('sku', productSkus);
-      
+
       if (error) {
         console.error('[fetchStockForProducts] Error:', error);
         throw error;
       }
-      
+
       // Actualizar solo los SKUs consultados (merge con stock existente)
       setProductStock(prevStock => {
         const newStock = { ...prevStock };
@@ -410,7 +415,7 @@ const InvoiceForm: React.FC = () => {
         });
         return newStock;
       });
-      
+
     } catch (err: any) {
       console.error('[fetchStockForProducts] Error fatal:', err);
       toast.error('Error al cargar stock de productos');
@@ -425,7 +430,8 @@ const InvoiceForm: React.FC = () => {
     }
 
     try {
-      const { data, error } = await supabase
+      const client = await supabase.getClient();
+      const { data, error } = await client
         .from('product_serials')
         .select('id, serial_code, vin, engine_number, year, color, status')
         .eq('product_id', productId)
@@ -444,20 +450,22 @@ const InvoiceForm: React.FC = () => {
       toast.error('Error al cargar seriales disponibles');
     }
   };
-  
+
   const fetchInvoiceDetails = async () => {
     try {
       setIsLoading(true);
-      
-  // Obtener la cotización
-      const { data: invoiceData, error: invoiceError } = await supabase
+
+      const client = await supabase.getClient();
+
+      // Obtener la cotización
+      const { data: invoiceData, error: invoiceError } = await client
         .from('invoices')
         .select('*')
         .eq('id', id)
         .single();
-      
+
       if (invoiceError) throw invoiceError;
-      
+
       if (invoiceData) {
         setFormData({
           customer_id: invoiceData.customer_id,
@@ -467,14 +475,14 @@ const InvoiceForm: React.FC = () => {
           invoice_number: invoiceData.invoice_number,
           notes: invoiceData.notes || ''
         });
-        
+
         setInvoiceDate(invoiceData.invoice_date);
         if (invoiceData.due_date) {
           setDueDate(invoiceData.due_date);
         }
-        
-  // Obtener los items de la cotización
-        const { data: itemsData, error: itemsError } = await supabase
+
+        // Obtener los items de la cotización
+        const { data: itemsData, error: itemsError } = await client
           .from('invoice_items')
           .select(`
             id,
@@ -489,9 +497,9 @@ const InvoiceForm: React.FC = () => {
             product:products(name, sku)
           `)
           .eq('invoice_id', id);
-        
+
         if (itemsError) throw itemsError;
-        
+
         if (itemsData) {
           const formattedItems = itemsData.map((item: any) => ({
             id: item.id,
@@ -506,30 +514,30 @@ const InvoiceForm: React.FC = () => {
             discount_amount: item.discount_amount || 0,
             total_price: item.total_price
           }));
-          
+
           setInvoiceItems(formattedItems);
         }
       }
     } catch (err: any) {
-      
+
       setError(err.message);
     } finally {
       setIsLoading(false);
     }
   };
-  
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    
+
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
   };
-  
+
   const handleItemInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    
+
     if (name === 'product_id') {
       const selectedProduct = products.find(p => p.id === value);
       if (selectedProduct) {
@@ -570,7 +578,7 @@ const InvoiceForm: React.FC = () => {
       }));
     }
   };
-  
+
   const calculateItemTotals = (quantity: number, unitPrice: number, taxRate: number, discountPercent: number) => {
     const subtotal = quantity * unitPrice;
     const discountAmount = (subtotal * discountPercent) / 100;
@@ -579,20 +587,20 @@ const InvoiceForm: React.FC = () => {
     const effectiveTaxRate = showTaxColumn ? taxRate : 0;
     const taxAmount = (taxableAmount * effectiveTaxRate) / 100;
     const totalPrice = taxableAmount + taxAmount;
-    
+
     return {
       discountAmount,
       taxAmount,
       totalPrice
     };
   };
-  
+
   const addItemToInvoice = () => {
     if (!currentItem.product_id) {
       toast.error('Por favor seleccione un producto');
       return;
     }
-    
+
     const selectedProduct = products.find(p => p.id === currentItem.product_id);
     if (!selectedProduct) {
       toast.error('Producto no encontrado');
@@ -611,17 +619,17 @@ const InvoiceForm: React.FC = () => {
         return;
       }
     }
-    
+
     // Usar descuento global o por producto según el modo
     const effectiveDiscount = discountMode === 'global' ? globalDiscountPercent : currentItem.discount_percent;
-    
+
     const { discountAmount, taxAmount, totalPrice } = calculateItemTotals(
       currentItem.quantity,
       currentItem.unit_price,
       currentItem.tax_rate,
       effectiveDiscount
     );
-    
+
     const newItem: InvoiceItem = {
       product_id: currentItem.product_id,
       product_name: selectedProduct.name,
@@ -635,9 +643,9 @@ const InvoiceForm: React.FC = () => {
       total_price: totalPrice,
       serial_id: selectedProduct.tracking_method === 'serialized' ? selectedSerialId : undefined
     };
-    
+
     setInvoiceItems(prev => [...prev, newItem]);
-    
+
     // Limpiar el formulario de item
     setCurrentItem({
       product_id: '',
@@ -647,11 +655,11 @@ const InvoiceForm: React.FC = () => {
       tax_rate: 0,
       discount_percent: 0
     });
-    
+
     setProductSearchTerm('');
     setSelectedSerialId('');
   };
-  
+
   const removeItemFromInvoice = (index: number) => {
     setInvoiceItems(prev => prev.filter((_, i) => i !== index));
     setEditingItemIndex((current) => {
@@ -741,41 +749,41 @@ const InvoiceForm: React.FC = () => {
     setEditingItemDraft(null);
     toast.success('Producto actualizado en la cotización.');
   };
-  
+
   const calculateInvoiceTotals = () => {
     let subtotal = 0;
     let taxAmount = 0;
     let discountAmount = 0;
     let total = 0;
-    
+
     invoiceItems.forEach(item => {
       subtotal += item.quantity * item.unit_price;
       taxAmount += item.tax_amount;
       discountAmount += item.discount_amount;
       total += item.total_price;
     });
-    
+
     return { subtotal, taxAmount, discountAmount, total };
   };
-  
+
   const handleSubmit = async (e: React.FormEvent, saveAsDraft: boolean = true) => {
     e.preventDefault();
-    
+
     if (!formData.customer_id) {
       toast.error('Por favor seleccione un cliente');
       return;
     }
-    
+
     if (!formData.warehouse_id) {
       toast.error('Por favor seleccione un almacén');
       return;
     }
-    
+
     if (invoiceItems.length === 0) {
-  toast.error('Por favor agregue al menos un producto a la cotización');
+      toast.error('Por favor agregue al menos un producto a la cotización');
       return;
     }
-    
+
     try {
       setIsSaving(true);
       const { subtotal, taxAmount, discountAmount, total } = calculateInvoiceTotals();
@@ -790,9 +798,11 @@ const InvoiceForm: React.FC = () => {
         outboundMovementTypeId = await stockMovementService.getOutboundSaleTypeId();
       }
 
+      const client = await supabase.getClient();
+
       if (isEditing) {
-  // Actualizar cotización existente
-        const { error: invoiceError } = await supabase
+        // Actualizar cotización existente
+        const { error: invoiceError } = await client
           .from('invoices')
           .update({
             status: status,
@@ -805,17 +815,17 @@ const InvoiceForm: React.FC = () => {
             updated_at: new Date().toISOString()
           })
           .eq('id', id);
-          
+
         if (invoiceError) throw invoiceError;
-        
+
         // Eliminar items existentes
-        const { error: deleteError } = await supabase
+        const { error: deleteError } = await client
           .from('invoice_items')
           .delete()
           .eq('invoice_id', id);
-          
+
         if (deleteError) throw deleteError;
-        
+
         // Insertar nuevos items
         const itemsToInsert = invoiceItems.map(item => ({
           invoice_id: id,
@@ -829,15 +839,15 @@ const InvoiceForm: React.FC = () => {
           total_price: item.total_price,
           serial_id: item.serial_id || null
         }));
-        
-        const { error: itemsError } = await supabase
+
+        const { error: itemsError } = await client
           .from('invoice_items')
           .insert(itemsToInsert);
-          
+
         if (itemsError) throw itemsError;
 
         // Sincronizar movimientos de stock según el estado actual
-        const { error: purgeMovementsError } = await supabase
+        const { error: purgeMovementsError } = await client
           .from('stock_movements')
           .delete()
           .eq('related_id', id);
@@ -857,7 +867,7 @@ const InvoiceForm: React.FC = () => {
           }));
 
           if (stockMovements.length) {
-            const { error: movementError } = await supabase
+            const { error: movementError } = await client
               .from('stock_movements')
               .insert(stockMovements);
             if (movementError) throw movementError;
@@ -869,7 +879,7 @@ const InvoiceForm: React.FC = () => {
             .map(item => item.serial_id!);
 
           if (serialIds.length > 0) {
-            const { error: serialUpdateError } = await supabase
+            const { error: serialUpdateError } = await client
               .from('product_serials')
               .update({ status: 'sold' })
               .in('id', serialIds);
@@ -877,11 +887,11 @@ const InvoiceForm: React.FC = () => {
             if (serialUpdateError) throw serialUpdateError;
           }
         }
-        
+
         toast.success(`Factura ${status === 'borrador' ? 'guardada como borrador' : 'emitida'} correctamente`);
       } else {
-  // Crear nueva cotización
-        const { data: invoiceData, error: invoiceError } = await supabase
+        // Crear nueva cotización
+        const { data: invoiceData, error: invoiceError } = await client
           .from('invoices')
           .insert({
             customer_id: formData.customer_id,
@@ -901,9 +911,9 @@ const InvoiceForm: React.FC = () => {
           })
           .select()
           .single();
-          
+
         if (invoiceError) throw invoiceError;
-        
+
         if (invoiceData) {
           // Insertar items
           const itemsToInsert = invoiceItems.map(item => ({
@@ -918,13 +928,13 @@ const InvoiceForm: React.FC = () => {
             total_price: item.total_price,
             serial_id: item.serial_id || null
           }));
-          
-          const { error: itemsError } = await supabase
+
+          const { error: itemsError } = await client
             .from('invoice_items')
             .insert(itemsToInsert);
-            
+
           if (itemsError) throw itemsError;
-          
+
           // Si la cotización se emite, registrar los movimientos de inventario
           if (status === 'emitida' && outboundMovementTypeId !== null) {
             const stockMovements = invoiceItems.map(item => ({
@@ -940,7 +950,7 @@ const InvoiceForm: React.FC = () => {
             }));
 
             if (stockMovements.length) {
-              const { error: movementError } = await supabase
+              const { error: movementError } = await client
                 .from('stock_movements')
                 .insert(stockMovements);
               if (movementError) throw movementError;
@@ -952,7 +962,7 @@ const InvoiceForm: React.FC = () => {
               .map(item => item.serial_id!);
 
             if (serialIds.length > 0) {
-              const { error: serialUpdateError } = await supabase
+              const { error: serialUpdateError } = await client
                 .from('product_serials')
                 .update({ status: 'sold' })
                 .in('id', serialIds);
@@ -960,23 +970,23 @@ const InvoiceForm: React.FC = () => {
               if (serialUpdateError) throw serialUpdateError;
             }
           }
-          
+
           toast.success(`Cotización ${status === 'borrador' ? 'guardada como borrador' : 'emitida'} correctamente`);
         }
       }
-      
-  // Redirigir a la lista de cotizaciones
+
+      // Redirigir a la lista de cotizaciones
       navigate('/ventas/facturas');
     } catch (err: any) {
-      
+
       toast.error(`Error: ${err.message}`);
     } finally {
       setIsSaving(false);
     }
   };
-  
+
   const formatCurrency = (amount: number) => currency.format(amount);
-  
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center py-20">
@@ -1104,7 +1114,7 @@ const InvoiceForm: React.FC = () => {
           <div className="border rounded-lg p-4 bg-gray-50">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-medium">Agregar Productos</h2>
-              
+
               {/* Toggle para modo de descuento y columna IVA */}
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
@@ -1112,42 +1122,38 @@ const InvoiceForm: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setDiscountMode(discountMode === 'product' ? 'global' : 'product')}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      discountMode === 'global' ? 'bg-blue-600' : 'bg-gray-300'
-                    }`}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${discountMode === 'global' ? 'bg-blue-600' : 'bg-gray-300'
+                      }`}
                   >
                     <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        discountMode === 'global' ? 'translate-x-6' : 'translate-x-1'
-                      }`}
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${discountMode === 'global' ? 'translate-x-6' : 'translate-x-1'
+                        }`}
                     />
                   </button>
                   <span className="text-sm text-gray-600">
                     {discountMode === 'product' ? 'Por Producto' : 'Global'}
                   </span>
                 </div>
-                
+
                 {/* Toggle para mostrar/ocultar columna IVA */}
                 <div className="flex items-center gap-2">
                   <label className="text-sm font-medium text-gray-700">Mostrar IVA:</label>
                   <button
                     type="button"
                     onClick={() => setShowTaxColumn(!showTaxColumn)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      showTaxColumn ? 'bg-blue-600' : 'bg-gray-300'
-                    }`}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${showTaxColumn ? 'bg-blue-600' : 'bg-gray-300'
+                      }`}
                   >
                     <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        showTaxColumn ? 'translate-x-6' : 'translate-x-1'
-                      }`}
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showTaxColumn ? 'translate-x-6' : 'translate-x-1'
+                        }`}
                     />
                   </button>
                   <span className="text-sm text-gray-600">
                     {showTaxColumn ? 'Sí' : 'No'}
                   </span>
                 </div>
-                
+
                 {/* Campo de descuento global */}
                 {discountMode === 'global' && (
                   <div className="flex items-center gap-2">
@@ -1166,7 +1172,7 @@ const InvoiceForm: React.FC = () => {
                 )}
               </div>
             </div>
-            
+
             <div className={`grid grid-cols-1 gap-4 mb-4 ${discountMode === 'product' ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Producto <span className="text-red-500">*</span></label>
@@ -1211,7 +1217,7 @@ const InvoiceForm: React.FC = () => {
                         const hasStockData = availableStock !== undefined;
                         const stockValue = availableStock || 0;
                         const stockColor = stockValue > 0 ? 'text-green-600' : 'text-red-600';
-                        
+
                         return (
                           <div
                             key={product.id}
@@ -1228,7 +1234,7 @@ const InvoiceForm: React.FC = () => {
                               }));
                               setProductSearchTerm(product.name);
                               setSelectedSerialId('');
-                              
+
                               // Cargar seriales si es un producto serializado
                               if (product.tracking_method === 'serialized' && formData.warehouse_id) {
                                 fetchAvailableSerials(product.id, formData.warehouse_id);
@@ -1362,7 +1368,7 @@ const InvoiceForm: React.FC = () => {
           {/* Lista de productos */}
           <div>
             <h2 className="text-lg font-medium mb-4">Productos en la Cotización</h2>
-            
+
             {invoiceItems.length === 0 ? (
               <div className="text-center py-8 border rounded-lg">
                 <p className="text-gray-500">No hay productos agregados a la cotización</p>
@@ -1393,7 +1399,7 @@ const InvoiceForm: React.FC = () => {
                       const hasStockData = availableStock !== undefined;
                       const stockValue = availableStock || 0;
                       const stockWarning = hasStockData && item.quantity > stockValue;
-                      
+
                       return (
                         <tr key={`${item.product_id}-${index}`} className={stockWarning ? 'bg-red-50' : ''}>
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -1558,7 +1564,7 @@ const InvoiceForm: React.FC = () => {
             ></textarea>
           </div>
         </div>
-        
+
         <div className="px-6 py-4 bg-gray-50 flex justify-end space-x-3">
           <Link
             to="/ventas/facturas"

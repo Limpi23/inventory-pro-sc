@@ -197,12 +197,39 @@ export const warehousesService = {
 };
 // Funciones de utilidad para el manejo de productos
 export const productsService = {
+    async getProducts({ page = 1, pageSize = 50, search = '', warehouseId = '', locationId = '' }) {
+        let query = supabase
+            .from('products')
+            .select(`
+        *,
+        category:categories(id, name),
+        location:locations(id, name, warehouse_id)
+      `, { count: 'exact' });
+        if (search) {
+            query = query.or(`name.ilike.%${search}%, sku.ilike.%${search}%, barcode.ilike.%${search}%`);
+        }
+        if (warehouseId) {
+            query = query.eq('location.warehouse_id', warehouseId);
+        }
+        if (locationId) {
+            query = query.eq('location_id', locationId);
+        }
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        const { data, error, count } = await query
+            .range(from, to)
+            .order('name');
+        if (error)
+            throw error;
+        return { data, count };
+    },
     async getAll() {
         const { data, error } = await supabase
             .from('products')
             .select(`
         *,
-        category:categories(id, name)
+        category:categories(id, name),
+        location:locations(id, name, warehouse_id)
       `)
             .order('name');
         if (error)

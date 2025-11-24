@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { Link } from 'react-router-dom';
 import { useCurrency } from '../hooks/useCurrency';
+import { OutOfStockModal } from '../components/OutOfStockModal';
 
 interface StockMovement {
   id: string;
@@ -54,6 +55,7 @@ interface StatCard {
 const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const currency = useCurrency();
+  const [showOutOfStockModal, setShowOutOfStockModal] = useState(false);
   const [stats, setStats] = useState<StatCard[]>([
     { title: 'Total Productos', value: '0', icon: 'fas fa-box', color: 'bg-primary' },
     { title: 'Ventas del Mes', value: currency.format(0), icon: 'fas fa-shopping-cart', color: 'bg-secondary' },
@@ -99,7 +101,7 @@ const Dashboard: React.FC = () => {
         // 3. Low stock count (unique products)
         client.from('current_stock')
           .select('product_id')
-          .lte('current_quantity', 5),
+          .lte('current_quantity', 0),
           
         // 4. Today's movements count
         client.from('stock_movements')
@@ -113,11 +115,8 @@ const Dashboard: React.FC = () => {
             quantity,
             movement_date,
             movement_type_id,
-            product:products(name),
-            warehouse:warehouses(name),
-            product_id,
-            warehouse_name,
             product:products(name, sku),
+            warehouse:warehouses(name),
             movement_type:movement_types(code, description)
           `)
           .order('created_at', { ascending: false })
@@ -128,13 +127,8 @@ const Dashboard: React.FC = () => {
 
         // 7. Low stock detail
         client.from('current_stock')
-          .select(`
-            current_quantity,
-            product_id,
-            warehouse_name,
-            product:products(id, name, sku)
-          `)
-          .lte('current_quantity', 5)
+          .select('current_quantity, product_id, product_name, sku, warehouse_name')
+          .lte('current_quantity', 0)
           .order('current_quantity', { ascending: true })
           .limit(5)
       ]) as any;
@@ -198,8 +192,8 @@ const Dashboard: React.FC = () => {
           current_quantity: Number(item.current_quantity),
           product: {
             id: item.product_id,
-            name: item.product?.name || 'Desconocido',
-            sku: item.product?.sku || 'Sin SKU'
+            name: item.product_name || 'Desconocido',
+            sku: item.sku || 'Sin SKU'
           },
           warehouse: {
             name: item.warehouse_name || 'Desconocido'
@@ -257,7 +251,15 @@ const Dashboard: React.FC = () => {
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {stats.map((stat, index) => (
-              <Card key={index}>
+              <Card 
+                key={index}
+                className={`${stat.title === 'Productos Agotados' ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''}`}
+                onClick={() => {
+                  if (stat.title === 'Productos Agotados') {
+                    setShowOutOfStockModal(true);
+                  }
+                }}
+              >
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground">{stat.title}</CardTitle>
                   <div className={`${stat.color} text-white p-2 rounded-lg`}>
@@ -431,6 +433,11 @@ const Dashboard: React.FC = () => {
           </div>
         </>
       )}
+      
+      <OutOfStockModal 
+        isOpen={showOutOfStockModal} 
+        onClose={() => setShowOutOfStockModal(false)} 
+      />
     </div>
   );
 };

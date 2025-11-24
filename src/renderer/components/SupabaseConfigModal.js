@@ -61,7 +61,9 @@ const SupabaseConfigModal = ({ onFinish, onClose }) => {
                 return;
             }
             // 2. Forzar recarga de Supabase client con nuevas credenciales
-            await supabase.reinitialize();
+            if (supabase.reinitialize) {
+                supabase.reinitialize();
+            }
             // 3. Verificar si la base de datos necesita setup inicial
             const needsSetup = await migrationService.needsInitialSetup();
             if (needsSetup) {
