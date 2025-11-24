@@ -49,8 +49,10 @@ function loadEnvConfig() {
 autoUpdater.logger = require('electron-log');
 autoUpdater.logger.transports.file.level = 'info';
 
-// Configuración específica para NSIS
+// Configuración para Squirrel.Windows
+// No descargar automáticamente - pedir confirmación al usuario
 autoUpdater.autoDownload = false;
+// No instalar automáticamente al cerrar - requiere confirmación explícita
 autoUpdater.autoInstallOnAppQuit = false;
 
 autoUpdater.on('checking-for-update', () => {
@@ -132,11 +134,10 @@ autoUpdater.on('update-downloaded', () => {
     buttons: ['Reiniciar', 'Más tarde']
   }).then((returnValue) => {
     if (returnValue.response === 0) {
-      // Para NSIS, setImmediate asegura que el diálogo se cierre antes de reiniciar
+      // Para Squirrel.Windows, quitAndInstall() no acepta parámetros
+      // La aplicación se cerrará, instalará la actualización y se reabrirá automáticamente
       setImmediate(() => {
-        // isSilent: false - muestra el progreso de instalación
-        // isForceRunAfter: true - reabre la app automáticamente
-        autoUpdater.quitAndInstall(false, true);
+        autoUpdater.quitAndInstall();
       });
     }
   });
@@ -502,9 +503,9 @@ ipcMain.on('check-for-updates', () => {
   autoUpdater.checkForUpdates();
 });
 ipcMain.on('install-update', () => {
-  // isSilent: false - mostrar instalador
-  // isForceRunAfter: true - FORZAR que reabra la app después de instalar
-  autoUpdater.quitAndInstall(false, true);
+  // Para Squirrel.Windows: no requiere parámetros
+  // La app se cerrará, se instalará la actualización y se reabrirá automáticamente
+  autoUpdater.quitAndInstall();
 });
 ipcMain.on('get-supabase-config', (event) => {
   event.sender.send('supabase-config', {
