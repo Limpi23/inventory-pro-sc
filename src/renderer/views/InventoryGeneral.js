@@ -5,6 +5,7 @@ import SerializedInventory from '../components/inventory/SerializedInventory';
 import { supabase } from '../lib/supabase';
 import Papa from 'papaparse';
 import { useReactToPrint } from 'react-to-print';
+import { getLocalDateISOString } from '../lib/dateUtils';
 const InventoryGeneral = () => {
     const [inventory, setInventory] = useState([]);
     const [movements, setMovements] = useState([]);
@@ -287,7 +288,7 @@ const InventoryGeneral = () => {
             const url = URL.createObjectURL(blob);
             // Crear elemento de enlace para descarga
             const link = document.createElement('a');
-            const date = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
+            const date = getLocalDateISOString(); // Formato YYYY-MM-DD
             const fileName = format === 'physical'
                 ? `conteo_fisico_inventario_${date}.csv`
                 : `inventario_${date}.csv`;

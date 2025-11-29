@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useParams, Link } from 'react-router-dom';
 import { useCurrency } from '../hooks/useCurrency';
+import { getLocalDateISOString } from '../lib/dateUtils';
 
 interface PurchaseOrder {
   id: string;
@@ -46,9 +47,9 @@ const SupplierPurchases: React.FC = () => {
   const [purchaseItems, setPurchaseItems] = useState<PurchaseOrderItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dateRange, setDateRange] = useState<{start: string, end: string}>({
-    start: new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0], // Primer día del año actual
-    end: new Date().toISOString().split('T')[0] // Hoy
+  const [dateRange, setDateRange] = useState<{ start: string, end: string }>({
+    start: `${new Date().getFullYear()}-01-01`, // Primer día del año actual
+    end: getLocalDateISOString() // Hoy
   });
 
   // Paginación
@@ -70,15 +71,15 @@ const SupplierPurchases: React.FC = () => {
 
   const fetchSupplier = async () => {
     try {
-  const client = await supabase.getClient();
-  const { data, error } = await client
+      const client = await supabase.getClient();
+      const { data, error } = await client
         .from('suppliers')
         .select('*')
         .eq('id', id)
         .single();
-      
+
       if (error) throw error;
-  setSupplier(data as unknown as Supplier);
+      setSupplier(data as unknown as Supplier);
     } catch (err: any) {
       console.error('Error cargando proveedor:', err);
       setError(err.message);
@@ -88,9 +89,9 @@ const SupplierPurchases: React.FC = () => {
   const fetchPurchases = async () => {
     try {
       setIsLoading(true);
-      
-  const client = await supabase.getClient();
-  const { data, error } = await client
+
+      const client = await supabase.getClient();
+      const { data, error } = await client
         .from('purchase_orders')
         .select(`
           *,
@@ -101,9 +102,9 @@ const SupplierPurchases: React.FC = () => {
         .gte('order_date', dateRange.start)
         .lte('order_date', dateRange.end)
         .order('order_date', { ascending: false });
-      
+
       if (error) throw error;
-      
+
       const formattedPurchases = (data || []).map((p: any) => ({
         id: p.id,
         order_date: p.order_date,
@@ -113,10 +114,10 @@ const SupplierPurchases: React.FC = () => {
         items_count: p.items?.length || 0,
         warehouse_name: p.warehouse?.name || 'Desconocido'
       }));
-      
+
       setPurchases(formattedPurchases);
       setIsLoading(false);
-      
+
       // Si hay compras y no hay ninguna seleccionada, seleccionar la primera
       if (formattedPurchases.length > 0 && !selectedPurchase) {
         setSelectedPurchase(formattedPurchases[0].id);
@@ -124,7 +125,7 @@ const SupplierPurchases: React.FC = () => {
         setSelectedPurchase(null);
         setPurchaseItems([]);
       }
-      
+
     } catch (err: any) {
       console.error('Error cargando compras:', err);
       setError(err.message);
@@ -134,17 +135,17 @@ const SupplierPurchases: React.FC = () => {
 
   const fetchPurchaseItems = async (purchaseId: string) => {
     try {
-  const client = await supabase.getClient();
-  const { data, error } = await client
+      const client = await supabase.getClient();
+      const { data, error } = await client
         .from('purchase_order_items')
         .select(`
           *,
           product:products(name, sku)
         `)
         .eq('purchase_order_id', purchaseId);
-      
+
       if (error) throw error;
-      
+
       const formattedItems = (data || []).map((item: any) => ({
         id: item.id,
         product_name: item.product?.name || 'Producto desconocido',
@@ -153,9 +154,9 @@ const SupplierPurchases: React.FC = () => {
         unit_price: item.unit_price || 0,
         total_price: item.total_price || 0
       }));
-      
+
       setPurchaseItems(formattedItems);
-      
+
     } catch (err: any) {
       console.error('Error cargando items de compra:', err);
       setError(err.message);
@@ -186,7 +187,7 @@ const SupplierPurchases: React.FC = () => {
   // Formatear estado con colores
   const getStatusBadge = (status: string) => {
     let colorClass = '';
-    
+
     switch (status.toLowerCase()) {
       case 'completed':
       case 'completado':
@@ -203,7 +204,7 @@ const SupplierPurchases: React.FC = () => {
       default:
         colorClass = 'bg-gray-100 text-gray-800';
     }
-    
+
     return (
       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colorClass}`}>
         {status}
@@ -217,8 +218,8 @@ const SupplierPurchases: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between">
         <div>
-          <Link 
-            to="/proveedores" 
+          <Link
+            to="/proveedores"
             className="inline-flex items-center text-blue-600 hover:text-blue-800 mb-2"
           >
             <i className="fas fa-arrow-left mr-2"></i>
@@ -238,13 +239,13 @@ const SupplierPurchases: React.FC = () => {
           )}
         </div>
       </div>
-      
+
       {error && (
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded-md">
           <p>{error}</p>
         </div>
       )}
-      
+
       <div className="bg-white p-6 rounded-lg shadow-md">
         <div className="mb-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
@@ -283,7 +284,7 @@ const SupplierPurchases: React.FC = () => {
             </Link>
           </div>
         </div>
-        
+
         {isLoading ? (
           <div className="flex justify-center items-center py-20">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
@@ -293,7 +294,7 @@ const SupplierPurchases: React.FC = () => {
             {/* Lista de órdenes */}
             <div className="lg:col-span-2 overflow-x-auto">
               <h2 className="text-lg font-medium mb-4">Órdenes de Compra</h2>
-              
+
               {purchases.length === 0 ? (
                 <div className="bg-gray-50 rounded-md p-8 text-center">
                   <i className="fas fa-shopping-cart text-gray-300 text-4xl mb-2"></i>
@@ -318,11 +319,10 @@ const SupplierPurchases: React.FC = () => {
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {currentPurchases.map((purchase) => (
-                          <tr 
-                            key={purchase.id} 
-                            className={`hover:bg-gray-50 transition-colors cursor-pointer ${
-                              selectedPurchase === purchase.id ? 'bg-blue-50' : ''
-                            }`}
+                          <tr
+                            key={purchase.id}
+                            className={`hover:bg-gray-50 transition-colors cursor-pointer ${selectedPurchase === purchase.id ? 'bg-blue-50' : ''
+                              }`}
                             onClick={() => setSelectedPurchase(purchase.id)}
                           >
                             <td className="py-3 px-4 text-sm">
@@ -344,7 +344,7 @@ const SupplierPurchases: React.FC = () => {
                       </tbody>
                     </table>
                   </div>
-                  
+
                   {/* Paginación */}
                   {purchases.length > itemsPerPage && (
                     <div className="mt-4 flex items-center justify-between">
@@ -355,15 +355,14 @@ const SupplierPurchases: React.FC = () => {
                         <button
                           onClick={() => paginate(currentPage - 1)}
                           disabled={currentPage === 1}
-                          className={`px-3 py-1 rounded-md text-sm font-medium ${
-                            currentPage === 1
+                          className={`px-3 py-1 rounded-md text-sm font-medium ${currentPage === 1
                               ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
+                            }`}
                         >
                           <i className="fas fa-chevron-left"></i>
                         </button>
-                        
+
                         {/* Botones de página */}
                         {Array.from({ length: Math.min(5, totalPages) }).map((_, i) => {
                           let pageNumber;
@@ -376,30 +375,28 @@ const SupplierPurchases: React.FC = () => {
                           } else {
                             pageNumber = currentPage - 2 + i;
                           }
-                        
+
                           return (
                             <button
                               key={pageNumber}
                               onClick={() => paginate(pageNumber)}
-                              className={`px-3 py-1 rounded-md text-sm font-medium ${
-                                currentPage === pageNumber
+                              className={`px-3 py-1 rounded-md text-sm font-medium ${currentPage === pageNumber
                                   ? 'bg-blue-500 text-white'
                                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                              }`}
+                                }`}
                             >
                               {pageNumber}
                             </button>
                           );
                         })}
-                        
+
                         <button
                           onClick={() => paginate(currentPage + 1)}
                           disabled={currentPage === totalPages}
-                          className={`px-3 py-1 rounded-md text-sm font-medium ${
-                            currentPage === totalPages
+                          className={`px-3 py-1 rounded-md text-sm font-medium ${currentPage === totalPages
                               ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
+                            }`}
                         >
                           <i className="fas fa-chevron-right"></i>
                         </button>
@@ -409,11 +406,11 @@ const SupplierPurchases: React.FC = () => {
                 </>
               )}
             </div>
-            
+
             {/* Detalles de orden seleccionada */}
             <div className="lg:col-span-3">
               <h2 className="text-lg font-medium mb-4">Detalles de la Orden</h2>
-              
+
               {!selectedPurchase ? (
                 <div className="bg-gray-50 rounded-md p-8 text-center">
                   <i className="fas fa-receipt text-gray-300 text-4xl mb-2"></i>
@@ -473,7 +470,7 @@ const SupplierPurchases: React.FC = () => {
                   </table>
                 </div>
               )}
-              
+
               {selectedPurchase && (
                 <div className="mt-4 flex justify-end">
                   <Link
@@ -493,4 +490,4 @@ const SupplierPurchases: React.FC = () => {
   );
 };
 
-export default SupplierPurchases; 
+export default SupplierPurchases;

@@ -2,6 +2,7 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { getLocalDateISOString } from '../lib/dateUtils';
 import { toast } from 'react-hot-toast';
 import { useCurrency } from '../hooks/useCurrency';
 const ReturnForm = () => {
@@ -141,7 +142,7 @@ const ReturnForm = () => {
             // Crear la devolución
             const returnData = {
                 invoice_id: selectedInvoice.id,
-                return_date: new Date().toISOString().split('T')[0],
+                return_date: getLocalDateISOString(),
                 reason: reason,
                 notes: notes || undefined,
                 items: returnItems

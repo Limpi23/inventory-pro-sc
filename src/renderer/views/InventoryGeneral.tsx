@@ -4,6 +4,7 @@ import SerializedInventory from '../components/inventory/SerializedInventory';
 import { supabase } from '../lib/supabase';
 import Papa from 'papaparse';
 import { useReactToPrint } from 'react-to-print';
+import { getLocalDateISOString } from '../lib/dateUtils';
 
 interface InventoryItem {
   product_id: string;
@@ -43,11 +44,11 @@ const InventoryGeneral: React.FC = () => {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [locationsLoading, setLocationsLoading] = useState(false);
   const [locationsByRow, setLocationsByRow] = useState<Record<string, { location_id: string | null; location_name: string; current_quantity: number }[]>>({});
-  
+
   // Paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
-  
+
   // Estados para la vista previa de impresión
   const [showPrintOptions, setShowPrintOptions] = useState(false);
 
@@ -65,38 +66,38 @@ const InventoryGeneral: React.FC = () => {
   const fetchInventory = async () => {
     try {
       setIsLoading(true);
-      
+
       const client = await supabase.getClient();
-      
+
       // Construir query base
       let countQuery = client
         .from('current_stock')
         .select('*', { count: 'exact', head: true });
-      
+
       let dataQuery = client
         .from('current_stock')
         .select('*');
-      
+
       // Aplicar filtro de búsqueda si existe
       if (searchTerm.trim()) {
         const searchFilter = `product_name.ilike.%${searchTerm}%,sku.ilike.%${searchTerm}%`;
         countQuery = countQuery.or(searchFilter);
         dataQuery = dataQuery.or(searchFilter);
       }
-      
+
       // Primero obtener el count total para la paginación
       const { count: totalCount, error: countError } = await countQuery;
-      
+
       if (countError) throw countError;
-      
+
       // Luego obtener solo los datos de la página actual
       const startIndex = (currentPage - 1) * itemsPerPage;
       const { data: inventoryData, error: inventoryError } = await dataQuery
         .order('product_name')
         .range(startIndex, startIndex + itemsPerPage - 1);
-      
+
       if (inventoryError) throw inventoryError;
-      
+
       // Debug: Log the actual count
       console.log('Inventory loaded:', {
         totalRecords: totalCount || 0,
@@ -106,10 +107,10 @@ const InventoryGeneral: React.FC = () => {
         startIndex,
         timestamp: new Date().toISOString()
       });
-      
+
       setTotalInventoryCount(totalCount || 0);
       setInventory((inventoryData as any[]) || []);
-      
+
       console.log(`Registros cargados en inventario: ${inventoryData?.length || 0}`);
       setIsLoading(false);
     } catch (err: any) {
@@ -123,13 +124,13 @@ const InventoryGeneral: React.FC = () => {
     setIsLoading(true);
     try {
       const client = await supabase.getClient();
-      
+
       // Obtener el conteo total de movimientos para este producto
       const { count } = await client
         .from('stock_movements')
         .select('*', { count: 'exact', head: true })
         .eq('product_id', productId);
-      
+
       // Cargar todos los movimientos sin límite de 1000
       const { data: movementsData, error: movementsError } = await client
         .from('stock_movements')
@@ -145,9 +146,9 @@ const InventoryGeneral: React.FC = () => {
         .eq('product_id', productId)
         .order('movement_date', { ascending: false })
         .range(0, count ? count - 1 : 10000); // Cargar todos los movimientos
-      
+
       if (movementsError) throw movementsError;
-      
+
       const formattedMovements = (movementsData || []).map((m: any) => ({
         id: m.id,
         product_name: m.product?.name || 'Desconocido',
@@ -160,11 +161,11 @@ const InventoryGeneral: React.FC = () => {
         quantity: m.quantity,
         reference: m.reference
       }));
-      
+
       setMovements(formattedMovements);
       setActiveTab('history');
     } catch (err: any) {
-  // swallow console noise
+      // swallow console noise
       setError(err.message);
     } finally {
       setIsLoading(false);
@@ -212,7 +213,7 @@ const InventoryGeneral: React.FC = () => {
 
       setLocationsByRow(prev => ({ ...prev, [cacheKey]: mapped }));
     } catch (e: any) {
-  // swallow console noise
+      // swallow console noise
       setError(e.message || 'No se pudieron cargar las ubicaciones');
     } finally {
       setLocationsLoading(false);
@@ -243,7 +244,7 @@ const InventoryGeneral: React.FC = () => {
   // Los filtros se aplicarán en la consulta del servidor
   const currentItems = inventory; // Los datos ya vienen paginados del servidor
   const totalPages = Math.ceil(totalInventoryCount / itemsPerPage);
-  
+
   // Calcular índices para mostrar "Mostrando X-Y de Z items"
   const indexOfFirstItem = (currentPage - 1) * itemsPerPage;
   const indexOfLastItem = Math.min(indexOfFirstItem + itemsPerPage, totalInventoryCount);
@@ -267,12 +268,12 @@ const InventoryGeneral: React.FC = () => {
     documentTitle: `Inventario para Conteo Físico - ${new Date().toLocaleDateString()}`,
     onAfterPrint: handleClosePrintOptions
   });
-  
+
   // Función para abrir las opciones de exportación
   const openExportOptions = () => {
     setShowExportOptions(true);
   };
-  
+
   // Función para cerrar las opciones de exportación
   const closeExportOptions = () => {
     setShowExportOptions(false);
@@ -282,10 +283,10 @@ const InventoryGeneral: React.FC = () => {
   const exportToCSV = (format: 'csv' | 'physical') => {
     try {
       setIsExporting(true);
-      
+
       let headers: string[];
       let dataRows: string[][];
-      
+
       if (format === 'physical') {
         // Formato para conteo físico con más columnas para la verificación
         headers = [
@@ -299,7 +300,7 @@ const InventoryGeneral: React.FC = () => {
           'Responsable de Conteo',
           'Fecha de Conteo'
         ];
-        
+
         dataRows = currentItems.map(item => [
           item.product_name,
           item.sku || '',
@@ -319,7 +320,7 @@ const InventoryGeneral: React.FC = () => {
           'Almacén',
           'Cantidad'
         ];
-        
+
         dataRows = currentItems.map(item => [
           item.product_name,
           item.sku || '',
@@ -327,37 +328,37 @@ const InventoryGeneral: React.FC = () => {
           item.current_quantity.toString()
         ]);
       }
-      
+
       // Usar PapaParse para crear el CSV correctamente con manejo de comillas y caracteres especiales
       const csv = Papa.unparse({
         fields: headers,
         data: dataRows
       });
-      
+
       // Crear un blob y URL para descargar
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
-      
+
       // Crear elemento de enlace para descarga
       const link = document.createElement('a');
-      const date = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
-      const fileName = format === 'physical' 
-        ? `conteo_fisico_inventario_${date}.csv` 
+      const date = getLocalDateISOString(); // Formato YYYY-MM-DD
+      const fileName = format === 'physical'
+        ? `conteo_fisico_inventario_${date}.csv`
         : `inventario_${date}.csv`;
-      
+
       link.setAttribute('href', url);
       link.setAttribute('download', fileName);
       document.body.appendChild(link);
-      
+
       // Simular clic y eliminar el enlace
       link.click();
       document.body.removeChild(link);
-      
+
       // Cerrar el modal de opciones
       closeExportOptions();
-      
+
     } catch (err: any) {
-  // swallow console noise
+      // swallow console noise
       setError('Error al generar el archivo CSV: ' + err.message);
     } finally {
       setIsExporting(false);
@@ -396,7 +397,7 @@ const InventoryGeneral: React.FC = () => {
           </button>
         </div>
       </div>
-      
+
       {error && (
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded-md">
           <p>{error}</p>
@@ -408,36 +409,33 @@ const InventoryGeneral: React.FC = () => {
           <div className="flex space-x-2">
             <button
               onClick={() => setActiveTab('current')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeTab === 'current'
-                  ? 'bg-blue-500 text-white shadow-sm'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'current'
+                ? 'bg-blue-500 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
             >
               Inventario Actual
             </button>
             <button
               onClick={() => setActiveTab('history')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeTab === 'history'
-                  ? 'bg-blue-500 text-white shadow-sm'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'history'
+                ? 'bg-blue-500 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
             >
               Historial de Movimientos
             </button>
             <button
               onClick={() => setActiveTab('serialized')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeTab === 'serialized'
-                  ? 'bg-blue-500 text-white shadow-sm'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'serialized'
+                ? 'bg-blue-500 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
             >
               Inventario Serializado
             </button>
           </div>
-          
+
           <div className="relative flex-grow">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <i className="fas fa-search text-gray-400"></i>
@@ -455,7 +453,7 @@ const InventoryGeneral: React.FC = () => {
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
-          
+
           {(selectedProduct || selectedWarehouse || searchTerm) && (
             <button
               onClick={clearFilters}
@@ -519,8 +517,8 @@ const InventoryGeneral: React.FC = () => {
                       <React.Fragment key={`row-${rowKey}`}>
                         <tr key={`${item.product_id}-${item.warehouse_id}`} className="hover:bg-gray-50 transition-colors">
                           <td className="py-3 px-4 text-sm">
-                            <a 
-                              href="#" 
+                            <a
+                              href="#"
                               className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
                               onClick={(e) => {
                                 e.preventDefault();
@@ -533,8 +531,8 @@ const InventoryGeneral: React.FC = () => {
                           </td>
                           <td className="py-3 px-4 text-sm text-gray-500">{item.sku || '-'}</td>
                           <td className="py-3 px-4 text-sm">
-                            <a 
-                              href="#" 
+                            <a
+                              href="#"
                               className="text-blue-600 hover:text-blue-800 hover:underline"
                               onClick={(e) => {
                                 e.preventDefault();
@@ -625,15 +623,14 @@ const InventoryGeneral: React.FC = () => {
                   <button
                     onClick={() => paginate(currentPage - 1)}
                     disabled={currentPage === 1}
-                    className={`px-3 py-1 rounded-md text-sm font-medium ${
-                      currentPage === 1
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    className={`px-3 py-1 rounded-md text-sm font-medium ${currentPage === 1
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
                   >
                     <i className="fas fa-chevron-left"></i>
                   </button>
-                  
+
                   {/* Botones de página */}
                   {Array.from({ length: Math.min(5, totalPages) }).map((_, i) => {
                     // Si hay más de 5 páginas, mostrar racionalmente las páginas cercanas a la actual
@@ -647,30 +644,28 @@ const InventoryGeneral: React.FC = () => {
                     } else {
                       pageNumber = currentPage - 2 + i;
                     }
-                  
+
                     return (
                       <button
                         key={pageNumber}
                         onClick={() => paginate(pageNumber)}
-                        className={`px-3 py-1 rounded-md text-sm font-medium ${
-                          currentPage === pageNumber
-                            ? 'bg-blue-500 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
+                        className={`px-3 py-1 rounded-md text-sm font-medium ${currentPage === pageNumber
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
                       >
                         {pageNumber}
                       </button>
                     );
                   })}
-                  
+
                   <button
                     onClick={() => paginate(currentPage + 1)}
                     disabled={currentPage === totalPages}
-                    className={`px-3 py-1 rounded-md text-sm font-medium ${
-                      currentPage === totalPages
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    className={`px-3 py-1 rounded-md text-sm font-medium ${currentPage === totalPages
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
                   >
                     <i className="fas fa-chevron-right"></i>
                   </button>
@@ -681,8 +676,8 @@ const InventoryGeneral: React.FC = () => {
         ) : (
           <div className="overflow-x-auto">
             <h2 className="text-lg font-medium mb-4">
-              {selectedProduct ? 
-                `Historial de: ${inventory.find(i => i.product_id === selectedProduct)?.product_name}` : 
+              {selectedProduct ?
+                `Historial de: ${inventory.find(i => i.product_id === selectedProduct)?.product_name}` :
                 'Historial de Movimientos'}
             </h2>
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -716,21 +711,20 @@ const InventoryGeneral: React.FC = () => {
                   movements.map((movement) => (
                     <tr key={movement.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                       <td className="py-3 px-4 text-sm dark:text-gray-300">
-                        {new Date(movement.movement_date).toLocaleDateString()} 
+                        {new Date(movement.movement_date).toLocaleDateString()}
                         <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">
-                          {new Date(movement.movement_date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          {new Date(movement.movement_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-sm">
                         <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            movement.movement_type.code.startsWith('IN_')
-                              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                              : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                          }`}
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${movement.movement_type.code.startsWith('IN_')
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                            : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                            }`}
                         >
-                          {movement.movement_type.code.startsWith('IN_') ? 
-                            <i className="fas fa-arrow-up mr-1"></i> : 
+                          {movement.movement_type.code.startsWith('IN_') ?
+                            <i className="fas fa-arrow-up mr-1"></i> :
                             <i className="fas fa-arrow-down mr-1"></i>}
                           {movement.movement_type.description}
                         </span>
@@ -750,13 +744,13 @@ const InventoryGeneral: React.FC = () => {
           </div>
         )}
       </div>
-      
+
       {/* Modal para opciones de exportación */}
       {showExportOptions && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold mb-4 dark:text-gray-200">Opciones de Exportación</h3>
-            
+
             <div className="mb-6 space-y-4">
               <div className="flex items-center space-x-2">
                 <input
@@ -772,7 +766,7 @@ const InventoryGeneral: React.FC = () => {
                 </label>
                 <span className="text-xs text-gray-500 dark:text-gray-400">- Lista básica del inventario actual</span>
               </div>
-              
+
               <div className="flex items-center space-x-2">
                 <input
                   type="radio"
@@ -788,7 +782,7 @@ const InventoryGeneral: React.FC = () => {
                 <span className="text-xs text-gray-500 dark:text-gray-400">- Incluye columnas para registrar conteo</span>
               </div>
             </div>
-            
+
             <div className="flex justify-end space-x-3">
               <button
                 onClick={closeExportOptions}
@@ -814,7 +808,7 @@ const InventoryGeneral: React.FC = () => {
           </div>
         </div>
       )}
-      
+
       {/* Componente oculto para impresión de conteo físico */}
       <div style={{ display: 'none' }}>
         <div ref={printComponentRef} className="p-6">
@@ -822,7 +816,7 @@ const InventoryGeneral: React.FC = () => {
             <h1 className="text-2xl font-bold">Formulario de Conteo Físico de Inventario</h1>
             <p className="text-gray-600">Fecha de impresión: {new Date().toLocaleDateString()}</p>
           </div>
-          
+
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-gray-100">
@@ -849,7 +843,7 @@ const InventoryGeneral: React.FC = () => {
               ))}
             </tbody>
           </table>
-          
+
           <div className="mt-8">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -861,12 +855,12 @@ const InventoryGeneral: React.FC = () => {
                 <div className="mt-2 border-b border-gray-400 h-8"></div>
               </div>
             </div>
-            
+
             <div className="mt-6">
               <p className="font-semibold">Fecha de conteo:</p>
               <div className="mt-2 border-b border-gray-400 h-8"></div>
             </div>
-            
+
             <div className="mt-6">
               <p className="font-semibold">Observaciones generales:</p>
               <div className="mt-2 border border-gray-400 h-24 p-2"></div>
@@ -874,7 +868,7 @@ const InventoryGeneral: React.FC = () => {
           </div>
         </div>
       </div>
-      
+
       {/* Modal para vista previa de impresión */}
       {showPrintOptions && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -885,7 +879,7 @@ const InventoryGeneral: React.FC = () => {
                 <i className="fas fa-times"></i>
               </button>
             </div>
-            
+
             <div className="mb-4">
               <p className="text-sm text-gray-600 mb-2">Vista previa del inventario para conteo físico</p>
               <div className="border rounded-md bg-gray-50 p-3 h-[500px] overflow-auto">
@@ -897,7 +891,7 @@ const InventoryGeneral: React.FC = () => {
                         <h1 className="text-2xl font-bold text-gray-800">INVENTARIO PARA CONTEO FÍSICO</h1>
                         <p className="text-lg text-gray-600 mt-2">Fecha: {new Date().toLocaleDateString()}</p>
                       </div>
-                      
+
                       <table className="w-full border-collapse border border-gray-400 text-sm">
                         <thead>
                           <tr className="bg-gray-100">
@@ -928,24 +922,24 @@ const InventoryGeneral: React.FC = () => {
                           ))}
                         </tbody>
                       </table>
-                      
+
                       <div className="mt-8 grid grid-cols-3 gap-8">
                         <div>
                           <p className="font-semibold">Responsable del conteo:</p>
                           <div className="mt-2 border-b border-gray-400 h-8"></div>
                         </div>
-                        
+
                         <div>
                           <p className="font-semibold">Supervisor:</p>
                           <div className="mt-2 border-b border-gray-400 h-8"></div>
                         </div>
-                        
+
                         <div>
                           <p className="font-semibold">Fecha de conteo:</p>
                           <div className="mt-2 border-b border-gray-400 h-8"></div>
                         </div>
                       </div>
-                      
+
                       <div className="mt-6">
                         <p className="font-semibold">Observaciones generales:</p>
                         <div className="mt-2 border border-gray-400 h-24 p-2"></div>
@@ -955,7 +949,7 @@ const InventoryGeneral: React.FC = () => {
                 </div>
               </div>
               <p className="text-xs text-gray-500 mt-2">
-                Nota: Esta es la vista previa del documento que se imprimirá. 
+                Nota: Esta es la vista previa del documento que se imprimirá.
                 Use esta vista para revisar el contenido antes de imprimir.
               </p>
             </div>
@@ -967,7 +961,7 @@ const InventoryGeneral: React.FC = () => {
               >
                 Cancelar
               </button>
-              
+
               <button
                 onClick={handlePrint}
                 className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"

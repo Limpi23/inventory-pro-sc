@@ -7,6 +7,7 @@ import { useReactToPrint } from 'react-to-print';
 import useCompanySettings from '../hooks/useCompanySettings';
 import { useCurrency } from '../hooks/useCurrency';
 import { useAuth } from '../lib/auth';
+import { getLocalDateISOString } from '../lib/dateUtils';
 const InvoiceDetail = () => {
     const { id } = useParams();
     const [invoice, setInvoice] = useState(null);
@@ -163,7 +164,7 @@ const InvoiceDetail = () => {
         try {
             setIsGeneratingSale(true);
             const client = await supabase.getClient();
-            const orderDate = new Date().toISOString().split('T')[0];
+            const orderDate = getLocalDateISOString();
             const { data: salesOrder, error: salesOrderError } = await client
                 .from('sales_orders')
                 .insert({

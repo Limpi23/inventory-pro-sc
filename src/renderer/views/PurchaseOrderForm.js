@@ -4,6 +4,7 @@ import { supabase, logAppEvent } from '../lib/supabase';
 import PurchaseOrderItemsImport from '../components/purchase/PurchaseOrderItemsImport';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useCurrency } from '../hooks/useCurrency';
+import { getLocalDateISOString } from '../lib/dateUtils';
 const PurchaseOrderForm = () => {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -19,7 +20,7 @@ const PurchaseOrderForm = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState(null);
-    const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
+    const [orderDate, setOrderDate] = useState(getLocalDateISOString());
     const [formData, setFormData] = useState({
         supplier_id: '',
         warehouse_id: '',
@@ -137,7 +138,7 @@ const PurchaseOrderForm = () => {
                     warehouse_id: String(od.warehouse_id || ''),
                     status: String(od.status || 'borrador')
                 });
-                setOrderDate(String(od.order_date || new Date().toISOString().split('T')[0]));
+                setOrderDate(String(od.order_date || getLocalDateISOString()));
                 // Obtener los items de la orden
                 const { data: itemsData, error: itemsError } = await client
                     .from('purchase_order_items')

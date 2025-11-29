@@ -3,6 +3,7 @@ import { supabase, logAppEvent } from '../lib/supabase';
 import PurchaseOrderItemsImport, { ImportOrderItem } from '../components/purchase/PurchaseOrderItemsImport';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useCurrency } from '../hooks/useCurrency';
+import { getLocalDateISOString } from '../lib/dateUtils';
 
 interface Supplier {
   id: string;
@@ -37,26 +38,26 @@ const PurchaseOrderForm: React.FC = () => {
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
   const preselectedSupplierId = queryParams.get('supplier');
-  
+
   const isEditing = !!id;
-  
+
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
-  
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [orderDate, setOrderDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  
+  const [orderDate, setOrderDate] = useState<string>(getLocalDateISOString());
+
   const [formData, setFormData] = useState({
     supplier_id: '',
     warehouse_id: '',
     status: 'borrador'
   });
-  
+
   const [currentItem, setCurrentItem] = useState<{
     product_id: string;
     quantity: number;
@@ -66,15 +67,15 @@ const PurchaseOrderForm: React.FC = () => {
     quantity: 1,
     unit_price: 0
   });
-  
+
   const [productSearchTerm, setProductSearchTerm] = useState('');
   const productSearchInputRef = useRef<HTMLInputElement | null>(null);
-  
+
   useEffect(() => {
     fetchSuppliers();
     fetchWarehouses();
     fetchProducts();
-    
+
     if (isEditing) {
       fetchOrderDetails();
     } else if (preselectedSupplierId) {
@@ -95,11 +96,11 @@ const PurchaseOrderForm: React.FC = () => {
       return () => clearTimeout(t);
     }
   }, [isLoading, isEditing, formData.status]);
-  
+
   useEffect(() => {
     // Filtrar productos basados en el término de búsqueda
     if (productSearchTerm) {
-      const filtered = products.filter(product => 
+      const filtered = products.filter(product =>
         product.name.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
         product.sku.toLowerCase().includes(productSearchTerm.toLowerCase())
       );
@@ -108,49 +109,49 @@ const PurchaseOrderForm: React.FC = () => {
       setFilteredProducts([]);
     }
   }, [productSearchTerm, products]);
-  
+
   const fetchSuppliers = async () => {
     try {
-  const client = await supabase.getClient();
-  const { data, error } = await client
+      const client = await supabase.getClient();
+      const { data, error } = await client
         .from('suppliers')
         .select('id, name')
         .order('name');
-      
+
       if (error) throw error;
-  setSuppliers((data || []) as unknown as Supplier[]);
+      setSuppliers((data || []) as unknown as Supplier[]);
     } catch (err: any) {
       console.error('Error cargando proveedores:', err);
       setError(err.message);
     }
   };
-  
+
   const fetchWarehouses = async () => {
     try {
-  const client = await supabase.getClient();
-  const { data, error } = await client
+      const client = await supabase.getClient();
+      const { data, error } = await client
         .from('warehouses')
         .select('id, name')
         .order('name');
-      
+
       if (error) throw error;
-  setWarehouses((data || []) as unknown as Warehouse[]);
+      setWarehouses((data || []) as unknown as Warehouse[]);
     } catch (err: any) {
       console.error('Error cargando almacenes:', err);
       setError(err.message);
     }
   };
-  
+
   const fetchProducts = async () => {
     try {
-  const client = await supabase.getClient();
-  const { data, error } = await client
+      const client = await supabase.getClient();
+      const { data, error } = await client
         .from('products')
         .select('id, name, sku, purchase_price')
         .order('name');
-      
+
       if (error) throw error;
-  setProducts((data || []) as unknown as Product[]);
+      setProducts((data || []) as unknown as Product[]);
     } catch (err: any) {
       console.error('Error cargando productos:', err);
       setError(err.message);
@@ -158,21 +159,21 @@ const PurchaseOrderForm: React.FC = () => {
       setIsLoading(false);
     }
   };
-  
+
   const fetchOrderDetails = async () => {
     try {
       setIsLoading(true);
-      
+
       // Obtener la orden
-  const client = await supabase.getClient();
+      const client = await supabase.getClient();
       const { data: orderData, error: orderError } = await client
         .from('purchase_orders')
         .select('*')
         .eq('id', id)
         .single();
-      
+
       if (orderError) throw orderError;
-      
+
       if (orderData) {
         const od = orderData as any;
         setFormData({
@@ -180,11 +181,11 @@ const PurchaseOrderForm: React.FC = () => {
           warehouse_id: String(od.warehouse_id || ''),
           status: String(od.status || 'borrador')
         });
-        
-        setOrderDate(String(od.order_date || new Date().toISOString().split('T')[0]));
-        
+
+        setOrderDate(String(od.order_date || getLocalDateISOString()));
+
         // Obtener los items de la orden
-  const { data: itemsData, error: itemsError } = await client
+        const { data: itemsData, error: itemsError } = await client
           .from('purchase_order_items')
           .select(`
             id,
@@ -195,9 +196,9 @@ const PurchaseOrderForm: React.FC = () => {
             product:products(name, sku)
           `)
           .eq('purchase_order_id', id);
-        
+
         if (itemsError) throw itemsError;
-        
+
         if (itemsData) {
           const formattedItems = itemsData.map((item: any) => ({
             id: item.id,
@@ -208,7 +209,7 @@ const PurchaseOrderForm: React.FC = () => {
             unit_price: item.unit_price,
             total_price: item.total_price
           }));
-          
+
           setOrderItems(formattedItems);
         }
       }
@@ -219,7 +220,7 @@ const PurchaseOrderForm: React.FC = () => {
       setIsLoading(false);
     }
   };
-  
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -227,16 +228,16 @@ const PurchaseOrderForm: React.FC = () => {
       [name]: value
     }));
   };
-  
+
   const handleItemInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    
+
     setCurrentItem(prev => {
       const updated = {
         ...prev,
         [name]: name === 'product_id' ? value : parseFloat(value)
       };
-      
+
       // Actualizar el precio unitario si se cambia el producto
       if (name === 'product_id' && value) {
         const selectedProduct = products.find(p => p.id === value);
@@ -244,36 +245,36 @@ const PurchaseOrderForm: React.FC = () => {
           updated.unit_price = selectedProduct.purchase_price || 0;
         }
       }
-      
+
       return updated;
     });
   };
-  
+
   const addItemToOrder = () => {
     if (!currentItem.product_id || currentItem.quantity <= 0) {
       setError('Por favor seleccione un producto y una cantidad válida');
       return;
     }
-    
+
     const selectedProduct = products.find(p => p.id === currentItem.product_id);
-    
+
     if (!selectedProduct) {
       setError('Producto no encontrado');
       return;
     }
-    
+
     const existingItemIndex = orderItems.findIndex(item => item.product_id === currentItem.product_id);
-    
+
     if (existingItemIndex !== -1) {
       // Si el producto ya está en la orden, actualizar cantidad
       setOrderItems(prev => {
         const updated = [...prev];
         const item = updated[existingItemIndex];
-        
+
         item.quantity += currentItem.quantity;
         item.unit_price = currentItem.unit_price;
         item.total_price = item.quantity * item.unit_price;
-        
+
         return updated;
       });
     } else {
@@ -286,17 +287,17 @@ const PurchaseOrderForm: React.FC = () => {
         unit_price: currentItem.unit_price,
         total_price: currentItem.quantity * currentItem.unit_price
       };
-      
+
       setOrderItems(prev => [...prev, newItem]);
     }
-    
+
     // Limpiar el formulario
     setCurrentItem({
       product_id: '',
       quantity: 1,
       unit_price: 0
     });
-    
+
     setProductSearchTerm('');
   };
 
@@ -323,33 +324,33 @@ const PurchaseOrderForm: React.FC = () => {
       return Array.from(map.values());
     });
   };
-  
+
   const removeItemFromOrder = (index: number) => {
     setOrderItems(prev => prev.filter((_, i) => i !== index));
   };
-  
+
   const calculateTotal = () => {
     return orderItems.reduce((sum, item) => sum + item.total_price, 0);
   };
-  
+
   const handleSubmit = async (e: React.FormEvent, saveAsDraft: boolean = true) => {
     e.preventDefault();
-    
+
     if (!formData.supplier_id || !formData.warehouse_id || orderItems.length === 0) {
       setError('Por favor complete todos los campos requeridos y agregue al menos un producto');
       return;
     }
-    
+
     try {
       setIsSaving(true);
-      
+
       const status = saveAsDraft ? 'borrador' : 'enviada';
       const total = calculateTotal();
-      
+
       if (isEditing) {
         // Actualizar orden existente
-  const client = await supabase.getClient();
-  const { error: updateError } = await client
+        const client = await supabase.getClient();
+        const { error: updateError } = await client
           .from('purchase_orders')
           .update({
             supplier_id: formData.supplier_id,
@@ -360,17 +361,17 @@ const PurchaseOrderForm: React.FC = () => {
             updated_at: new Date().toISOString()
           })
           .eq('id', id);
-        
+
         if (updateError) throw updateError;
-        
+
         // Eliminar items existentes
-  const { error: deleteError } = await client
+        const { error: deleteError } = await client
           .from('purchase_order_items')
           .delete()
           .eq('purchase_order_id', id);
-        
+
         if (deleteError) throw deleteError;
-        
+
         // Insertar nuevos items
         const items = orderItems.map(item => ({
           purchase_order_id: id,
@@ -379,20 +380,20 @@ const PurchaseOrderForm: React.FC = () => {
           unit_price: item.unit_price,
           total_price: item.total_price
         }));
-        
-  const { error: insertError } = await client
+
+        const { error: insertError } = await client
           .from('purchase_order_items')
           .insert(items);
-        
+
         if (insertError) throw insertError;
         // Log de actualización de orden
         await logAppEvent('purchase_order.update', 'purchase_order', id as string, { status, total, items_count: items.length });
-        
+
         navigate(`/ordenes-compra/${id}`);
       } else {
         // Crear nueva orden
-  const client = await supabase.getClient();
-  const { data: orderData, error: orderError } = await client
+        const client = await supabase.getClient();
+        const { data: orderData, error: orderError } = await client
           .from('purchase_orders')
           .insert([{
             supplier_id: formData.supplier_id,
@@ -402,12 +403,12 @@ const PurchaseOrderForm: React.FC = () => {
             total_amount: total
           }])
           .select();
-        
+
         if (orderError) throw orderError;
-        
+
         if (orderData && orderData.length > 0) {
           const newOrderId = orderData[0].id;
-          
+
           // Insertar items de la orden
           const items = orderItems.map(item => ({
             purchase_order_id: newOrderId,
@@ -416,15 +417,15 @@ const PurchaseOrderForm: React.FC = () => {
             unit_price: item.unit_price,
             total_price: item.total_price
           }));
-          
+
           const { error: itemsError } = await client
             .from('purchase_order_items')
             .insert(items);
-          
+
           if (itemsError) throw itemsError;
           // Log de creación de orden
           await logAppEvent('purchase_order.create', 'purchase_order', newOrderId as string, { status, total, items_count: items.length, supplier_id: formData.supplier_id, warehouse_id: formData.warehouse_id });
-          
+
           navigate(`/ordenes-compra/${newOrderId}`);
         }
       }
@@ -435,16 +436,16 @@ const PurchaseOrderForm: React.FC = () => {
       setIsSaving(false);
     }
   };
-  
+
   // Moneda y formato centralizado
   const { format: formatCurrency } = useCurrency();
-  
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between">
         <div>
-          <Link 
-            to="/ordenes-compra" 
+          <Link
+            to="/ordenes-compra"
             className="inline-flex items-center text-blue-600 hover:text-blue-800 mb-2"
           >
             <i className="fas fa-arrow-left mr-2"></i>
@@ -455,13 +456,13 @@ const PurchaseOrderForm: React.FC = () => {
           </h1>
         </div>
       </div>
-      
+
       {error && (
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded-md">
           <p>{error}</p>
         </div>
       )}
-      
+
       {isLoading ? (
         <div className="flex justify-center items-center py-20">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
@@ -491,7 +492,7 @@ const PurchaseOrderForm: React.FC = () => {
                   ))}
                 </select>
               </div>
-              
+
               <div>
                 <label htmlFor="warehouse_id" className="block text-sm font-medium text-gray-700 mb-1">
                   Almacén de destino *
@@ -513,7 +514,7 @@ const PurchaseOrderForm: React.FC = () => {
                   ))}
                 </select>
               </div>
-              
+
               <div>
                 <label htmlFor="order_date" className="block text-sm font-medium text-gray-700 mb-1">
                   Fecha de orden *
@@ -529,7 +530,7 @@ const PurchaseOrderForm: React.FC = () => {
                 />
               </div>
             </div>
-            
+
             {/* Sección para agregar productos */}
             <div className="mb-6 border p-4 rounded-md bg-gray-50">
               <div className="flex items-center justify-between mb-4">
@@ -541,7 +542,7 @@ const PurchaseOrderForm: React.FC = () => {
                   disabled={isEditing && formData.status !== 'borrador'}
                 />
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="md:col-span-2">
                   <label htmlFor="product_search" className="block text-sm font-medium text-gray-700 mb-1">
@@ -594,7 +595,7 @@ const PurchaseOrderForm: React.FC = () => {
                     )}
                   </div>
                 </div>
-                
+
                 <div>
                   <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 mb-1">
                     Cantidad
@@ -611,7 +612,7 @@ const PurchaseOrderForm: React.FC = () => {
                     disabled={isEditing && formData.status !== 'borrador'}
                   />
                 </div>
-                
+
                 <div>
                   <label htmlFor="unit_price" className="block text-sm font-medium text-gray-700 mb-1">
                     Precio Unitario
@@ -629,7 +630,7 @@ const PurchaseOrderForm: React.FC = () => {
                   />
                 </div>
               </div>
-              
+
               <div className="mt-4 flex justify-end">
                 <button
                   type="button"
@@ -642,11 +643,11 @@ const PurchaseOrderForm: React.FC = () => {
                 </button>
               </div>
             </div>
-            
+
             {/* Lista de productos en la orden */}
             <div className="mb-6">
               <h2 className="text-lg font-medium mb-4">Productos en la Orden</h2>
-              
+
               {orderItems.length === 0 ? (
                 <div className="bg-gray-50 dark:bg-gray-800 rounded-md p-8 text-center">
                   <i className="fas fa-shopping-cart text-gray-300 dark:text-gray-600 text-4xl mb-2"></i>
@@ -704,7 +705,7 @@ const PurchaseOrderForm: React.FC = () => {
                           </td>
                         </tr>
                       ))}
-                      
+
                       <tr className="bg-gray-50 dark:bg-gray-700">
                         <td colSpan={3} className="py-3 px-4 text-sm text-right font-medium dark:text-gray-300">
                           Total:
@@ -719,7 +720,7 @@ const PurchaseOrderForm: React.FC = () => {
                 </div>
               )}
             </div>
-            
+
             <div className="mt-6 flex justify-end space-x-3">
               <Link
                 to="/ordenes-compra"
@@ -727,7 +728,7 @@ const PurchaseOrderForm: React.FC = () => {
               >
                 Cancelar
               </Link>
-              
+
               {(!isEditing || formData.status === 'borrador') && (
                 <>
                   <button
@@ -738,7 +739,7 @@ const PurchaseOrderForm: React.FC = () => {
                     <i className="fas fa-save mr-2"></i>
                     Guardar como Borrador
                   </button>
-                  
+
                   <button
                     type="button"
                     onClick={(e) => handleSubmit(e, false)}
@@ -758,4 +759,4 @@ const PurchaseOrderForm: React.FC = () => {
   );
 };
 
-export default PurchaseOrderForm; 
+export default PurchaseOrderForm;

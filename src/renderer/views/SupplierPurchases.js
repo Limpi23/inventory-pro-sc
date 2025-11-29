@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useParams, Link } from 'react-router-dom';
 import { useCurrency } from '../hooks/useCurrency';
+import { getLocalDateISOString } from '../lib/dateUtils';
 const SupplierPurchases = () => {
     const { id } = useParams();
     const currency = useCurrency();
@@ -13,8 +14,8 @@ const SupplierPurchases = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
     const [dateRange, setDateRange] = useState({
-        start: new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0], // Primer día del año actual
-        end: new Date().toISOString().split('T')[0] // Hoy
+        start: `${new Date().getFullYear()}-01-01`, // Primer día del año actual
+        end: getLocalDateISOString() // Hoy
     });
     // Paginación
     const [currentPage, setCurrentPage] = useState(1);

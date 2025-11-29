@@ -1,6 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { useState, useEffect, useRef } from 'react';
 import { supabase, stockMovementService } from '../lib/supabase';
+import { getLocalDateISOString } from '../lib/dateUtils';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useCurrency } from '../hooks/useCurrency';
@@ -24,7 +25,7 @@ const InvoiceForm = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState(null);
-    const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
+    const [invoiceDate, setInvoiceDate] = useState(getLocalDateISOString());
     const [dueDate, setDueDate] = useState('');
     // Estados para descuento global
     const [discountMode, setDiscountMode] = useState('product');

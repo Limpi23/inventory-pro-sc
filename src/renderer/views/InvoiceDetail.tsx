@@ -6,6 +6,7 @@ import { useReactToPrint } from 'react-to-print';
 import useCompanySettings from '../hooks/useCompanySettings';
 import { useCurrency } from '../hooks/useCurrency';
 import { useAuth } from '../lib/auth';
+import { getLocalDateISOString } from '../lib/dateUtils';
 
 interface Invoice {
   id: string;
@@ -73,16 +74,16 @@ const InvoiceDetail: React.FC = () => {
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const shouldAutoGenerateSale = searchParams.get('generar-venta') === '1';
   const attemptedAutoSaleRef = useRef(false);
-  
+
   const letterPrintRef = useRef<HTMLDivElement>(null);
   const rollPrintRef = useRef<HTMLDivElement>(null);
 
   const fetchInvoiceDetails = useCallback(async () => {
     try {
       setLoading(true);
-      
+
       const client = await supabase.getClient();
-      
+
       // Fetch invoice with customer and warehouse data
       const { data: invoiceData, error: invoiceError } = await client
         .from('invoices')
@@ -93,12 +94,12 @@ const InvoiceDetail: React.FC = () => {
         `)
         .eq('id', id)
         .single();
-      
+
       if (invoiceError) throw invoiceError;
-      
+
       if (invoiceData) {
         setInvoice(invoiceData);
-        
+
         // Fetch invoice items with product data
         const { data: itemsData, error: itemsError } = await client
           .from('invoice_items')
@@ -108,16 +109,16 @@ const InvoiceDetail: React.FC = () => {
           `)
           .eq('invoice_id', id)
           .order('id');
-        
+
         if (itemsError) throw itemsError;
-        
+
         if (itemsData) {
           setInvoiceItems(itemsData);
         }
       }
     } catch (err: any) {
       console.error('Error fetching invoice details:', err);
-  setError(`Error al cargar los detalles de la cotización: ${err.message}`);
+      setError(`Error al cargar los detalles de la cotización: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -126,7 +127,7 @@ const InvoiceDetail: React.FC = () => {
   useEffect(() => {
     fetchInvoiceDetails();
   }, [fetchInvoiceDetails]);
-  
+
   const handleCancelInvoice = async () => {
     if (!isAdmin) {
       toast.error('Solo un administrador puede anular una cotización.');
@@ -136,20 +137,20 @@ const InvoiceDetail: React.FC = () => {
     if (!confirm('¿Está seguro que desea anular esta cotización? Esta acción no se puede deshacer.')) {
       return;
     }
-    
+
     try {
       const client = await supabase.getClient();
-      
+
       const { error } = await client
         .from('invoices')
-        .update({ 
+        .update({
           status: 'anulada',
           updated_at: new Date().toISOString()
         })
         .eq('id', id);
-      
+
       if (error) throw error;
-      
+
       // If invoice was previously emitted, reverse stock movements
       if (invoice?.status === 'emitida') {
         // Create reverse stock movements
@@ -163,24 +164,24 @@ const InvoiceDetail: React.FC = () => {
           movement_date: new Date().toISOString(),
           notes: `Anulación de cotización #${invoice.invoice_number}`
         }));
-        
+
         const { error: movementError } = await client
           .from('stock_movements')
           .insert(stockMovements);
-        
+
         if (movementError) {
           console.error('Error registrando movimientos de inventario para anulación:', movementError);
           // No interrumpimos el proceso por errores en los movimientos
         }
       }
-      
-  toast.success('Cotización anulada correctamente');
-      
+
+      toast.success('Cotización anulada correctamente');
+
       // Refresh the invoice details
       fetchInvoiceDetails();
     } catch (err: any) {
-  console.error('Error anulando cotización:', err);
-  toast.error(`Error al anular cotización: ${err.message}`);
+      console.error('Error anulando cotización:', err);
+      toast.error(`Error al anular cotización: ${err.message}`);
     }
   };
 
@@ -236,7 +237,7 @@ const InvoiceDetail: React.FC = () => {
 
       const client = await supabase.getClient();
 
-      const orderDate = new Date().toISOString().split('T')[0];
+      const orderDate = getLocalDateISOString();
       const { data: salesOrder, error: salesOrderError } = await client
         .from('sales_orders')
         .insert({
@@ -343,7 +344,7 @@ const InvoiceDetail: React.FC = () => {
     attemptedAutoSaleRef.current = true;
     handleGenerateSale();
   }, [invoice, invoiceItems, loading, shouldAutoGenerateSale, handleGenerateSale]);
-  
+
 
 
   // Abrir el visor de vista previa
@@ -361,7 +362,7 @@ const InvoiceDetail: React.FC = () => {
       toast.success('Cotización enviada a impresión correctamente');
     },
   });
-  
+
   const formatDate = (dateString?: string) => {
     if (!dateString) return '';
     return new Date(dateString).toLocaleDateString(currency.settings.locale, {
@@ -371,7 +372,7 @@ const InvoiceDetail: React.FC = () => {
     });
   };
 
-  
+
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
       case 'borrador':
@@ -388,7 +389,7 @@ const InvoiceDetail: React.FC = () => {
         return 'bg-gray-100 text-gray-800';
     }
   };
-  
+
   const getStatusText = (status: string) => {
     const statusMap: Record<string, string> = {
       'borrador': 'Borrador',
@@ -397,10 +398,10 @@ const InvoiceDetail: React.FC = () => {
       'vencida': 'Vencida',
       'anulada': 'Anulada'
     };
-    
+
     return statusMap[status] || 'Desconocido';
   };
-  
+
   if (loading) {
     return (
       <div className="flex justify-center items-center py-20">
@@ -408,7 +409,7 @@ const InvoiceDetail: React.FC = () => {
       </div>
     );
   }
-  
+
   if (error) {
     return (
       <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4">
@@ -419,7 +420,7 @@ const InvoiceDetail: React.FC = () => {
       </div>
     );
   }
-  
+
   if (!invoice) {
     return (
       <div className="text-center py-10">
@@ -430,7 +431,7 @@ const InvoiceDetail: React.FC = () => {
       </div>
     );
   }
-  
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between">
@@ -446,7 +447,7 @@ const InvoiceDetail: React.FC = () => {
             </span>
           </h1>
         </div>
-        
+
         <div className="mt-4 md:mt-0 flex flex-wrap gap-2 justify-end">
           {isAdmin && invoice.status !== 'anulada' && invoice.status !== 'pagada' && !invoice.sales_order_id && (
             <button
@@ -477,7 +478,7 @@ const InvoiceDetail: React.FC = () => {
               Imprimir
             </button>
           )}
-          
+
           {isAdmin && (invoice.status === 'borrador' || invoice.status === 'emitida') && (
             <>
               {invoice.status === 'borrador' && (
@@ -489,7 +490,7 @@ const InvoiceDetail: React.FC = () => {
                   Editar
                 </Link>
               )}
-              
+
               <button
                 onClick={handleCancelInvoice}
                 className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 flex items-center"
@@ -501,8 +502,8 @@ const InvoiceDetail: React.FC = () => {
           )}
         </div>
       </div>
-      
-  {/* Detalles de cotización */}
+
+      {/* Detalles de cotización */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
           <div>
@@ -546,7 +547,7 @@ const InvoiceDetail: React.FC = () => {
               </div>
             </div>
           </div>
-          
+
           <div>
             <h2 className="text-lg font-medium mb-4 border-b pb-2">Información de Cliente</h2>
             <div className="space-y-3">
@@ -581,7 +582,7 @@ const InvoiceDetail: React.FC = () => {
             </div>
           </div>
         </div>
-        
+
         <div className="p-6 border-t">
           <h2 className="text-lg font-medium mb-4">Productos</h2>
           <div className="overflow-x-auto">
@@ -621,7 +622,7 @@ const InvoiceDetail: React.FC = () => {
             </table>
           </div>
         </div>
-        
+
         <div className="p-6 border-t flex justify-end">
           <div className="w-full md:w-1/3 space-y-2">
             <div className="flex justify-between">
@@ -642,7 +643,7 @@ const InvoiceDetail: React.FC = () => {
             </div>
           </div>
         </div>
-        
+
         {invoice.notes && (
           <div className="p-6 border-t">
             <h2 className="text-lg font-medium mb-2">Notas</h2>
@@ -650,7 +651,7 @@ const InvoiceDetail: React.FC = () => {
           </div>
         )}
       </div>
-      
+
       {/* Modal de selección de formato de impresión */}
       {showPrintDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -678,7 +679,7 @@ const InvoiceDetail: React.FC = () => {
                 <span>Formato Rollo</span>
               </label>
             </div>
-            
+
             <div className="flex justify-end mt-6 space-x-2">
               <button
                 onClick={() => setShowPrintDialog(false)}
@@ -697,7 +698,7 @@ const InvoiceDetail: React.FC = () => {
           </div>
         </div>
       )}
-      
+
       {/* Modal de Vista Previa - Visor completo */}
       {showPreviewModal && (
         <div className="fixed inset-0 bg-black bg-opacity-90 flex flex-col z-50">
@@ -710,22 +711,20 @@ const InvoiceDetail: React.FC = () => {
               <div className="flex space-x-2">
                 <button
                   onClick={() => setPrintFormat('letter')}
-                  className={`px-3 py-1 rounded text-sm ${
-                    printFormat === 'letter'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
+                  className={`px-3 py-1 rounded text-sm ${printFormat === 'letter'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
                 >
                   <i className="fas fa-file-alt mr-1"></i>
                   Carta
                 </button>
                 <button
                   onClick={() => setPrintFormat('roll')}
-                  className={`px-3 py-1 rounded text-sm ${
-                    printFormat === 'roll'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
+                  className={`px-3 py-1 rounded text-sm ${printFormat === 'roll'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
                 >
                   <i className="fas fa-receipt mr-1"></i>
                   Rollo
@@ -760,7 +759,7 @@ const InvoiceDetail: React.FC = () => {
                     <h1 className="text-2xl font-bold">COTIZACIÓN</h1>
                     <p className="text-xl">{invoice.invoice_number}</p>
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-6 mb-6">
                     <div>
                       <h2 className="text-lg font-bold mb-2">Información de Empresa</h2>
@@ -771,7 +770,7 @@ const InvoiceDetail: React.FC = () => {
                       {settings.email && <p>{settings.email}</p>}
                       {settings.website && <p>{settings.website}</p>}
                     </div>
-                    
+
                     <div>
                       <h2 className="text-lg font-bold mb-2">Información de Cliente</h2>
                       <p><strong>{invoice.customer.name}</strong></p>
@@ -783,7 +782,7 @@ const InvoiceDetail: React.FC = () => {
                       {invoice.customer.email && <p>Email: {invoice.customer.email}</p>}
                     </div>
                   </div>
-                  
+
                   <div className="mb-6">
                     <h2 className="text-lg font-bold mb-2">Detalles de Cotización</h2>
                     <div className="grid grid-cols-2 gap-6">
@@ -798,7 +797,7 @@ const InvoiceDetail: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                  
+
                   <table className="w-full border-collapse border border-black mb-6">
                     <thead>
                       <tr className="bg-gray-200">
@@ -822,7 +821,7 @@ const InvoiceDetail: React.FC = () => {
                       ))}
                     </tbody>
                   </table>
-                  
+
                   <div className="flex justify-end mb-6">
                     <div className="w-64 space-y-2">
                       <div className="flex justify-between">
@@ -845,14 +844,14 @@ const InvoiceDetail: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                  
+
                   {invoice.notes && (
                     <div className="mb-6">
                       <h3 className="font-bold mb-2">Notas:</h3>
                       <p className="text-sm whitespace-pre-line">{invoice.notes}</p>
                     </div>
                   )}
-                  
+
                   <div className="text-center text-sm mt-10 text-gray-600">
                     <p>Gracias por su compra</p>
                     <p>{settings.footerText}</p>
@@ -870,7 +869,7 @@ const InvoiceDetail: React.FC = () => {
                     <h2 className="font-bold">COTIZACIÓN {invoice.invoice_number}</h2>
                     <p className="text-xs">Fecha: {formatDate(invoice.invoice_date)}</p>
                   </div>
-                  
+
                   <div className="mb-3 text-xs">
                     <p><strong>Cliente:</strong> {invoice.customer.name}</p>
                     {invoice.customer.identification_type && invoice.customer.identification_number && (
@@ -878,9 +877,9 @@ const InvoiceDetail: React.FC = () => {
                     )}
                     {invoice.customer.phone && <p><strong>Tel:</strong> {invoice.customer.phone}</p>}
                   </div>
-                  
+
                   <div className="border-t border-dashed border-black my-2"></div>
-                  
+
                   <div className="mb-3">
                     {invoiceItems.map((item) => (
                       <div key={item.id} className="mb-2 text-xs">
@@ -892,9 +891,9 @@ const InvoiceDetail: React.FC = () => {
                       </div>
                     ))}
                   </div>
-                  
+
                   <div className="border-t border-dashed border-black my-2"></div>
-                  
+
                   <div className="text-xs space-y-1">
                     <div className="flex justify-between">
                       <span>Subtotal:</span>
@@ -915,7 +914,7 @@ const InvoiceDetail: React.FC = () => {
                       <span>{currency.format(invoice.total_amount)}</span>
                     </div>
                   </div>
-                  
+
                   {invoice.notes && (
                     <>
                       <div className="border-t border-dashed border-black my-2"></div>
@@ -925,7 +924,7 @@ const InvoiceDetail: React.FC = () => {
                       </div>
                     </>
                   )}
-                  
+
                   <div className="border-t border-dashed border-black my-3"></div>
                   <p className="text-center text-xs">¡Gracias por su preferencia!</p>
                 </div>
@@ -943,7 +942,7 @@ const InvoiceDetail: React.FC = () => {
             <h1 className="text-2xl font-bold">COTIZACIÓN</h1>
             <p className="text-xl">{invoice.invoice_number}</p>
           </div>
-          
+
           <div className="grid grid-cols-2 gap-6 mb-6">
             <div>
               <h2 className="text-lg font-bold mb-2">Información de Empresa</h2>
@@ -954,7 +953,7 @@ const InvoiceDetail: React.FC = () => {
               {settings.email && <p>{settings.email}</p>}
               {settings.website && <p>{settings.website}</p>}
             </div>
-            
+
             <div>
               <h2 className="text-lg font-bold mb-2">Información de Cliente</h2>
               <p><strong>{invoice.customer.name}</strong></p>
@@ -966,7 +965,7 @@ const InvoiceDetail: React.FC = () => {
               {invoice.customer.email && <p>Email: {invoice.customer.email}</p>}
             </div>
           </div>
-          
+
           <div className="mb-6">
             <h2 className="text-lg font-bold mb-2">Detalles de Cotización</h2>
             <div className="grid grid-cols-2 gap-6">
@@ -982,7 +981,7 @@ const InvoiceDetail: React.FC = () => {
               </div>
             </div>
           </div>
-          
+
           <div className="mb-6">
             <h2 className="text-lg font-bold mb-2">Productos</h2>
             <table className="w-full border-collapse">
@@ -1017,7 +1016,7 @@ const InvoiceDetail: React.FC = () => {
               </tbody>
             </table>
           </div>
-          
+
           <div className="flex justify-end mb-6">
             <div className="w-1/3">
               <div className="flex justify-between py-1">
@@ -1038,14 +1037,14 @@ const InvoiceDetail: React.FC = () => {
               </div>
             </div>
           </div>
-          
+
           {invoice.notes && (
             <div className="mb-6">
               <h2 className="text-lg font-bold mb-2">Notas</h2>
               <p className="whitespace-pre-line">{invoice.notes}</p>
             </div>
           )}
-          
+
           <div className="text-center text-sm mt-10">
             <p>Gracias por su compra</p>
             <p>Este documento tiene validez como comprobante fiscal de acuerdo a las normas vigentes.</p>
@@ -1053,7 +1052,7 @@ const InvoiceDetail: React.FC = () => {
             <p>{new Date().toLocaleDateString(currency.settings.locale)}</p>
           </div>
         </div>
-        
+
         {/* Formato rollo */}
         <div ref={rollPrintRef} className="p-3 bg-white w-[80mm] text-black text-sm">
           <div className="text-center mb-4">
@@ -1066,7 +1065,7 @@ const InvoiceDetail: React.FC = () => {
             <p>Fecha: {formatDate(invoice.invoice_date)}</p>
             {invoice.due_date && <p>Vencimiento: {formatDate(invoice.due_date)}</p>}
           </div>
-          
+
           <div className="mb-4">
             <p><strong>Cliente:</strong> {invoice.customer.name}</p>
             {invoice.customer.identification_type && invoice.customer.identification_number && (
@@ -1074,9 +1073,9 @@ const InvoiceDetail: React.FC = () => {
             )}
             {invoice.customer.phone && <p><strong>Tel:</strong> {invoice.customer.phone}</p>}
           </div>
-          
+
           <hr className="my-2" />
-          
+
           <div className="mb-4">
             <table className="w-full">
               <thead>
@@ -1103,7 +1102,7 @@ const InvoiceDetail: React.FC = () => {
               </tbody>
             </table>
           </div>
-          
+
           <div className="mb-4">
             <div className="flex justify-between py-1">
               <span>Subtotal:</span>
@@ -1125,19 +1124,19 @@ const InvoiceDetail: React.FC = () => {
               <p>Método de pago: {invoice.payment_method ? `${invoice.payment_method.charAt(0).toUpperCase()}${invoice.payment_method.slice(1)}` : 'No especificado'}</p>
             </div>
           </div>
-          
+
           {invoice.notes && (
             <div className="mb-4 text-xs">
               <p className="whitespace-pre-line">{invoice.notes}</p>
             </div>
           )}
-          
+
           <div className="text-center text-xs mb-4">
             <p>*** Gracias por su compra ***</p>
             <p>{settings.footerText}</p>
             <p>{new Date().toLocaleDateString(currency.settings.locale)}</p>
           </div>
-          
+
           <div className="text-center">
             <p>--------------------------------</p>
           </div>

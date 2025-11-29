@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { getLocalDateISOString } from '../lib/dateUtils';
 import Papa from 'papaparse';
 import { useCurrency } from '../hooks/useCurrency';
 
@@ -38,17 +39,21 @@ const Reports: React.FC = () => {
   const currency = useCurrency();
   const [activeReport, setActiveReport] = useState<'sales' | 'purchases'>('sales');
   const [filters, setFilters] = useState<ReportFilter>({
-    startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0],
+    startDate: (() => {
+      const d = new Date();
+      d.setMonth(d.getMonth() - 1);
+      return getLocalDateISOString(d);
+    })(),
+    endDate: getLocalDateISOString(),
   });
-  
+
   const [salesData, setSalesData] = useState<SalesData[]>([]);
   const [purchasesData, setPurchasesData] = useState<PurchaseData[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Estadísticas
   const [stats, setStats] = useState({
     totalAmount: 0,
@@ -76,9 +81,9 @@ const Reports: React.FC = () => {
       const { data, error } = await client.from('warehouses')
         .select('id, name')
         .order('name');
-      
+
       if (error) throw error;
-  setWarehouses((data as any[]) || []);
+      setWarehouses((data as any[]) || []);
     } catch (err: any) {
       console.error('Error cargando almacenes:', err);
       setError('Error cargando almacenes: ' + err.message);
@@ -88,7 +93,7 @@ const Reports: React.FC = () => {
   const fetchSalesReport = async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const client = await supabase.getClient();
       let query = client.from('invoices')
@@ -104,19 +109,19 @@ const Reports: React.FC = () => {
         .gte('invoice_date', filters.startDate)
         .lte('invoice_date', filters.endDate)
         .order('invoice_date', { ascending: false });
-      
+
       if (filters.status) {
         query = query.eq('status', filters.status);
       }
-      
+
       if (filters.warehouse_id) {
         query = query.eq('warehouse_id', filters.warehouse_id);
       }
-      
+
       const { data, error } = await query;
-      
+
       if (error) throw error;
-      
+
       const formattedData = (data || []).map((invoice: any) => ({
         id: invoice.id,
         invoice_number: invoice.invoice_number,
@@ -126,20 +131,20 @@ const Reports: React.FC = () => {
         warehouse_name: invoice.warehouse?.name || 'Desconocido',
         total_amount: invoice.total_amount || 0
       }));
-      
+
       setSalesData(formattedData);
-      
+
       // Calcular estadísticas (EXCLUIR facturas anuladas del total)
       // Filtrar solo facturas válidas (emitida, pagada, borrador) para los cálculos
       const validInvoices = formattedData.filter(item => item.status !== 'anulada');
-      
+
       if (validInvoices.length > 0) {
         const total = validInvoices.reduce((sum, item) => sum + item.total_amount, 0);
         const count = validInvoices.length;
         const avg = total / count;
         const min = Math.min(...validInvoices.map(item => item.total_amount));
         const max = Math.max(...validInvoices.map(item => item.total_amount));
-        
+
         setStats({
           totalAmount: total,
           count,
@@ -156,7 +161,7 @@ const Reports: React.FC = () => {
           maxAmount: 0
         });
       }
-      
+
     } catch (err: any) {
       console.error('Error cargando reporte de ventas:', err);
       setError('Error cargando reporte de ventas: ' + err.message);
@@ -168,7 +173,7 @@ const Reports: React.FC = () => {
   const fetchPurchasesReport = async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const client = await supabase.getClient();
       let query = client.from('purchase_orders')
@@ -183,19 +188,19 @@ const Reports: React.FC = () => {
         .gte('order_date', filters.startDate)
         .lte('order_date', filters.endDate)
         .order('order_date', { ascending: false });
-      
+
       if (filters.status) {
         query = query.eq('status', filters.status);
       }
-      
+
       if (filters.warehouse_id) {
         query = query.eq('warehouse_id', filters.warehouse_id);
       }
-      
+
       const { data, error } = await query;
-      
+
       if (error) throw error;
-      
+
       const formattedData = (data || []).map((order: any) => ({
         id: order.id,
         order_date: order.order_date,
@@ -204,9 +209,9 @@ const Reports: React.FC = () => {
         warehouse_name: order.warehouse?.name || 'Desconocido',
         total_amount: order.total_amount || 0
       }));
-      
+
       setPurchasesData(formattedData);
-      
+
       // Calcular estadísticas
       if (formattedData.length > 0) {
         const total = formattedData.reduce((sum, item) => sum + item.total_amount, 0);
@@ -214,7 +219,7 @@ const Reports: React.FC = () => {
         const avg = total / count;
         const min = Math.min(...formattedData.map(item => item.total_amount));
         const max = Math.max(...formattedData.map(item => item.total_amount));
-        
+
         setStats({
           totalAmount: total,
           count,
@@ -231,7 +236,7 @@ const Reports: React.FC = () => {
           maxAmount: 0
         });
       }
-      
+
     } catch (err: any) {
       console.error('Error cargando reporte de compras:', err);
       setError('Error cargando reporte de compras: ' + err.message);
@@ -251,11 +256,11 @@ const Reports: React.FC = () => {
   const exportToCSV = () => {
     try {
       setIsExporting(true);
-      
+
       const data = activeReport === 'sales' ? salesData : purchasesData;
       let headers: string[];
       let dataRows: string[][];
-      
+
       if (activeReport === 'sales') {
         headers = [
           'Número de Factura',
@@ -265,7 +270,7 @@ const Reports: React.FC = () => {
           'Almacén',
           'Total'
         ];
-        
+
         dataRows = data.map(item => [
           (item as SalesData).invoice_number,
           new Date((item as SalesData).invoice_date).toLocaleDateString(currency.settings.locale),
@@ -283,7 +288,7 @@ const Reports: React.FC = () => {
           'Almacén',
           'Total'
         ];
-        
+
         dataRows = data.map(item => [
           (item as PurchaseData).id,
           new Date((item as PurchaseData).order_date).toLocaleDateString(currency.settings.locale),
@@ -293,41 +298,41 @@ const Reports: React.FC = () => {
           (item as PurchaseData).total_amount.toString()
         ]);
       }
-      
+
       // Añadir estadísticas al final
       dataRows.push([]);
       dataRows.push(['Resumen', '', '', '', '', '']);
       dataRows.push(['Total registros', stats.count.toString(), '', '', '', '']);
-  dataRows.push(['Total monto', stats.totalAmount.toString(), '', '', '', '']);
-  dataRows.push(['Promedio', stats.avgAmount.toString(), '', '', '', '']);
-  dataRows.push(['Mínimo', stats.minAmount.toString(), '', '', '', '']);
-  dataRows.push(['Máximo', stats.maxAmount.toString(), '', '', '', '']);
-      
+      dataRows.push(['Total monto', stats.totalAmount.toString(), '', '', '', '']);
+      dataRows.push(['Promedio', stats.avgAmount.toString(), '', '', '', '']);
+      dataRows.push(['Mínimo', stats.minAmount.toString(), '', '', '', '']);
+      dataRows.push(['Máximo', stats.maxAmount.toString(), '', '', '', '']);
+
       // Usar PapaParse para crear el CSV correctamente con manejo de comillas y caracteres especiales
       const csv = Papa.unparse({
         fields: headers,
         data: dataRows
       });
-      
+
       // Crear un blob y URL para descargar
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
-      
+
       // Crear elemento de enlace para descarga
       const link = document.createElement('a');
-      const date = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
-      const fileName = activeReport === 'sales' 
-        ? `reporte_ventas_${date}.csv` 
+      const date = getLocalDateISOString(); // Formato YYYY-MM-DD
+      const fileName = activeReport === 'sales'
+        ? `reporte_ventas_${date}.csv`
         : `reporte_compras_${date}.csv`;
-      
+
       link.setAttribute('href', url);
       link.setAttribute('download', fileName);
       document.body.appendChild(link);
-      
+
       // Simular clic y eliminar el enlace
       link.click();
       document.body.removeChild(link);
-      
+
     } catch (err: any) {
       console.error('Error al exportar reporte:', err);
       setError('Error al generar el archivo CSV: ' + err.message);
@@ -358,39 +363,37 @@ const Reports: React.FC = () => {
           Exportar a CSV
         </button>
       </div>
-      
+
       {/* Pestañas de tipo de reporte */}
       <div className="border-b border-gray-200 dark:border-gray-700 mb-4">
         <nav className="flex space-x-8" aria-label="Tabs">
           <button
             onClick={() => setActiveReport('sales')}
-            className={`py-3 px-1 border-b-2 font-medium text-sm ${
-              activeReport === 'sales'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-            }`}
+            className={`py-3 px-1 border-b-2 font-medium text-sm ${activeReport === 'sales'
+              ? 'border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
           >
             Reporte de Ventas
           </button>
           <button
             onClick={() => setActiveReport('purchases')}
-            className={`py-3 px-1 border-b-2 font-medium text-sm ${
-              activeReport === 'purchases'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-            }`}
+            className={`py-3 px-1 border-b-2 font-medium text-sm ${activeReport === 'purchases'
+              ? 'border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
           >
             Reporte de Compras
           </button>
         </nav>
       </div>
-      
+
       {error && (
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded-md">
           <p>{error}</p>
         </div>
       )}
-      
+
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow mb-6">
         <h2 className="text-lg font-semibold mb-4 dark:text-gray-200">Filtros</h2>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -407,7 +410,7 @@ const Reports: React.FC = () => {
               className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
-          
+
           <div>
             <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Fecha Fin
@@ -421,7 +424,7 @@ const Reports: React.FC = () => {
               className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
-          
+
           <div>
             <label htmlFor="status" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Estado
@@ -452,7 +455,7 @@ const Reports: React.FC = () => {
               )}
             </select>
           </div>
-          
+
           <div>
             <label htmlFor="warehouse_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Almacén
@@ -474,7 +477,7 @@ const Reports: React.FC = () => {
           </div>
         </div>
       </div>
-      
+
       {/* Estadísticas */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
         <div className="bg-blue-50 dark:bg-blue-900 p-4 rounded-lg shadow">
@@ -498,7 +501,7 @@ const Reports: React.FC = () => {
           <div className="text-2xl font-bold text-red-700 dark:text-red-200">{formatCurrency(stats.maxAmount)}</div>
         </div>
       </div>
-      
+
       {isLoading ? (
         <div className="flex justify-center items-center py-20">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
@@ -566,10 +569,10 @@ const Reports: React.FC = () => {
                       </td>
                       <td className="py-3 px-4">
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                          ${invoice.status === 'emitida' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' : 
-                          invoice.status === 'pagada' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 
-                          invoice.status === 'anulada' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' : 
-                          'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'}`}
+                            ${invoice.status === 'emitida' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
+                            invoice.status === 'pagada' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                              invoice.status === 'anulada' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
+                                'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'}`}
                         >
                           {invoice.status}
                         </span>
@@ -604,11 +607,11 @@ const Reports: React.FC = () => {
                       </td>
                       <td className="py-3 px-4">
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                          ${order.status === 'enviada' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' : 
-                          order.status === 'completada' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 
-                          order.status === 'cancelada' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' : 
-                          order.status === 'recibida_parcialmente' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' : 
-                          'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'}`}
+                            ${order.status === 'enviada' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
+                            order.status === 'completada' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                              order.status === 'cancelada' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
+                                order.status === 'recibida_parcialmente' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
+                                  'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'}`}
                         >
                           {order.status}
                         </span>
@@ -631,4 +634,4 @@ const Reports: React.FC = () => {
   );
 };
 
-export default Reports; 
+export default Reports;

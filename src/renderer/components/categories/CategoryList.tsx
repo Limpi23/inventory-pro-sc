@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import CategoryModal from "./CategoryModal";
 import { toast } from "react-hot-toast";
+import { getLocalDateISOString } from "../../lib/dateUtils";
 
 export default function CategoryList() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -33,7 +34,7 @@ export default function CategoryList() {
       const data = await categoriesService.getAll();
       setCategories(data || []);
     } catch (error) {
-      
+
       toast.error("Error al cargar categorías");
     } finally {
       setIsLoading(false);
@@ -52,7 +53,7 @@ export default function CategoryList() {
         fetchCategories();
         toast.success("Categoría eliminada correctamente");
       } catch (error) {
-        
+
         toast.error("Error al eliminar categoría");
       }
     }
@@ -94,23 +95,23 @@ export default function CategoryList() {
 
     try {
       setIsImporting(true);
-      
+
       // Importar las categorías desde Excel
       const result = await categoriesService.importFromExcel(file);
-      
+
       if (result.success > 0) {
         toast.success(`Se importaron ${result.success} categorías correctamente`);
         fetchCategories(); // Actualizar la lista de categorías
       }
-      
+
       if (result.errors > 0) {
         toast.error(`No se pudieron importar ${result.errors} categorías`);
       }
-      
+
       if (result.messages && result.messages.length > 0) {
         console.log('Mensajes de importación:', result.messages);
       }
-      
+
     } catch (error: any) {
       console.error('Error al importar:', error);
       toast.error(error.message || "Error al importar categorías");
@@ -127,19 +128,19 @@ export default function CategoryList() {
     try {
       setIsExporting(true);
       const blob = await categoriesService.exportToExcel();
-      
+
       // Crear un enlace para descargar el archivo y hacer clic en él
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `categorias_${new Date().toISOString().split('T')[0]}.xlsx`);
+      link.setAttribute('download', `categorias_${getLocalDateISOString()}.xlsx`);
       document.body.appendChild(link);
       link.click();
-      
+
       // Limpiar
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      
+
       toast.success("Categorías exportadas correctamente");
     } catch (error) {
       console.error('Error al exportar:', error);
@@ -161,15 +162,15 @@ export default function CategoryList() {
             accept=".xlsx,.xls"
             className="hidden"
           />
-          <Button 
-            onClick={handleImportClick} 
+          <Button
+            onClick={handleImportClick}
             variant="outline"
             disabled={isImporting}
           >
             {isImporting ? "Importando..." : "Importar Excel"}
           </Button>
-          <Button 
-            onClick={handleExport} 
+          <Button
+            onClick={handleExport}
             variant="outline"
             disabled={isExporting || categories.length === 0}
           >

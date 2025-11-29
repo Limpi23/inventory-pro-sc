@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import CategoryModal from "./CategoryModal";
 import { toast } from "react-hot-toast";
+import { getLocalDateISOString } from "../../lib/dateUtils";
 export default function CategoryList() {
     const [categories, setCategories] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -113,7 +114,7 @@ export default function CategoryList() {
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `categorias_${new Date().toISOString().split('T')[0]}.xlsx`);
+            link.setAttribute('download', `categorias_${getLocalDateISOString()}.xlsx`);
             document.body.appendChild(link);
             link.click();
             // Limpiar

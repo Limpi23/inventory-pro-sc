@@ -7,6 +7,7 @@ import { toast } from 'react-hot-toast';
 import { useAuth } from '../lib/auth';
 import { Button } from '../components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, } from '../components/ui/dropdown-menu';
+import { getLocalDateISOString } from '../lib/dateUtils';
 const PurchaseOrders = () => {
     const [orders, setOrders] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -14,8 +15,12 @@ const PurchaseOrders = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [dateRange, setDateRange] = useState({
-        start: new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString().split('T')[0], // Últimos 3 meses
-        end: new Date().toISOString().split('T')[0] // Hoy
+        start: (() => {
+            const d = new Date();
+            d.setMonth(d.getMonth() - 3);
+            return getLocalDateISOString(d);
+        })(),
+        end: getLocalDateISOString()
     });
     const currency = useCurrency();
     const { hasPermission, user } = useAuth();
@@ -103,8 +108,12 @@ const PurchaseOrders = () => {
         setSearchTerm('');
         setStatusFilter('');
         setDateRange({
-            start: new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString().split('T')[0],
-            end: new Date().toISOString().split('T')[0]
+            start: (() => {
+                const d = new Date();
+                d.setMonth(d.getMonth() - 3);
+                return getLocalDateISOString(d);
+            })(),
+            end: getLocalDateISOString()
         });
         setCurrentPage(1);
     };
@@ -301,8 +310,8 @@ const PurchaseOrders = () => {
                                             const totalOrdered = orderItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
                                             const totalReceived = orderItems.reduce((sum, item) => sum + (item.received_quantity || 0), 0);
                                             const totalPending = Math.max(totalOrdered - totalReceived, 0);
-                                            return (_jsxs("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-4", children: [_jsxs("div", { className: "bg-gray-50 rounded-md p-4", children: [_jsx("p", { className: "text-xs uppercase text-gray-500", children: "Total ordenado" }), _jsx("p", { className: "text-lg font-semibold", children: totalOrdered })] }), _jsxs("div", { className: "bg-green-50 rounded-md p-4", children: [_jsx("p", { className: "text-xs uppercase text-green-600", children: "Total recibido" }), _jsx("p", { className: "text-lg font-semibold text-green-700", children: totalReceived })] }), _jsxs("div", { className: "bg-yellow-50 rounded-md p-4", children: [_jsx("p", { className: "text-xs uppercase text-yellow-600", children: "Pendiente por recibir" }), _jsx("p", { className: "text-lg font-semibold text-yellow-700", children: totalPending })] })] }));
-                                        })()) : (_jsx("p", { className: "text-sm text-gray-600", children: "No hay productos asociados a esta orden." }))] }), _jsxs("div", { className: "bg-white rounded-lg border shadow-sm", children: [_jsx("div", { className: "p-4 border-b", children: _jsx("h3", { className: "font-medium text-gray-700", children: "Detalle de productos" }) }), _jsx("div", { className: "overflow-x-auto", children: _jsxs("table", { className: "min-w-full divide-y divide-gray-200", children: [_jsx("thead", { className: "bg-gray-50", children: _jsxs("tr", { children: [_jsx("th", { className: "px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase", children: "Producto" }), _jsx("th", { className: "px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase", children: "Cantidad" }), _jsx("th", { className: "px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase", children: "Recibido" }), _jsx("th", { className: "px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase", children: "Pendiente" }), _jsx("th", { className: "px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase", children: "Total" })] }) }), _jsx("tbody", { className: "divide-y divide-gray-200", children: orderItems.length === 0 ? (_jsx("tr", { children: _jsx("td", { colSpan: 5, className: "px-4 py-6 text-sm text-center text-gray-500", children: "No se encontraron productos para esta orden." }) })) : (orderItems.map((item) => {
+                                            return (_jsxs("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-4", children: [_jsxs("div", { className: "bg-gray-50 rounded-md p-4", children: [_jsx("p", { className: "text-xs uppercase text-gray-500", children: "Total ordenado" }), _jsx("p", { className: "text-lg font-semibold", children: totalOrdered })] }), _jsxs("div", { className: "bg-green-50 rounded-md p-4", children: [_jsx("p", { className: "text-xs uppercase text-green-600", children: "Recibido" }), _jsx("p", { className: "text-lg font-semibold text-green-700", children: totalReceived })] }), _jsxs("div", { className: "bg-yellow-50 rounded-md p-4", children: [_jsx("p", { className: "text-xs uppercase text-yellow-600", children: "Pendiente" }), _jsx("p", { className: "text-lg font-semibold text-yellow-700", children: totalPending })] })] }));
+                                        })()) : (_jsx("p", { className: "text-sm text-gray-500", children: "No hay items en esta orden." }))] }), _jsxs("div", { className: "bg-white rounded-lg border shadow-sm overflow-hidden", children: [_jsx("div", { className: "p-4 border-b bg-gray-50", children: _jsx("h3", { className: "font-medium text-gray-700", children: "Detalle de productos" }) }), _jsx("div", { className: "overflow-x-auto", children: _jsxs("table", { className: "min-w-full divide-y divide-gray-200", children: [_jsx("thead", { className: "bg-gray-50", children: _jsxs("tr", { children: [_jsx("th", { className: "px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase", children: "Producto" }), _jsx("th", { className: "px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase", children: "Cantidad" }), _jsx("th", { className: "px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase", children: "Recibido" }), _jsx("th", { className: "px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase", children: "Pendiente" }), _jsx("th", { className: "px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase", children: "Total" })] }) }), _jsx("tbody", { className: "divide-y divide-gray-200", children: orderItems.length === 0 ? (_jsx("tr", { children: _jsx("td", { colSpan: 5, className: "px-4 py-6 text-sm text-center text-gray-500", children: "No se encontraron productos para esta orden." }) })) : (orderItems.map((item) => {
                                                             const received = item.received_quantity || 0;
                                                             const pending = Math.max((item.quantity || 0) - received, 0);
                                                             return (_jsxs("tr", { children: [_jsxs("td", { className: "px-4 py-3", children: [_jsx("div", { className: "font-medium text-gray-900", children: item.product?.name || 'Producto sin nombre' }), item.product?.sku && (_jsxs("div", { className: "text-xs text-gray-500", children: ["SKU: ", item.product.sku] }))] }), _jsx("td", { className: "px-4 py-3 text-right text-sm", children: item.quantity }), _jsx("td", { className: "px-4 py-3 text-right text-sm text-green-700", children: received }), _jsx("td", { className: `px-4 py-3 text-right text-sm ${pending === 0 ? 'text-gray-500' : 'text-yellow-600'}`, children: pending }), _jsx("td", { className: "px-4 py-3 text-right text-sm font-medium", children: formatCurrency(item.total_price) })] }, item.id));

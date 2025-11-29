@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../components/ui/dropdown-menu';
+import { getLocalDateISOString } from '../lib/dateUtils';
 
 interface PurchaseOrder {
   id: string;
@@ -63,9 +64,13 @@ const PurchaseOrders: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
-  const [dateRange, setDateRange] = useState<{start: string, end: string}>({
-    start: new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString().split('T')[0], // Últimos 3 meses
-    end: new Date().toISOString().split('T')[0] // Hoy
+  const [dateRange, setDateRange] = useState<{ start: string, end: string }>({
+    start: (() => {
+      const d = new Date();
+      d.setMonth(d.getMonth() - 3);
+      return getLocalDateISOString(d);
+    })(),
+    end: getLocalDateISOString()
   });
   const currency = useCurrency();
   const { hasPermission, user } = useAuth();
@@ -76,7 +81,7 @@ const PurchaseOrders: React.FC = () => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [drawerError, setDrawerError] = useState<string | null>(null);
-  
+
   // Paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
@@ -101,7 +106,7 @@ const PurchaseOrders: React.FC = () => {
 
     try {
       setIsLoading(true);
-      
+
       const client = await supabase.getClient();
       let query = client.from('purchase_orders')
         .select(`
@@ -113,15 +118,15 @@ const PurchaseOrders: React.FC = () => {
         .gte('order_date', dateRange.start)
         .lte('order_date', dateRange.end)
         .order('order_date', { ascending: false });
-      
+
       if (statusFilter) {
         query = query.eq('status', statusFilter);
       }
-      
+
       const { data, error } = await query;
-      
+
       if (error) throw error;
-      
+
       const formattedOrders = (data || []).map((order: any) => ({
         id: order.id,
         order_date: order.order_date,
@@ -132,9 +137,9 @@ const PurchaseOrders: React.FC = () => {
         items_count: order.items?.length || 0,
         created_at: order.created_at
       }));
-      
+
       setOrders(formattedOrders);
-      
+
     } catch (err: any) {
       console.error('Error cargando órdenes de compra:', err);
       setError(err.message);
@@ -166,8 +171,12 @@ const PurchaseOrders: React.FC = () => {
     setSearchTerm('');
     setStatusFilter('');
     setDateRange({
-      start: new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString().split('T')[0],
-      end: new Date().toISOString().split('T')[0]
+      start: (() => {
+        const d = new Date();
+        d.setMonth(d.getMonth() - 3);
+        return getLocalDateISOString(d);
+      })(),
+      end: getLocalDateISOString()
     });
     setCurrentPage(1);
   };
@@ -287,7 +296,7 @@ const PurchaseOrders: React.FC = () => {
   };
 
   // Filtrar órdenes por término de búsqueda
-  const filteredOrders = orders.filter(order => 
+  const filteredOrders = orders.filter(order =>
     order.supplier_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     order.warehouse_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     order.id.toLowerCase().includes(searchTerm.toLowerCase())
@@ -318,7 +327,7 @@ const PurchaseOrders: React.FC = () => {
   const getStatusBadge = (status: string) => {
     let colorClass = '';
     let icon = '';
-    
+
     switch (status.toLowerCase()) {
       case 'draft':
       case 'borrador':
@@ -349,7 +358,7 @@ const PurchaseOrders: React.FC = () => {
         colorClass = 'bg-gray-100 text-gray-800';
         icon = 'fas fa-question-circle';
     }
-    
+
     return (
       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colorClass}`}>
         <i className={`${icon} mr-1`}></i>
@@ -381,13 +390,13 @@ const PurchaseOrders: React.FC = () => {
           </Link>
         )}
       </div>
-      
+
       {error && (
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded-md">
           <p>{error}</p>
         </div>
       )}
-      
+
       <div className="bg-white p-6 rounded-lg shadow-md">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div>
@@ -408,7 +417,7 @@ const PurchaseOrders: React.FC = () => {
               />
             </div>
           </div>
-          
+
           <div>
             <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
               Estado
@@ -427,7 +436,7 @@ const PurchaseOrders: React.FC = () => {
               <option value="cancelada">Cancelada</option>
             </select>
           </div>
-          
+
           <div>
             <label htmlFor="start" className="block text-sm font-medium text-gray-700 mb-1">
               Fecha Inicial
@@ -441,7 +450,7 @@ const PurchaseOrders: React.FC = () => {
               className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
-          
+
           <div>
             <label htmlFor="end" className="block text-sm font-medium text-gray-700 mb-1">
               Fecha Final
@@ -456,7 +465,7 @@ const PurchaseOrders: React.FC = () => {
             />
           </div>
         </div>
-        
+
         <div className="mb-4">
           <button
             onClick={clearFilters}
@@ -466,7 +475,7 @@ const PurchaseOrders: React.FC = () => {
             Limpiar Filtros
           </button>
         </div>
-        
+
         {isLoading ? (
           <div className="flex justify-center items-center py-20">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
@@ -625,7 +634,7 @@ const PurchaseOrders: React.FC = () => {
                 )}
               </tbody>
             </table>
-            
+
             {/* Paginación */}
             {filteredOrders.length > itemsPerPage && (
               <div className="mt-4 flex items-center justify-between">
@@ -636,15 +645,14 @@ const PurchaseOrders: React.FC = () => {
                   <button
                     onClick={() => paginate(currentPage - 1)}
                     disabled={currentPage === 1}
-                    className={`px-3 py-1 rounded-md text-sm font-medium ${
-                      currentPage === 1
+                    className={`px-3 py-1 rounded-md text-sm font-medium ${currentPage === 1
                         ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                      }`}
                   >
                     <i className="fas fa-chevron-left"></i>
                   </button>
-                  
+
                   {/* Botones de página */}
                   {Array.from({ length: Math.min(5, totalPages) }).map((_, i) => {
                     let pageNumber;
@@ -657,30 +665,28 @@ const PurchaseOrders: React.FC = () => {
                     } else {
                       pageNumber = currentPage - 2 + i;
                     }
-                  
+
                     return (
                       <button
                         key={pageNumber}
                         onClick={() => paginate(pageNumber)}
-                        className={`px-3 py-1 rounded-md text-sm font-medium ${
-                          currentPage === pageNumber
+                        className={`px-3 py-1 rounded-md text-sm font-medium ${currentPage === pageNumber
                             ? 'bg-blue-500 text-white'
                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
+                          }`}
                       >
                         {pageNumber}
                       </button>
                     );
                   })}
-                  
+
                   <button
                     onClick={() => paginate(currentPage + 1)}
                     disabled={currentPage === totalPages}
-                    className={`px-3 py-1 rounded-md text-sm font-medium ${
-                      currentPage === totalPages
+                    className={`px-3 py-1 rounded-md text-sm font-medium ${currentPage === totalPages
                         ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                      }`}
                   >
                     <i className="fas fa-chevron-right"></i>
                   </button>
@@ -800,23 +806,23 @@ const PurchaseOrders: React.FC = () => {
                             <p className="text-lg font-semibold">{totalOrdered}</p>
                           </div>
                           <div className="bg-green-50 rounded-md p-4">
-                            <p className="text-xs uppercase text-green-600">Total recibido</p>
+                            <p className="text-xs uppercase text-green-600">Recibido</p>
                             <p className="text-lg font-semibold text-green-700">{totalReceived}</p>
                           </div>
                           <div className="bg-yellow-50 rounded-md p-4">
-                            <p className="text-xs uppercase text-yellow-600">Pendiente por recibir</p>
+                            <p className="text-xs uppercase text-yellow-600">Pendiente</p>
                             <p className="text-lg font-semibold text-yellow-700">{totalPending}</p>
                           </div>
                         </div>
                       );
                     })()
                   ) : (
-                    <p className="text-sm text-gray-600">No hay productos asociados a esta orden.</p>
+                    <p className="text-sm text-gray-500">No hay items en esta orden.</p>
                   )}
                 </div>
 
-                <div className="bg-white rounded-lg border shadow-sm">
-                  <div className="p-4 border-b">
+                <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+                  <div className="p-4 border-b bg-gray-50">
                     <h3 className="font-medium text-gray-700">Detalle de productos</h3>
                   </div>
                   <div className="overflow-x-auto">
@@ -893,4 +899,4 @@ const PurchaseOrders: React.FC = () => {
   );
 };
 
-export default PurchaseOrders; 
+export default PurchaseOrders;

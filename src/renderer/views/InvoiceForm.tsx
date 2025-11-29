@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase, stockMovementService } from '../lib/supabase';
+import { getLocalDateISOString } from '../lib/dateUtils';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useCurrency } from '../hooks/useCurrency';
@@ -76,7 +77,7 @@ const InvoiceForm: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [invoiceDate, setInvoiceDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [invoiceDate, setInvoiceDate] = useState<string>(getLocalDateISOString());
   const [dueDate, setDueDate] = useState<string>('');
 
   // Estados para descuento global

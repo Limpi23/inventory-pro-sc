@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { getLocalDateISOString } from '../lib/dateUtils';
 import { ReturnInput, ReturnItemInput, Invoice, InvoiceItem } from '../../types';
 import { toast } from 'react-hot-toast';
 import { useCurrency } from '../hooks/useCurrency';
@@ -45,7 +46,7 @@ const ReturnForm: React.FC = () => {
         .order('invoice_date', { ascending: false });
 
       if (error) throw error;
-  setInvoices((data as any[]) || []);
+      setInvoices((data as any[]) || []);
     } catch (error: any) {
       console.error('Error al cargar facturas:', error.message);
       toast.error(`Error al cargar facturas: ${error.message}`);
@@ -66,7 +67,7 @@ const ReturnForm: React.FC = () => {
         .eq('invoice_id', invoiceId);
 
       if (error) throw error;
-  setInvoiceItems((data as any[]) || []);
+      setInvoiceItems((data as any[]) || []);
     } catch (error: any) {
       console.error('Error al cargar items de factura:', error.message);
       toast.error(`Error al cargar items de factura: ${error.message}`);
@@ -83,21 +84,21 @@ const ReturnForm: React.FC = () => {
   const handleQuantityChange = (itemId: string, productId: string, value: string) => {
     const quantity = parseFloat(value);
     const invoiceItem = invoiceItems.find(item => item.id === itemId);
-    
+
     if (!invoiceItem) return;
-    
+
     if (isNaN(quantity) || quantity <= 0) {
       setReturnItems(prevItems => prevItems.filter(item => item.invoice_item_id !== itemId));
       return;
     }
-    
+
     if (quantity > invoiceItem.quantity) {
       toast.error(`No puede devolver más de ${invoiceItem.quantity} unidades`);
       return;
     }
-    
+
     const existingItemIndex = returnItems.findIndex(item => item.invoice_item_id === itemId);
-    
+
     if (existingItemIndex >= 0) {
       const updatedItems = [...returnItems];
       updatedItems[existingItemIndex].quantity = quantity;
@@ -117,7 +118,7 @@ const ReturnForm: React.FC = () => {
 
   const handleItemReasonChange = (itemId: string, value: string) => {
     const existingItemIndex = returnItems.findIndex(item => item.invoice_item_id === itemId);
-    
+
     if (existingItemIndex >= 0) {
       const updatedItems = [...returnItems];
       updatedItems[existingItemIndex].reason = value;
@@ -127,40 +128,40 @@ const ReturnForm: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!selectedInvoice) {
       toast.error('Debe seleccionar una factura');
       return;
     }
-    
+
     if (returnItems.length === 0) {
       toast.error('Debe seleccionar al menos un producto para devolver');
       return;
     }
-    
+
     if (!reason.trim()) {
       toast.error('Debe ingresar el motivo general de la devolución');
       return;
     }
-    
+
     try {
       setSubmitting(true);
-      
+
       // Calcular el monto total de la devolución
       const totalAmount = returnItems.reduce((sum, item) => {
         const invoiceItem = invoiceItems.find(i => i.id === item.invoice_item_id);
         return sum + (invoiceItem ? (invoiceItem.unit_price ?? 0) * item.quantity : 0);
       }, 0);
-      
+
       // Crear la devolución
       const returnData: ReturnInput = {
         invoice_id: selectedInvoice.id,
-        return_date: new Date().toISOString().split('T')[0],
+        return_date: getLocalDateISOString(),
         reason: reason,
         notes: notes || undefined,
         items: returnItems
       };
-      
+
       // Insertar la devolución en la base de datos
       const client = await supabase.getClient();
       const { data: returnRecord, error: returnError } = await client.from('returns')
@@ -174,13 +175,13 @@ const ReturnForm: React.FC = () => {
         }])
         .select('id')
         .single();
-      
+
       if (returnError) throw returnError;
-      
+
       if (!returnRecord?.id) {
         throw new Error('No se pudo crear la devolución');
       }
-      
+
       // Insertar los items de la devolución
       const returnItemsData = returnItems.map(item => {
         const invoiceItem = invoiceItems.find(i => i.id === item.invoice_item_id);
@@ -194,15 +195,15 @@ const ReturnForm: React.FC = () => {
           reason: item.reason
         };
       });
-      
+
       const { error: itemsError } = await client.from('return_items')
         .insert(returnItemsData);
-      
+
       if (itemsError) throw itemsError;
-      
+
       toast.success('Devolución registrada correctamente');
       navigate('/ventas/devoluciones');
-      
+
     } catch (error: any) {
       console.error('Error al crear devolución:', error.message);
       toast.error(`Error al crear devolución: ${error.message}`);
@@ -247,7 +248,7 @@ const ReturnForm: React.FC = () => {
             {/* Selección de Factura */}
             <div className="mb-6">
               <h2 className="text-lg font-medium mb-4">Seleccionar Factura</h2>
-              
+
               {!selectedInvoice ? (
                 <div className="space-y-4">
                   <div className="relative">
@@ -260,7 +261,7 @@ const ReturnForm: React.FC = () => {
                     />
                     <i className="fas fa-search absolute left-3 top-3 text-gray-400"></i>
                   </div>
-                  
+
                   {loading ? (
                     <div className="flex justify-center py-4">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
@@ -279,8 +280,8 @@ const ReturnForm: React.FC = () => {
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                           {invoices
-                            .filter(invoice => 
-                              searchTerm === '' || 
+                            .filter(invoice =>
+                              searchTerm === '' ||
                               invoice.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                               invoice.customer?.name.toLowerCase().includes(searchTerm.toLowerCase())
                             )
@@ -310,18 +311,18 @@ const ReturnForm: React.FC = () => {
                                 </td>
                               </tr>
                             ))}
-                            
-                          {invoices.filter(invoice => 
-                            searchTerm === '' || 
+
+                          {invoices.filter(invoice =>
+                            searchTerm === '' ||
                             invoice.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             invoice.customer?.name.toLowerCase().includes(searchTerm.toLowerCase())
                           ).length === 0 && (
-                            <tr>
-                              <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
-                                No se encontraron facturas que coincidan con la búsqueda
-                              </td>
-                            </tr>
-                          )}
+                              <tr>
+                                <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                                  No se encontraron facturas que coincidan con la búsqueda
+                                </td>
+                              </tr>
+                            )}
                         </tbody>
                       </table>
                     </div>
@@ -347,7 +348,7 @@ const ReturnForm: React.FC = () => {
                 </div>
               )}
             </div>
-            
+
             {/* Datos de la devolución */}
             {selectedInvoice && (
               <div className="space-y-6">
@@ -362,7 +363,7 @@ const ReturnForm: React.FC = () => {
                     required
                   />
                 </div>
-                
+
                 <div>
                   <h2 className="text-lg font-medium mb-4">Notas Adicionales (Opcional)</h2>
                   <textarea
@@ -373,7 +374,7 @@ const ReturnForm: React.FC = () => {
                     onChange={(e) => setNotes(e.target.value)}
                   />
                 </div>
-                
+
                 <div>
                   <h2 className="text-lg font-medium mb-4">Productos a Devolver</h2>
                   {loading ? (
@@ -440,7 +441,7 @@ const ReturnForm: React.FC = () => {
                     </div>
                   )}
                 </div>
-                
+
                 {/* Resumen de la devolución */}
                 {returnItems.length > 0 && (
                   <div className="bg-gray-50 p-4 rounded-md">
@@ -453,7 +454,7 @@ const ReturnForm: React.FC = () => {
                     </div>
                   </div>
                 )}
-                
+
                 <div className="flex justify-end space-x-4 mt-6">
                   <Link
                     to="/ventas/devoluciones"
