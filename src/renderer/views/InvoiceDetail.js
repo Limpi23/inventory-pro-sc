@@ -7,7 +7,7 @@ import { useReactToPrint } from 'react-to-print';
 import useCompanySettings from '../hooks/useCompanySettings';
 import { useCurrency } from '../hooks/useCurrency';
 import { useAuth } from '../lib/auth';
-import { getLocalDateISOString } from '../lib/dateUtils';
+import { getLocalDateISOString, formatDateString } from '../lib/dateUtils';
 const InvoiceDetail = () => {
     const { id } = useParams();
     const [invoice, setInvoice] = useState(null);
@@ -286,11 +286,7 @@ const InvoiceDetail = () => {
     const formatDate = (dateString) => {
         if (!dateString)
             return '';
-        return new Date(dateString).toLocaleDateString(currency.settings.locale, {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        });
+        return formatDateString(dateString, currency.settings.locale);
     };
     const getStatusBadgeClass = (status) => {
         switch (status) {

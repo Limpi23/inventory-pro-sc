@@ -892,14 +892,18 @@ const InvoiceForm: React.FC = () => {
         toast.success(`Factura ${status === 'borrador' ? 'guardada como borrador' : 'emitida'} correctamente`);
       } else {
         // Crear nueva cotización
+        // Asegurar que las fechas se guarden correctamente sin conversión de zona horaria
+        const invoiceDateToSave = invoiceDate || new Date().toISOString().split('T')[0];
+        const dueDateToSave = dueDate || null;
+        
         const { data: invoiceData, error: invoiceError } = await client
           .from('invoices')
           .insert({
             customer_id: formData.customer_id,
             warehouse_id: formData.warehouse_id,
             invoice_number: formData.invoice_number,
-            invoice_date: invoiceDate,
-            due_date: dueDate || null,
+            invoice_date: invoiceDateToSave,
+            due_date: dueDateToSave,
             status: status,
             payment_method: formData.payment_method,
             subtotal: subtotal,

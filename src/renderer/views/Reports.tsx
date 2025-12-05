@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { getLocalDateISOString } from '../lib/dateUtils';
+import { getLocalDateISOString, formatDateString } from '../lib/dateUtils';
 import Papa from 'papaparse';
 import { useCurrency } from '../hooks/useCurrency';
 
@@ -41,7 +41,7 @@ const Reports: React.FC = () => {
   const [filters, setFilters] = useState<ReportFilter>({
     startDate: (() => {
       const d = new Date();
-      d.setMonth(d.getMonth() - 1);
+      d.setDate(1); // Establecer al día 1 del mes actual
       return getLocalDateISOString(d);
     })(),
     endDate: getLocalDateISOString(),
@@ -53,6 +53,10 @@ const Reports: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
 
   // Estadísticas
   const [stats, setStats] = useState({
@@ -68,6 +72,7 @@ const Reports: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    setCurrentPage(1); // Reset página al cambiar filtros
     if (activeReport === 'sales') {
       fetchSalesReport();
     } else {
@@ -96,6 +101,14 @@ const Reports: React.FC = () => {
 
     try {
       const client = await supabase.getClient();
+      
+      // Agregar día completo para incluir todo el día final
+      const endDatePlusOne = (() => {
+        const d = new Date(filters.endDate);
+        d.setDate(d.getDate() + 1);
+        return d.toISOString().split('T')[0];
+      })();
+
       let query = client.from('invoices')
         .select(`
           id,
@@ -107,7 +120,7 @@ const Reports: React.FC = () => {
           warehouse:warehouses(name)
         `)
         .gte('invoice_date', filters.startDate)
-        .lte('invoice_date', filters.endDate)
+        .lt('invoice_date', endDatePlusOne)
         .order('invoice_date', { ascending: false });
 
       if (filters.status) {
@@ -176,6 +189,14 @@ const Reports: React.FC = () => {
 
     try {
       const client = await supabase.getClient();
+      
+      // Agregar día completo para incluir todo el día final
+      const endDatePlusOne = (() => {
+        const d = new Date(filters.endDate);
+        d.setDate(d.getDate() + 1);
+        return d.toISOString().split('T')[0];
+      })();
+
       let query = client.from('purchase_orders')
         .select(`
           id,
@@ -186,7 +207,7 @@ const Reports: React.FC = () => {
           warehouse:warehouses(name)
         `)
         .gte('order_date', filters.startDate)
-        .lte('order_date', filters.endDate)
+        .lt('order_date', endDatePlusOne)
         .order('order_date', { ascending: false });
 
       if (filters.status) {
@@ -273,7 +294,7 @@ const Reports: React.FC = () => {
 
         dataRows = data.map(item => [
           (item as SalesData).invoice_number,
-          new Date((item as SalesData).invoice_date).toLocaleDateString(currency.settings.locale),
+          formatDateString((item as SalesData).invoice_date, currency.settings.locale),
           (item as SalesData).customer_name,
           (item as SalesData).status,
           (item as SalesData).warehouse_name,
@@ -291,7 +312,7 @@ const Reports: React.FC = () => {
 
         dataRows = data.map(item => [
           (item as PurchaseData).id,
-          new Date((item as PurchaseData).order_date).toLocaleDateString(currency.settings.locale),
+          formatDateString((item as PurchaseData).order_date, currency.settings.locale),
           (item as PurchaseData).supplier_name,
           (item as PurchaseData).status,
           (item as PurchaseData).warehouse_name,
@@ -344,6 +365,37 @@ const Reports: React.FC = () => {
   // Formatear moneda
   const formatCurrency = (amount: number) => currency.format(amount);
 
+  // Lógica de paginación
+  const currentData = activeReport === 'sales' ? salesData : purchasesData;
+  const totalPages = Math.ceil(currentData.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedData = currentData.slice(startIndex, endIndex);
+
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  const getPageNumbers = (): number[] => {
+    const pages: number[] = [];
+    const maxVisiblePages = 5;
+    
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+    
+    return pages;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -395,7 +447,23 @@ const Reports: React.FC = () => {
       )}
 
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow mb-6">
-        <h2 className="text-lg font-semibold mb-4 dark:text-gray-200">Filtros</h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold dark:text-gray-200">Filtros</h2>
+          <button
+            onClick={() => {
+              const today = getLocalDateISOString();
+              setFilters(prev => ({
+                ...prev,
+                startDate: today,
+                endDate: today
+              }));
+            }}
+            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 flex items-center text-sm"
+          >
+            <i className="fas fa-calendar-day mr-2"></i>
+            Reporte Diario
+          </button>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -476,6 +544,18 @@ const Reports: React.FC = () => {
             </select>
           </div>
         </div>
+        
+        {/* Indicador de Reporte Diario */}
+        {filters.startDate === filters.endDate && filters.startDate === getLocalDateISOString() && (
+          <div className="mt-4 bg-blue-50 dark:bg-blue-900 border-l-4 border-blue-500 p-3 rounded-md">
+            <div className="flex items-center">
+              <i className="fas fa-info-circle text-blue-500 dark:text-blue-300 mr-2"></i>
+              <p className="text-sm text-blue-700 dark:text-blue-200 font-medium">
+                Mostrando reporte del día: {formatDateString(filters.startDate, currency.settings.locale)}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Estadísticas */}
@@ -507,62 +587,63 @@ const Reports: React.FC = () => {
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-700">
-              <tr>
+        <>
+          <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg shadow">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  {activeReport === 'sales' ? (
+                    <>
+                      <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
+                        Factura
+                      </th>
+                      <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
+                        Fecha
+                      </th>
+                      <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
+                        Cliente
+                      </th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
+                        Orden #
+                      </th>
+                      <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
+                        Fecha
+                      </th>
+                      <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
+                        Proveedor
+                      </th>
+                    </>
+                  )}
+                  <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
+                    Estado
+                  </th>
+                  <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
+                    Almacén
+                  </th>
+                  <th className="text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
+                    Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {activeReport === 'sales' ? (
-                  <>
-                    <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
-                      Factura
-                    </th>
-                    <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
-                      Fecha
-                    </th>
-                    <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
-                      Cliente
-                    </th>
-                  </>
-                ) : (
-                  <>
-                    <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
-                      Orden #
-                    </th>
-                    <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
-                      Fecha
-                    </th>
-                    <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
-                      Proveedor
-                    </th>
-                  </>
-                )}
-                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
-                  Estado
-                </th>
-                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
-                  Almacén
-                </th>
-                <th className="text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4">
-                  Total
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {activeReport === 'sales' ? (
-                salesData.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
-                      No hay datos para el período seleccionado
-                    </td>
-                  </tr>
-                ) : (
-                  salesData.map(invoice => (
+                  paginatedData.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                        No hay datos para el período seleccionado
+                      </td>
+                    </tr>
+                  ) : (
+                    (paginatedData as SalesData[]).map((invoice) => (
                     <tr key={invoice.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="py-3 px-4 text-sm font-medium text-blue-600 dark:text-blue-400">
                         {invoice.invoice_number}
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-900 dark:text-gray-300">
-                        {new Date(invoice.invoice_date).toLocaleDateString(currency.settings.locale)}
+                        {formatDateString(invoice.invoice_date, currency.settings.locale)}
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-900 dark:text-gray-300">
                         {invoice.customer_name}
@@ -584,23 +665,23 @@ const Reports: React.FC = () => {
                         {formatCurrency(invoice.total_amount)}
                       </td>
                     </tr>
-                  ))
-                )
-              ) : (
-                purchasesData.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
-                      No hay datos para el período seleccionado
-                    </td>
-                  </tr>
+                    ))
+                  )
                 ) : (
-                  purchasesData.map(order => (
+                  paginatedData.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                        No hay datos para el período seleccionado
+                      </td>
+                    </tr>
+                  ) : (
+                    (paginatedData as PurchaseData[]).map((order) => (
                     <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="py-3 px-4 text-sm font-medium text-blue-600 dark:text-blue-400">
                         #{order.id.substring(0, 8)}...
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-900 dark:text-gray-300">
-                        {new Date(order.order_date).toLocaleDateString(currency.settings.locale)}
+                        {formatDateString(order.order_date, currency.settings.locale)}
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-900 dark:text-gray-300">
                         {order.supplier_name}
@@ -623,12 +704,83 @@ const Reports: React.FC = () => {
                         {formatCurrency(order.total_amount)}
                       </td>
                     </tr>
-                  ))
-                )
-              )}
-            </tbody>
-          </table>
-        </div>
+                    ))
+                  )
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Controles de paginación */}
+          {currentData.length > itemsPerPage && (
+            <div className="bg-white dark:bg-gray-800 px-4 py-3 flex items-center justify-between border-t border-gray-200 dark:border-gray-700 sm:px-6 rounded-b-lg shadow">
+              <div className="flex-1 flex justify-between sm:hidden">
+                <button
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Anterior
+                </button>
+                <button
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage >= totalPages}
+                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Siguiente
+                </button>
+              </div>
+              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                    Mostrando{' '}
+                    <span className="font-medium">{startIndex + 1}</span>
+                    {' '}-{' '}
+                    <span className="font-medium">
+                      {Math.min(endIndex, currentData.length)}
+                    </span>
+                    {' '}de{' '}
+                    <span className="font-medium">{currentData.length}</span>
+                    {' '}resultados
+                  </p>
+                </div>
+                <div>
+                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                    <button
+                      onClick={() => goToPage(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <span className="sr-only">Anterior</span>
+                      <i className="fas fa-chevron-left"></i>
+                    </button>
+                    {getPageNumbers().map((page) => (
+                      <button
+                        key={page}
+                        onClick={() => goToPage(page)}
+                        className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                          currentPage === page
+                            ? 'z-10 bg-blue-50 dark:bg-blue-900 border-blue-500 text-blue-600 dark:text-blue-200'
+                            : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => goToPage(currentPage + 1)}
+                      disabled={currentPage >= totalPages}
+                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <span className="sr-only">Siguiente</span>
+                      <i className="fas fa-chevron-right"></i>
+                    </button>
+                  </nav>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import { toast } from 'react-hot-toast';
 import useCompanySettings from '../hooks/useCompanySettings';
 import { useCurrency } from '../hooks/useCurrency';
 import { useAuth } from '../lib/auth';
+import { formatDateString } from '../lib/dateUtils';
 import { Button } from '../components/ui/button';
 import {
   DropdownMenu,
@@ -226,8 +227,7 @@ const Invoices: React.FC = () => {
   // Formateo centralizado
   const formatCurrency = (amount: number) => currency.format(amount);
   const formatDate = (dateString: string) => {
-    const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' };
-    return new Date(dateString).toLocaleDateString(currency.settings.locale, options);
+    return formatDateString(dateString, currency.settings.locale);
   };
 
   // Renderizar el badge de estado
