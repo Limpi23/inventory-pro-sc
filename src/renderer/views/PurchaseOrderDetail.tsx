@@ -45,6 +45,7 @@ interface OrderItem {
     name: string;
     sku: string;
     tracking_method?: string;
+    location_id?: string | null;
   };
 }
 
@@ -75,9 +76,6 @@ const PurchaseOrderDetail: React.FC = () => {
   const [receivingError, setReceivingError] = useState<{[key: string]: string}>({});
   const [printFormat, setPrintFormat] = useState<PrintFormat>({ value: 'letter', label: 'Carta' });
   const [showPrintOptions, setShowPrintOptions] = useState<boolean>(false);
-  // Selección de ubicación para recepción
-  const [receiveLocations, setReceiveLocations] = useState<Array<{id: string; name: string}>>([]);
-  const [receiveLocationId, setReceiveLocationId] = useState<string>('');
   
   // Estados para gestión de seriales
   const [serializedItems, setSerializedItems] = useState<{[itemId: string]: SerialInput[]}>({});
@@ -107,35 +105,6 @@ const PurchaseOrderDetail: React.FC = () => {
       setIsReceivingItems(true);
     }
   }, [id, location.pathname]);
-  
-  // Cargar ubicaciones del almacén de la orden para recepción
-  useEffect(() => {
-    (async () => {
-      try {
-        const whId = order?.warehouse_id;
-        if (!whId) {
-          setReceiveLocations([]);
-          setReceiveLocationId('');
-          return;
-        }
-        const client = await supabase.getClient();
-        const { data, error } = await client
-          .from('locations')
-          .select('id, name')
-          .eq('warehouse_id', whId)
-          .order('name');
-        if (error) throw error as any;
-        setReceiveLocations((data as any[])?.map(l => ({ id: l.id, name: l.name })) || []);
-        if (!data || !(data as any[]).find(l => l.id === receiveLocationId)) {
-          setReceiveLocationId('');
-        }
-      } catch (e) {
-        console.error('Error cargando ubicaciones para recepción:', e);
-        setReceiveLocations([]);
-        setReceiveLocationId('');
-      }
-    })();
-  }, [order?.warehouse_id, isReceivingItems]);
   
   // Efecto para detectar cambios en el hash
   useEffect(() => {
@@ -190,7 +159,7 @@ const PurchaseOrderDetail: React.FC = () => {
       const { data: itemsData, error: itemsError } = await client.from('purchase_order_items')
         .select(`
           *,
-          product:products(id, name, sku, tracking_method)
+          product:products(id, name, sku, tracking_method, location_id)
         `)
         .eq('purchase_order_id', id);
       
@@ -368,12 +337,6 @@ const PurchaseOrderDetail: React.FC = () => {
         }
       }
     }
-
-    // Validar ubicación
-    if (!receiveLocationId) {
-      toast.error('Selecciona una ubicación de destino');
-      return;
-    }
     
     try {
       // Registrar cada ítem recibido
@@ -415,10 +378,12 @@ const PurchaseOrderDetail: React.FC = () => {
         .map(([itemId, receivedQty]) => {
           const item = orderItems.find(i => i.id === itemId);
           if (!item) return null;
+          // Usar la ubicación predeterminada del producto
+          const productLocationId = item.product.location_id || null;
           return {
             product_id: item.product_id,
             warehouse_id: order?.warehouse_id,
-            location_id: receiveLocationId,
+            location_id: productLocationId,
             quantity: receivedQty as number,
             movement_type_id: movementTypeId,
             movement_date: movementDate,
@@ -439,6 +404,9 @@ const PurchaseOrderDetail: React.FC = () => {
         const item = orderItems.find(i => i.id === itemId);
         if (!item || item.product.tracking_method !== 'serialized') continue;
 
+        // Usar la ubicación predeterminada del producto
+        const productLocationId = item.product.location_id || null;
+
         const serialRecords = serials.map(serial => ({
           product_id: item.product_id,
           serial_code: serial.serial_code,
@@ -447,7 +415,7 @@ const PurchaseOrderDetail: React.FC = () => {
           year: serial.year || null,
           color: serial.color || null,
           warehouse_id: order?.warehouse_id,
-          location_id: receiveLocationId,
+          location_id: productLocationId,
           status: 'in_stock',
           purchase_order_id: id
         }));
@@ -509,7 +477,7 @@ const PurchaseOrderDetail: React.FC = () => {
       // Mostrar opciones de impresión
       handleShowPrintOptions();
       // Log de recepción
-      await logAppEvent('purchase_order.receive', 'purchase_order', id as string, { received_count: Object.values(receivedItems).filter(q => (q as number) > 0).length, total_received: Object.values(receivedItems).reduce((a, b) => a + (b as number), 0), location_id: receiveLocationId, new_status: newStatus });
+      await logAppEvent('purchase_order.receive', 'purchase_order', id as string, { received_count: Object.values(receivedItems).filter(q => (q as number) > 0).length, total_received: Object.values(receivedItems).reduce((a, b) => a + (b as number), 0), new_status: newStatus });
     } catch (err: any) {
       console.error('Error al registrar recepción:', err);
       toast.error('Error al registrar recepción: ' + err.message);
@@ -703,21 +671,6 @@ const PurchaseOrderDetail: React.FC = () => {
             <h3 className="text-lg font-medium mb-3 dark:text-gray-200">Productos</h3>
             {isReceivingItems ? (
               <div>
-                {/* Selector de ubicación de destino */}
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ubicación Destino *</label>
-                  <select
-                    value={receiveLocationId}
-                    onChange={(e) => setReceiveLocationId(e.target.value)}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                    disabled={!receiveLocations.length}
-                  >
-                    <option value="">{receiveLocations.length ? 'Selecciona una ubicación' : 'No hay ubicaciones disponibles'}</option>
-                    {receiveLocations.map((loc) => (
-                      <option key={loc.id} value={loc.id}>{loc.name}</option>
-                    ))}
-                  </select>
-                </div>
                 {/* Tabla de recepción */}
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">

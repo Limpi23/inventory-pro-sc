@@ -168,21 +168,35 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenConfig }) => {
           sidebarOpen ? 'w-64' : 'w-20'
         )}
       >
-        <div className="p-4 flex items-center justify-between border-b">
+        <div className={cn(
+          "p-4 flex items-center border-b",
+          sidebarOpen ? "justify-between" : "justify-center"
+        )}>
           {sidebarOpen ? (
-            <div className="flex items-center">
-              <h1 className="text-xl font-bold text-primary">C.O.M.P.A</h1>
-            </div>
+            <>
+              <div className="flex items-center">
+                <h1 className="text-xl font-bold text-primary">C.O.M.P.A</h1>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                title="Contraer menú"
+              >
+                <i className="fas fa-chevron-left"></i>
+              </Button>
+            </>
           ) : (
-            <h1 className="text-xl font-bold text-primary">C.O.M.P.A</h1>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="w-12 h-12"
+              title="Expandir menú"
+            >
+              <i className="fas fa-bars text-xl"></i>
+            </Button>
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-          >
-            <i className={`fas ${sidebarOpen ? 'fa-chevron-left' : 'fa-chevron-right'}`}></i>
-          </Button>
         </div>
 
         <nav className="mt-6">
