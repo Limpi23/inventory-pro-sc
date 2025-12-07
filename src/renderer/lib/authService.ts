@@ -7,16 +7,23 @@ export const authService = {
   // Iniciar sesión con email y contraseña usando Supabase Auth
   login: async (email: string, password: string): Promise<User | null> => {
     try {
+      console.log('[AuthService] 🔐 Intentando login con:', email);
       const client = await supabase.getClient();
       
       // MÉTODO 1: Intentar con Supabase Auth primero
+      console.log('[AuthService] 📡 Método 1: Intentando con Supabase Auth...');
       const { data: authData, error: authError } = await client.auth.signInWithPassword({
         email,
         password,
       });
       
+      if (authError) {
+        console.log('[AuthService] ❌ Supabase Auth falló:', authError.message);
+      }
+      
       // Si Supabase Auth funciona, continuar con el flujo normal
       if (!authError && authData.user) {
+        console.log('[AuthService] ✅ Supabase Auth exitoso, usuario ID:', authData.user.id);
         // Buscar usuario en la tabla users para obtener datos adicionales
         let { data: userData, error } = await client
           .from('users')
@@ -100,6 +107,8 @@ export const authService = {
       }
       
       // MÉTODO 2: Si Supabase Auth falla, intentar con password_hash en public.users
+      console.log('[AuthService] 🔄 Método 2: Buscando usuario en public.users...');
+      
       // Verificar si existe la columna password_hash
       const { data: userWithHash, error: hashError } = await client
         .from('users')
@@ -121,22 +130,38 @@ export const authService = {
         .maybeSingle();
       
       if (hashError) {
+        console.log('[AuthService] ❌ Error al buscar usuario:', hashError.message);
         return null;
       }
       
       if (!userWithHash) {
+        console.log('[AuthService] ❌ Usuario no encontrado en public.users');
         return null;
       }
       
+      console.log('[AuthService] ✅ Usuario encontrado:', {
+        id: userWithHash.id,
+        email: userWithHash.email,
+        tiene_password_hash: !!userWithHash.password_hash,
+        active: userWithHash.active
+      });
+      
       // Verificar si tiene password_hash
       if (!userWithHash.password_hash) {
+        console.log('[AuthService] ❌ Usuario no tiene password_hash');
         return null;
       }
       
       // Verificar contraseña usando crypt
+      console.log('[AuthService] 🔐 Verificando contraseña con verify_password...');
       const { data: passwordMatch, error: cryptError } = await client.rpc('verify_password', {
         user_email: email.toLowerCase(),
         user_password: password
+      });
+      
+      console.log('[AuthService] 📊 Resultado verify_password:', {
+        passwordMatch,
+        error: cryptError?.message
       });
       
       // Si no existe la función verify_password, intentar crear una query directa
@@ -175,15 +200,20 @@ export const authService = {
         });
         
         if (retryError || !retryMatch) {
-          console.error('Contraseña incorrecta');
+          console.error('[AuthService] ❌ Contraseña incorrecta después de reintentar');
           return null;
         }
+        console.log('[AuthService] ✅ Contraseña válida después de reintentar');
       } else if (cryptError || !passwordMatch) {
+        console.log('[AuthService] ❌ Contraseña incorrecta o error en verify_password');
         return null;
       }
       
+      console.log('[AuthService] ✅ Contraseña válida!');
+      
       // Contraseña válida, retornar usuario
       if (!userWithHash.active) {
+        console.log('[AuthService] ❌ Usuario desactivado');
         throw new Error('Usuario desactivado');
       }
       
@@ -213,13 +243,19 @@ export const authService = {
         created_at: String(userWithHash.created_at || new Date().toISOString())
       };
       
+      console.log('[AuthService] 🎉 Login exitoso! Usuario:', {
+        id: sessionUser.id,
+        email: sessionUser.email,
+        role: sessionUser.role_name
+      });
+      
       // Guardar sesión
       saveSession(sessionUser);
       return sessionUser;
       
     } catch (error) {
-      console.error('Error detallado al iniciar sesión:', error);
-      return null;
+      console.error('[AuthService] 💥 Error en login:', error);
+      throw error;
     }
   },
 
@@ -374,6 +410,83 @@ export const authService = {
       options: { emailRedirectTo: redirectTo }
     } as any);
     if (error) throw error;
+  },
+
+  // Crear usuario directamente en public.users (sin Supabase Auth)
+  // Útil cuando Supabase Auth tiene rate limiting o problemas
+  createUserDirectly: async (userData: {
+    email: string;
+    password: string;
+    full_name: string;
+    role_id: number;
+  }): Promise<User> => {
+    try {
+      const bcrypt = await import('bcryptjs');
+      const client = await supabase.getClient();
+      const lowerEmail = userData.email.toLowerCase();
+
+      // Verificar que el email no exista
+      const { data: existing } = await client
+        .from('users')
+        .select('id')
+        .eq('email', lowerEmail)
+        .maybeSingle();
+      
+      if (existing?.id) {
+        throw new Error('El email ya está registrado en el sistema.');
+      }
+
+      // Hashear la contraseña en el cliente usando bcryptjs
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash(userData.password, salt);
+
+      // Insertar directamente en public.users con password_hash
+      const { data: newUserData, error: insertError } = await client
+        .from('users')
+        .insert({
+          email: lowerEmail,
+          full_name: userData.full_name,
+          role_id: userData.role_id,
+          password_hash: passwordHash,
+          active: true
+        })
+        .select(`
+          id, 
+          email, 
+          full_name, 
+          active, 
+          role_id,
+          created_at
+        `)
+        .single();
+
+      if (insertError || !newUserData) {
+        throw new Error(insertError?.message || 'No se pudo crear el usuario.');
+      }
+
+      // Obtener información del rol
+      const { data: roleData } = await client
+        .from('roles')
+        .select('name, description')
+        .eq('id', userData.role_id)
+        .single();
+
+      const user: User = {
+        id: String((newUserData as any).id),
+        email: String((newUserData as any).email),
+        full_name: String((newUserData as any).full_name || ''),
+        active: Boolean((newUserData as any).active),
+        role_id: Number((newUserData as any).role_id || 0),
+        role_name: String((roleData as any)?.name || ''),
+        role_description: String((roleData as any)?.description || ''),
+        created_at: String((newUserData as any).created_at || new Date().toISOString())
+      };
+
+      return user;
+    } catch (error) {
+      console.error('Error al crear usuario directamente:', error);
+      throw error;
+    }
   },
 };
 

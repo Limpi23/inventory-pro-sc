@@ -600,7 +600,7 @@ const PurchaseOrders: React.FC = () => {
                               {canManageOrders && order.status === 'borrador' && (
                                 <DropdownMenuItem asChild>
                                   <Link
-                                    to={`/ordenes-compra/${order.id}/editar`}
+                                    to={`/ordenes-compra/editar/${order.id}`}
                                     className="flex items-center gap-2 w-full"
                                     onClick={(e) => e.stopPropagation()}
                                   >

@@ -1,9 +1,9 @@
 -- Enable RLS and policies for public.users
 -- This migration enables row level security on the users table and adds
--- minimal, safe policies:
---  - Everyone (authenticated) can read and update only their own row
---  - Admins can read/update/insert/delete any row
---  - Self-insert allowed (not typically used because a trigger creates rows)
+-- permissive policies that work with password_hash authentication (without JWT)
+--
+-- IMPORTANTE: Como usamos password_hash para autenticación sin crear sesiones JWT,
+-- las políticas deben ser permisivas para usuarios anónimos (anon role)
 
 -- Helper to check if the current auth.uid() belongs to role 'admin'
 CREATE OR REPLACE FUNCTION public.is_admin()
@@ -21,89 +21,10 @@ AS $$
   );
 $$;
 
--- Ensure RLS is enabled
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+-- Deshabilitar RLS en users para permitir operaciones sin JWT
+-- Esto es necesario porque usamos password_hash en lugar de Supabase Auth
+ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
 
--- Policies (created only if they don't already exist)
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE schemaname = 'public' AND tablename = 'users' AND policyname = 'Users can view own profile'
-  ) THEN
-    CREATE POLICY "Users can view own profile"
-      ON public.users
-      FOR SELECT
-      TO authenticated
-      USING (id = auth.uid());
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE schemaname = 'public' AND tablename = 'users' AND policyname = 'Admins can view all users'
-  ) THEN
-    CREATE POLICY "Admins can view all users"
-      ON public.users
-      FOR SELECT
-      TO authenticated
-      USING (public.is_admin());
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE schemaname = 'public' AND tablename = 'users' AND policyname = 'Users can update own profile'
-  ) THEN
-    CREATE POLICY "Users can update own profile"
-      ON public.users
-      FOR UPDATE
-      TO authenticated
-      USING (id = auth.uid())
-      WITH CHECK (id = auth.uid());
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE schemaname = 'public' AND tablename = 'users' AND policyname = 'Admins can update users'
-  ) THEN
-    CREATE POLICY "Admins can update users"
-      ON public.users
-      FOR UPDATE
-      TO authenticated
-      USING (public.is_admin())
-      WITH CHECK (public.is_admin());
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE schemaname = 'public' AND tablename = 'users' AND policyname = 'Users can insert self'
-  ) THEN
-    CREATE POLICY "Users can insert self"
-      ON public.users
-      FOR INSERT
-      TO authenticated
-      WITH CHECK (id = auth.uid());
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE schemaname = 'public' AND tablename = 'users' AND policyname = 'Admins can insert users'
-  ) THEN
-    CREATE POLICY "Admins can insert users"
-      ON public.users
-      FOR INSERT
-      TO authenticated
-      WITH CHECK (public.is_admin());
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE schemaname = 'public' AND tablename = 'users' AND policyname = 'Admins can delete users'
-  ) THEN
-    CREATE POLICY "Admins can delete users"
-      ON public.users
-      FOR DELETE
-      TO authenticated
-      USING (public.is_admin());
-  END IF;
-END
-$$;
+-- Como RLS está deshabilitado, no necesitamos políticas
+-- Esto permite que las operaciones funcionen sin JWT
+-- Si en el futuro quieres habilitar RLS, deberás crear políticas apropiadas

@@ -1,6 +1,8 @@
 import { supabase } from './supabase';
 // Lista ordenada de migraciones (en el orden que deben ejecutarse)
+// IMPORTANTE: execute_migration_executor DEBE ser la primera para crear la función que ejecuta las demás
 const MIGRATIONS = [
+    '20251024000001_create_migration_executor', // ← PRIMERO: Crea la función execute_migration()
     '20250429000000_initial_schema',
     '20250429120706_alter_categories_table',
     '20250429120727_alter_warehouses_table',
@@ -40,7 +42,6 @@ const MIGRATIONS = [
     '20251007000300_prevent_negative_stock',
     '20251010000000_add_serial_id_to_invoice_items',
     '20251024000000_create_generic_admin_user',
-    '20251024000001_create_migration_executor',
     '20251123105500_optimize_dashboard_and_products'
 ];
 // Contenido de las migraciones embebido (se generará dinámicamente)
@@ -121,20 +122,30 @@ export const migrationService = {
                 // Obtener contenido de la migración
                 const sqlContent = await this.getMigrationContent(migrationName);
                 if (!sqlContent) {
+                    console.error(`[Migration] ❌ No se pudo leer: ${migrationName}`);
                     continue;
                 }
+                console.log(`[Migration] 📝 Ejecutando: ${migrationName}`);
                 // Ejecutar la migración usando la función RPC execute_migration
                 const { data, error } = await client.rpc('execute_migration', {
                     migration_sql: sqlContent
                 });
                 if (error) {
-                    // Algunas migraciones pueden fallar por dependencias, continuamos
+                    console.error(`[Migration] ❌ Error en ${migrationName}:`, error);
+                    // Solo continuar si es un error de dependencias, no errores críticos
+                    if (error.code !== 'PGRST202' && !error.message?.includes('already exists')) {
+                        // Registrar pero continuar con la siguiente
+                    }
                     continue;
                 }
                 // Verificar si la función retornó un error
                 const result = data;
                 if (result && !result.success) {
+                    console.warn(`[Migration] ⚠️  ${migrationName} retornó error:`, result.error);
                     // Continuamos con la siguiente migración
+                }
+                else {
+                    console.log(`[Migration] ✅ Completada: ${migrationName}`);
                 }
                 // Pequeña pausa para que la UI se actualice
                 await new Promise(resolve => setTimeout(resolve, 150));

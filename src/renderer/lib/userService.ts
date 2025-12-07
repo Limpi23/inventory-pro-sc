@@ -168,18 +168,28 @@ export const userService = {
     role_id: number;
   }): Promise<User> => {
     try {
-      // Usar nuestro servicio de autenticación personalizado en lugar de Supabase Auth
-      const newUser = await authService.register({
-        email: userData.email,
-        password: userData.password,
-        full_name: userData.full_name,
-        role_id: userData.role_id
-      });
-      
-      return newUser;
+      // Intentar primero crear directamente en public.users (más confiable)
+      try {
+        const newUser = await authService.createUserDirectly({
+          email: userData.email,
+          password: userData.password,
+          full_name: userData.full_name,
+          role_id: userData.role_id
+        });
+        return newUser;
+      } catch (directError: any) {
+        console.warn('Fallo creación directa, intentando con Supabase Auth:', directError.message);
+        // Fallback: intentar con Supabase Auth
+        const newUser = await authService.register({
+          email: userData.email,
+          password: userData.password,
+          full_name: userData.full_name,
+          role_id: userData.role_id
+        });
+        return newUser;
+      }
     } catch (error: any) {
       console.error('Error al crear usuario (detalle):', error);
-      // No enmascarar el error original para mostrar el motivo real (p.ej., 500 de Auth)
       throw error;
     }
   },

@@ -143,12 +143,27 @@ SET search_path = '';
 -- 4. Fix handle_new_user function
 CREATE OR REPLACE FUNCTION public.handle_new_user() 
 RETURNS TRIGGER AS $$
+DECLARE
+  default_role_id INT;
 BEGIN
-  INSERT INTO public.users (id, email, role)
+  -- Obtener el ID del rol 'user' por defecto (generalmente es 2)
+  SELECT id INTO default_role_id 
+  FROM public.roles 
+  WHERE name = 'user' 
+  LIMIT 1;
+  
+  -- Si no existe el rol 'user', usar NULL o un valor por defecto
+  IF default_role_id IS NULL THEN
+    default_role_id := 2; -- Fallback al ID 2 si no se encuentra
+  END IF;
+  
+  INSERT INTO public.users (id, email, full_name, role_id, active)
   VALUES (
     NEW.id,
     NEW.email,
-    'user'
+    COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
+    default_role_id,
+    true
   )
   ON CONFLICT (id) DO NOTHING;
   RETURN NEW;

@@ -678,26 +678,40 @@ ipcMain.handle('app-version', () => app.getVersion());
 // Handler para leer archivos de migración
 ipcMain.handle('read-migration-file', async (event, migrationName) => {
   try {
-    // Buscar el archivo de migración en supabase/migrations/
-    const migrationsDir = path.join(app.getAppPath(), 'supabase', 'migrations');
+    // Buscar el archivo de migración en supabase/migrations/ y archive/
+    const baseMigrationsDir = path.join(app.getAppPath(), 'supabase', 'migrations');
+    const archiveDir = path.join(baseMigrationsDir, 'archive');
     
-    // Listar archivos en el directorio
-    const files = fs.readdirSync(migrationsDir);
+    console.log(`[Main] Buscando migración: ${migrationName}`);
     
-    // Buscar el archivo que coincida con el nombre de migración
-    const migrationFile = files.find(file => file.includes(migrationName));
-    
-    if (!migrationFile) {
-      return '';
+    // Intentar primero en archive/
+    try {
+      const archiveFilePath = path.join(archiveDir, `${migrationName}.sql`);
+      if (fs.existsSync(archiveFilePath)) {
+        console.log(`[Main] ✅ Encontrado en archive/: ${archiveFilePath}`);
+        const content = fs.readFileSync(archiveFilePath, 'utf8');
+        return content;
+      }
+    } catch (err) {
+      console.log(`[Main] No encontrado en archive/`);
     }
     
-    // Leer el contenido del archivo
-    const filePath = path.join(migrationsDir, migrationFile);
-    const content = fs.readFileSync(filePath, 'utf8');
+    // Si no está en archive/, buscar en la raíz de migrations/
+    try {
+      const rootFilePath = path.join(baseMigrationsDir, `${migrationName}.sql`);
+      if (fs.existsSync(rootFilePath)) {
+        console.log(`[Main] ✅ Encontrado en raíz: ${rootFilePath}`);
+        const content = fs.readFileSync(rootFilePath, 'utf8');
+        return content;
+      }
+    } catch (err) {
+      console.log(`[Main] No encontrado en raíz`);
+    }
     
-    return content;
+    console.error(`[Main] ❌ Archivo de migración no encontrado: ${migrationName}`);
+    return '';
   } catch (error) {
-    console.error(`Error leyendo migración ${migrationName}:`, error);
+    console.error(`[Main] ❌ Error leyendo migración ${migrationName}:`, error);
     return '';
   }
 });

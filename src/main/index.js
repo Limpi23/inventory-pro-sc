@@ -235,14 +235,30 @@ ipcMain.handle('read-migration-file', async (_event, migrationName) => {
         // Determinar la ruta base dependiendo del entorno
         let migrationsPath;
         if (process.env.NODE_ENV === 'development') {
-            // En desarrollo, leer desde la carpeta del proyecto
-            migrationsPath = path.join(__dirname, '../../supabase/migrations');
+            // En desarrollo, leer desde la carpeta del proyecto (primero intentar archive/)
+            const archivePath = path.join(__dirname, '../../supabase/migrations/archive', `${migrationName}.sql`);
+            // Intentar primero en archive/
+            try {
+                await fs.access(archivePath);
+                migrationsPath = path.join(__dirname, '../../supabase/migrations/archive');
+            }
+            catch {
+                migrationsPath = path.join(__dirname, '../../supabase/migrations');
+            }
         }
         else {
-            // En producción, leer desde la carpeta de recursos empaquetados
-            migrationsPath = path.join(process.resourcesPath, 'migrations');
+            // En producción, leer desde la carpeta de recursos empaquetados (intentar archive/)
+            const archivePath = path.join(process.resourcesPath, 'migrations', 'archive', `${migrationName}.sql`);
+            try {
+                await fs.access(archivePath);
+                migrationsPath = path.join(process.resourcesPath, 'migrations', 'archive');
+            }
+            catch {
+                migrationsPath = path.join(process.resourcesPath, 'migrations');
+            }
         }
         const filePath = path.join(migrationsPath, `${migrationName}.sql`);
+        console.log(`[Main] Leyendo migración desde: ${filePath}`);
         try {
             const content = await fs.readFile(filePath, 'utf-8');
             return content;

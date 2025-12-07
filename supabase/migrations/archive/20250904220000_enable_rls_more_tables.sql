@@ -10,7 +10,8 @@ ALTER TABLE IF EXISTS public.purchase_receipts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.sales_orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.sales_order_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.inventory_count_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.role_permissions ENABLE ROW LEVEL SECURITY;
+-- No habilitar RLS en role_permissions porque se consultan durante login sin JWT
+ALTER TABLE IF EXISTS public.role_permissions DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.subscription_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.tenants ENABLE ROW LEVEL SECURITY;
@@ -25,7 +26,8 @@ DO $$ BEGIN EXECUTE 'CREATE POLICY purchase_receipts_select_auth ON public.purch
 DO $$ BEGIN EXECUTE 'CREATE POLICY sales_orders_select_auth ON public.sales_orders FOR SELECT TO authenticated USING (true)'; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN EXECUTE 'CREATE POLICY sales_order_items_select_auth ON public.sales_order_items FOR SELECT TO authenticated USING (true)'; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN EXECUTE 'CREATE POLICY inventory_count_items_select_auth ON public.inventory_count_items FOR SELECT TO authenticated USING (true)'; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN EXECUTE 'CREATE POLICY role_permissions_select_auth ON public.role_permissions FOR SELECT TO authenticated USING (true)'; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+-- No crear política para role_permissions porque RLS está deshabilitado
+-- DO $$ BEGIN EXECUTE 'CREATE POLICY role_permissions_select_auth ON public.role_permissions FOR SELECT TO authenticated USING (true)'; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN EXECUTE 'CREATE POLICY subscription_plans_select_auth ON public.subscription_plans FOR SELECT TO authenticated USING (true)'; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN EXECUTE 'CREATE POLICY subscriptions_select_auth ON public.subscriptions FOR SELECT TO authenticated USING (true)'; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN EXECUTE 'CREATE POLICY tenants_select_auth ON public.tenants FOR SELECT TO authenticated USING (true)'; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
