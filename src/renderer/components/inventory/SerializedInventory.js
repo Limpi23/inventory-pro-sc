@@ -35,8 +35,14 @@ export default function SerializedInventory() {
           location:locations(id, name)
         `)
                 .order('created_at', { ascending: false });
-            if (error)
+            if (error) {
+                console.error('[SerializedInventory] Error fetching serials:', error);
                 throw error;
+            }
+            console.log('[SerializedInventory] Total serials fetched:', data?.length || 0);
+            if (data && data.length > 0) {
+                console.log('[SerializedInventory] Sample serial:', data[0]);
+            }
             setSerials(data || []);
         }
         catch (error) {

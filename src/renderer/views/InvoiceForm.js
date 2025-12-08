@@ -331,6 +331,25 @@ const InvoiceForm = () => {
         }
         try {
             const client = await supabase.getClient();
+            // Primero verificar todos los seriales del producto (sin filtrar)
+            const { data: allSerials, error: allError } = await client
+                .from('product_serials')
+                .select('id, serial_code, vin, engine_number, year, color, status, warehouse_id')
+                .eq('product_id', productId);
+            console.log(`[fetchAvailableSerials] Product ${productId} - Total serials:`, allSerials?.length || 0);
+            if (allSerials && allSerials.length > 0) {
+                console.log('[fetchAvailableSerials] Sample serial:', allSerials[0]);
+                console.log('[fetchAvailableSerials] Serials by warehouse:', allSerials.reduce((acc, s) => {
+                    const wh = s.warehouse_id || 'null';
+                    acc[wh] = (acc[wh] || 0) + 1;
+                    return acc;
+                }, {}));
+                console.log('[fetchAvailableSerials] Serials by status:', allSerials.reduce((acc, s) => {
+                    acc[s.status] = (acc[s.status] || 0) + 1;
+                    return acc;
+                }, {}));
+            }
+            // Ahora obtener los seriales filtrados
             const { data, error } = await client
                 .from('product_serials')
                 .select('id, serial_code, vin, engine_number, year, color, status')
@@ -340,6 +359,7 @@ const InvoiceForm = () => {
                 .order('serial_code');
             if (error)
                 throw error;
+            console.log(`[fetchAvailableSerials] Filtered serials (warehouse: ${warehouseId}, status: in_stock):`, data?.length || 0);
             setAvailableSerials(prev => ({
                 ...prev,
                 [productId]: data || []

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import Papa from 'papaparse';
-import { stockMovementService, productService, warehousesService, locationsService, serialsService } from '../../lib/supabase';
+import { supabase, stockMovementService, productService, warehousesService, locationsService, serialsService } from '../../lib/supabase';
 
 interface Props {
   onImported?: (result: { created: number; errors: string[] }) => void;
@@ -342,6 +342,8 @@ const InventoryInitialImport: React.FC<Props> = ({ onImported, trigger }) => {
     try {
       const typeId = await stockMovementService.getInboundInitialTypeId();
       let created = 0;
+      const importErrors: string[] = [];
+      
       if (mode === 'serialized') {
         setProgressMessage('Creando seriales...');
         const serials = preview.map((r) => ({
@@ -356,16 +358,57 @@ const InventoryInitialImport: React.FC<Props> = ({ onImported, trigger }) => {
           status: 'in_stock' as const,
           acquired_at: r.acquired_at || new Date().toISOString(),
         }));
-        const inserted = await serialsService.createMany(serials, {
-          onProgress: (processed, total) => {
-            if (total > 0) {
-              const percent = Math.round((processed / total) * 50);
-              setProgress(percent);
-            } else {
-              setProgress(50);
+        
+        // Intentar crear seriales en lotes, capturando errores de duplicados
+        const inserted: any[] = [];
+        const batchSize = 50;
+        const client = await supabase.getClient();
+        
+        for (let i = 0; i < serials.length; i += batchSize) {
+          const batch = serials.slice(i, i + batchSize);
+          try {
+            const { data, error } = await client
+              .from('product_serials')
+              .insert(batch as any)
+              .select();
+
+            if (error) {
+              // Si hay error de unicidad, intentar uno por uno
+              if (error.code === '23505') {
+                for (const serial of batch) {
+                  try {
+                    const { data: singleData, error: singleError } = await client
+                      .from('product_serials')
+                      .insert([serial as any])
+                      .select()
+                      .single();
+                    
+                    if (singleError) {
+                      if (singleError.code === '23505') {
+                        importErrors.push(`Serial duplicado: ${serial.serial_code} (ya existe en el sistema)`);
+                      } else {
+                        importErrors.push(`Error en serial ${serial.serial_code}: ${singleError.message}`);
+                      }
+                    } else if (singleData) {
+                      inserted.push(singleData);
+                    }
+                  } catch (err: any) {
+                    importErrors.push(`Error en serial ${serial.serial_code}: ${err.message}`);
+                  }
+                }
+              } else {
+                throw error;
+              }
+            } else if (data) {
+              inserted.push(...data);
             }
-          },
-        });
+          } catch (err: any) {
+            importErrors.push(`Error en lote: ${err.message}`);
+          }
+          
+          const processed = Math.min(i + batch.length, serials.length);
+          setProgress(Math.round((processed / serials.length) * 50));
+        }
         const byCode = new Map(inserted.map((s) => [s.serial_code, s]));
         setProgressMessage('Generando movimientos...');
         const moves = preview.map((r) => ({
@@ -416,11 +459,18 @@ const InventoryInitialImport: React.FC<Props> = ({ onImported, trigger }) => {
       }
       setProgress(100);
       setProgressMessage('Importación completada');
-      onImported?.({ created, errors: [] });
-      setFile(null);
-      setPreview([]);
-      setErrors([]);
-      setOpen(false);
+      
+      if (importErrors.length > 0) {
+        setErrors(importErrors);
+        onImported?.({ created, errors: importErrors });
+        // No cerramos el modal para que el usuario vea los errores
+      } else {
+        onImported?.({ created, errors: [] });
+        setFile(null);
+        setPreview([]);
+        setErrors([]);
+        setOpen(false);
+      }
     } catch (e: any) {
       setErrors([e.message || 'Error al importar inventario']);
     } finally {
