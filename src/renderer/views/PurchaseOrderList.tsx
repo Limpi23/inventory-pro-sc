@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useCurrency } from '../hooks/useCurrency';
+import { formatDateString } from '../lib/dateUtils';
 
 interface PurchaseOrder {
   id: string;
@@ -162,12 +163,7 @@ const PurchaseOrderList: React.FC = () => {
   
   // Formatear fecha
   const formatDate = (dateString: string) => {
-    const options: Intl.DateTimeFormatOptions = { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    };
-    return new Date(dateString).toLocaleDateString(currency.settings.locale, options);
+    return formatDateString(dateString, currency.settings.locale);
   };
   
   // Renderizar el badge de estado

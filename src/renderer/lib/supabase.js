@@ -760,7 +760,7 @@ export const serialsService = {
         const { data, error } = await client
             .from('product_serials')
             .select('*')
-            .eq('serial_number', serialNumber)
+            .eq('serial_code', serialNumber)
             .single();
         if (error && error.code !== 'PGRST116')
             throw error;
@@ -819,6 +819,7 @@ export const maintenanceService = {
             'stock_movements',
             'product_serials',
             'products',
+            'customers',
             'locations',
             'warehouses',
             'categories'

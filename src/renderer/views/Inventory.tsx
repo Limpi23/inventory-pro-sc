@@ -316,6 +316,14 @@ const Inventory: React.FC = () => {
       // Validar stock para salidas y transferencias (en paralelo)
       if (!isEntry || isTransfer) {
         const stockChecks = movementItems.map(async (item) => {
+          // Primero consultar sin filtrar por location_id para ver el stock total
+          const { data: totalStockData } = await client
+            .from('current_stock_by_location')
+            .select('location_id, location_name, current_quantity')
+            .eq('product_id', item.productId)
+            .eq('warehouse_id', item.warehouseId);
+          
+          // Luego consultar con la ubicación específica
           const { data: stockData } = await client
             .from('current_stock_by_location')
             .select('current_quantity')
@@ -325,8 +333,35 @@ const Inventory: React.FC = () => {
             .maybeSingle();
           
           const currentQty = Number((stockData as any)?.current_quantity ?? 0);
+          
+          // Log de depuración
+          console.log('Validación de stock:', {
+            producto: item.productName,
+            almacen: item.warehouseName,
+            ubicacion_buscada: item.locationName,
+            ubicacion_id: item.locationId,
+            cantidad_solicitada: item.quantity,
+            cantidad_disponible: currentQty,
+            todas_ubicaciones: totalStockData
+          });
+          
           if (item.quantity > currentQty) {
-            throw new Error(`Stock insuficiente para ${item.productName}. Solo hay ${currentQty} unidades disponibles.`);
+            // Crear mensaje más informativo
+            let errorMsg = `Stock insuficiente para ${item.productName} en ${item.locationName}. Solo hay ${currentQty} unidades disponibles en esa ubicación.`;
+            
+            // Si hay stock en otras ubicaciones, mencionarlo
+            if (totalStockData && totalStockData.length > 0) {
+              const otrasUbicaciones = totalStockData
+                .filter((loc: any) => loc.location_id !== item.locationId && loc.current_quantity > 0)
+                .map((loc: any) => `${loc.location_name}: ${loc.current_quantity} unidades`)
+                .join(', ');
+              
+              if (otrasUbicaciones) {
+                errorMsg += `\n\nStock disponible en otras ubicaciones: ${otrasUbicaciones}`;
+              }
+            }
+            
+            throw new Error(errorMsg);
           }
         });
         

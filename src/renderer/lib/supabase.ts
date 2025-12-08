@@ -78,7 +78,7 @@ export interface StockMovement {
 export interface ProductSerial {
   id: string;
   product_id: string;
-  serial_number: string;
+  serial_code: string;
   status: 'available' | 'sold' | 'returned' | 'defective' | 'lost' | 'in_stock' | 'reserved' | 'maintenance' | 'scrapped' | 'in_transit';
   purchase_order_id?: string;
   sales_order_id?: string;
@@ -888,7 +888,7 @@ export const serialsService = {
     const { data, error } = await client
       .from('product_serials')
       .select('*')
-      .eq('serial_number', serialNumber)
+      .eq('serial_code', serialNumber)
       .single();
     if (error && error.code !== 'PGRST116') throw error;
     return data;
@@ -943,6 +943,7 @@ export const maintenanceService = {
       'stock_movements',
       'product_serials',
       'products',
+      'customers',
       'locations',
       'warehouses',
       'categories'

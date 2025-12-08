@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useCurrency } from '../hooks/useCurrency';
+import { formatDateString } from '../lib/dateUtils';
 const PurchaseOrderList = () => {
     const [orders, setOrders] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -125,12 +126,7 @@ const PurchaseOrderList = () => {
     const formatCurrency = (amount) => currency.format(amount);
     // Formatear fecha
     const formatDate = (dateString) => {
-        const options = {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        };
-        return new Date(dateString).toLocaleDateString(currency.settings.locale, options);
+        return formatDateString(dateString, currency.settings.locale);
     };
     // Renderizar el badge de estado
     const renderStatusBadge = (status) => {

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import InventoryInitialImport from '../components/inventory/InventoryInitialImport';
 import SerializedInventory from '../components/inventory/SerializedInventory';
+import InventoryAdjustment from '../components/inventory/InventoryAdjustment';
+import InventoryAdjustmentHistory from '../components/inventory/InventoryAdjustmentHistory';
 import { supabase } from '../lib/supabase';
 import Papa from 'papaparse';
 import { useReactToPrint } from 'react-to-print';
@@ -56,9 +58,42 @@ const InventoryGeneral: React.FC = () => {
   const printComponentRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  // Estados para ajuste de inventario (solo super root)
+  const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
+  const [showAdjustmentHistory, setShowAdjustmentHistory] = useState(false);
+  const [isSuperRoot, setIsSuperRoot] = useState(false);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+
   useEffect(() => {
     fetchInventory();
   }, [currentPage, searchTerm]); // Recargar cuando cambie la página o el término de búsqueda
+
+  useEffect(() => {
+    checkSuperRootUser();
+  }, []);
+
+  const checkSuperRootUser = async () => {
+    try {
+      const client = await supabase.getClient();
+      const { data: { user } } = await client.auth.getUser();
+      
+      if (!user) return;
+
+      // Obtener el email del usuario desde la tabla users
+      const { data: userData } = await client
+        .from('users')
+        .select('email')
+        .eq('id', user.id)
+        .single();
+
+      if (userData?.email) {
+        setCurrentUserEmail(userData.email);
+        setIsSuperRoot(userData.email === 'admin@suitcore.com');
+      }
+    } catch (error) {
+      console.error('Error checking user:', error);
+    }
+  };
 
   // Nuevo estado para total count
   const [totalInventoryCount, setTotalInventoryCount] = useState<number>(0);
@@ -381,6 +416,16 @@ const InventoryGeneral: React.FC = () => {
               setActiveTab('current');
             }}
           />
+          {isSuperRoot && (
+            <button
+              onClick={() => setShowAdjustmentModal(true)}
+              className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-400 flex items-center"
+              title="Solo disponible para super administrador"
+            >
+              <i className="fas fa-balance-scale mr-2"></i>
+              Ajuste de Inventario
+            </button>
+          )}
           <button
             onClick={openExportOptions}
             className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 flex items-center"
@@ -434,6 +479,16 @@ const InventoryGeneral: React.FC = () => {
             >
               Inventario Serializado
             </button>
+            {isSuperRoot && (
+              <button
+                onClick={() => setShowAdjustmentHistory(true)}
+                className="px-4 py-2 rounded-md text-sm font-medium transition-colors bg-purple-100 text-purple-700 hover:bg-purple-200"
+                title="Ver historial de ajustes"
+              >
+                <i className="fas fa-history mr-2"></i>
+                Historial de Ajustes
+              </button>
+            )}
           </div>
 
           <div className="relative flex-grow">
@@ -999,6 +1054,22 @@ const InventoryGeneral: React.FC = () => {
           }
         }
       `}</style>
+
+      {/* Modal de Ajuste de Inventario - Solo para Super Root */}
+      <InventoryAdjustment
+        isOpen={showAdjustmentModal}
+        onClose={() => setShowAdjustmentModal(false)}
+        onAdjustmentComplete={() => {
+          fetchInventory();
+          setActiveTab('current');
+        }}
+      />
+
+      {/* Modal de Historial de Ajustes - Solo para Super Root */}
+      <InventoryAdjustmentHistory
+        isOpen={showAdjustmentHistory}
+        onClose={() => setShowAdjustmentHistory(false)}
+      />
     </div>
   );
 };

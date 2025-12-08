@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../components/ui/dropdown-menu';
-import { getLocalDateISOString } from '../lib/dateUtils';
+import { getLocalDateISOString, formatDateString } from '../lib/dateUtils';
 
 interface PurchaseOrder {
   id: string;
@@ -316,11 +316,7 @@ const PurchaseOrders: React.FC = () => {
 
   const formatDateLong = (dateString: string) => {
     if (!dateString) return '';
-    return new Date(dateString).toLocaleDateString(currency.settings.locale, {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+    return formatDateString(dateString, currency.settings.locale);
   };
 
   // Formatear estado con colores
@@ -545,7 +541,7 @@ const PurchaseOrders: React.FC = () => {
                         {order.supplier_name}
                       </td>
                       <td className="py-3 px-4 text-sm">
-                        {new Date(order.order_date).toLocaleDateString()}
+                        {formatDateString(order.order_date)}
                       </td>
                       <td className="py-3 px-4 text-sm">
                         {order.warehouse_name}

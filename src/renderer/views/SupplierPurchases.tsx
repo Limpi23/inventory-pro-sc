@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useParams, Link } from 'react-router-dom';
 import { useCurrency } from '../hooks/useCurrency';
-import { getLocalDateISOString } from '../lib/dateUtils';
+import { getLocalDateISOString, formatDateString } from '../lib/dateUtils';
 
 interface PurchaseOrder {
   id: string;
@@ -327,7 +327,7 @@ const SupplierPurchases: React.FC = () => {
                           >
                             <td className="py-3 px-4 text-sm">
                               <div className="font-medium">
-                                {new Date(purchase.order_date).toLocaleDateString(currency.settings.locale)}
+                                {formatDateString(purchase.order_date, currency.settings.locale)}
                               </div>
                               <div className="text-xs text-gray-500">
                                 {purchase.warehouse_name}

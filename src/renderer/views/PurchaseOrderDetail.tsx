@@ -5,6 +5,7 @@ import { toast } from 'react-hot-toast';
 import { useReactToPrint } from 'react-to-print';
 import PrintableOrder from '../components/PrintableOrder';
 import { useCurrency } from '../hooks/useCurrency';
+import { formatDateString } from '../lib/dateUtils';
 
 interface PurchaseOrder {
   id: string;
@@ -72,6 +73,7 @@ const PurchaseOrderDetail: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isReceivingItems, setIsReceivingItems] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [receivedItems, setReceivedItems] = useState<{[key: string]: number}>({});
   const [receivingError, setReceivingError] = useState<{[key: string]: string}>({});
   const [printFormat, setPrintFormat] = useState<PrintFormat>({ value: 'letter', label: 'Carta' });
@@ -297,48 +299,56 @@ const PurchaseOrderDetail: React.FC = () => {
   };
   
   const handleSaveReceived = async () => {
-    // Validar que al menos un ítem haya sido recibido
-    const hasReceivedItems = Object.values(receivedItems).some(qty => qty > 0);
-    if (!hasReceivedItems) {
-      toast.error('Debe ingresar al menos una cantidad recibida');
-      return;
-    }
+    // Prevenir múltiples envíos
+    if (isSubmitting) return;
+    
+    setIsSubmitting(true);
+    
+    try {
+      // Validar que al menos un ítem haya sido recibido
+      const hasReceivedItems = Object.values(receivedItems).some(qty => qty > 0);
+      if (!hasReceivedItems) {
+        toast.error('Debe ingresar al menos una cantidad recibida');
+        setIsSubmitting(false);
+        return;
+      }
 
-    // Validar seriales para productos serializados
-    for (const [itemId, qty] of Object.entries(receivedItems)) {
-      if (qty <= 0) continue;
-      
-      const item = orderItems.find(i => i.id === itemId);
-      if (!item) continue;
-
-      if (item.product.tracking_method === 'serialized') {
-        const serials = serializedItems[itemId] || [];
+      // Validar seriales para productos serializados
+      for (const [itemId, qty] of Object.entries(receivedItems)) {
+        if (qty <= 0) continue;
         
-        // Validar que haya el número correcto de seriales
-        if (serials.length !== qty) {
-          toast.error(`El producto "${item.product.name}" requiere ${qty} seriales, pero solo has ingresado ${serials.length}`);
-          return;
-        }
+        const item = orderItems.find(i => i.id === itemId);
+        if (!item) continue;
 
-        // Validar que todos los seriales tengan serial_code
-        for (let i = 0; i < serials.length; i++) {
-          if (!serials[i].serial_code || serials[i].serial_code.trim() === '') {
-            toast.error(`El serial #${i + 1} del producto "${item.product.name}" requiere un código de serie`);
+        if (item.product.tracking_method === 'serialized') {
+          const serials = serializedItems[itemId] || [];
+          
+          // Validar que haya el número correcto de seriales
+          if (serials.length !== qty) {
+            toast.error(`El producto "${item.product.name}" requiere ${qty} seriales, pero solo has ingresado ${serials.length}`);
+            setIsSubmitting(false);
+            return;
+          }
+
+          // Validar que todos los seriales tengan serial_code
+          for (let i = 0; i < serials.length; i++) {
+            if (!serials[i].serial_code || serials[i].serial_code.trim() === '') {
+              toast.error(`El serial #${i + 1} del producto "${item.product.name}" requiere un código de serie`);
+              setIsSubmitting(false);
+              return;
+            }
+          }
+
+          // Validar que no haya códigos duplicados dentro del mismo producto
+          const serialCodes = serials.map(s => s.serial_code.trim());
+          const uniqueCodes = new Set(serialCodes);
+          if (uniqueCodes.size !== serialCodes.length) {
+            toast.error(`Hay códigos de serie duplicados para el producto "${item.product.name}"`);
+            setIsSubmitting(false);
             return;
           }
         }
-
-        // Validar que no haya códigos duplicados dentro del mismo producto
-        const serialCodes = serials.map(s => s.serial_code.trim());
-        const uniqueCodes = new Set(serialCodes);
-        if (uniqueCodes.size !== serialCodes.length) {
-          toast.error(`Hay códigos de serie duplicados para el producto "${item.product.name}"`);
-          return;
-        }
       }
-    }
-    
-    try {
       // Registrar cada ítem recibido
       const client = await supabase.getClient();
       const receivedEntries = Object.entries(receivedItems)
@@ -481,6 +491,8 @@ const PurchaseOrderDetail: React.FC = () => {
     } catch (err: any) {
       console.error('Error al registrar recepción:', err);
       toast.error('Error al registrar recepción: ' + err.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
   
@@ -502,12 +514,7 @@ const PurchaseOrderDetail: React.FC = () => {
   
   // Formatear fecha
   const formatDate = (dateString: string) => {
-    const options: Intl.DateTimeFormatOptions = { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    };
-    return new Date(dateString).toLocaleDateString(currencySettings.locale || 'es-BO', options);
+    return formatDateString(dateString, currencySettings.locale || 'es-BO');
   };
   
   // Renderizar el badge de estado
@@ -952,10 +959,11 @@ const PurchaseOrderDetail: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleSaveReceived}
-                  className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <i className="fas fa-save mr-2"></i>
-                  Guardar Recepción
+                  <i className={`fas ${isSubmitting ? 'fa-spinner fa-spin' : 'fa-save'} mr-2`}></i>
+                  {isSubmitting ? 'Guardando...' : 'Guardar Recepción'}
                 </button>
               </div>
             )}

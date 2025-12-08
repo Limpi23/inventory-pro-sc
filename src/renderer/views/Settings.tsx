@@ -127,7 +127,7 @@ const Settings: React.FC = () => {
               <CardHeader>
                 <CardTitle className="text-red-600 dark:text-red-400">Reiniciar datos operativos</CardTitle>
                 <CardDescription>
-                  Esta acción eliminará inventario, productos, ubicaciones, órdenes de compra y ventas. Los clientes, proveedores y reportes históricos permanecen intactos.
+                  Esta acción eliminará inventario, productos, clientes, ubicaciones, órdenes de compra y ventas. Los proveedores y reportes históricos permanecen intactos.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -137,7 +137,7 @@ const Settings: React.FC = () => {
                     <li>Esta operación es irreversible y no se puede deshacer.</li>
                     <li>Se borrarán registros de inventario (movimientos, conteos y seriales).</li>
                     <li>Se eliminarán facturas, devoluciones, órdenes de venta y compra, y sus ítems.</li>
-                    <li>Se eliminarán productos, categorías, almacenes y ubicaciones.</li>
+                    <li>Se eliminarán productos, categorías, clientes, almacenes y ubicaciones.</li>
                   </ul>
                 </div>
 

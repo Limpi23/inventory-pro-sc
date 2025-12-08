@@ -6,6 +6,7 @@ import { toast } from 'react-hot-toast';
 import { useReactToPrint } from 'react-to-print';
 import PrintableOrder from '../components/PrintableOrder';
 import { useCurrency } from '../hooks/useCurrency';
+import { formatDateString } from '../lib/dateUtils';
 const PurchaseOrderDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -15,6 +16,7 @@ const PurchaseOrderDetail = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
     const [isReceivingItems, setIsReceivingItems] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [receivedItems, setReceivedItems] = useState({});
     const [receivingError, setReceivingError] = useState({});
     const [printFormat, setPrintFormat] = useState({ value: 'letter', label: 'Carta' });
@@ -217,43 +219,51 @@ const PurchaseOrderDetail = () => {
         });
     };
     const handleSaveReceived = async () => {
-        // Validar que al menos un ítem haya sido recibido
-        const hasReceivedItems = Object.values(receivedItems).some(qty => qty > 0);
-        if (!hasReceivedItems) {
-            toast.error('Debe ingresar al menos una cantidad recibida');
+        // Prevenir múltiples envíos
+        if (isSubmitting)
             return;
-        }
-        // Validar seriales para productos serializados
-        for (const [itemId, qty] of Object.entries(receivedItems)) {
-            if (qty <= 0)
-                continue;
-            const item = orderItems.find(i => i.id === itemId);
-            if (!item)
-                continue;
-            if (item.product.tracking_method === 'serialized') {
-                const serials = serializedItems[itemId] || [];
-                // Validar que haya el número correcto de seriales
-                if (serials.length !== qty) {
-                    toast.error(`El producto "${item.product.name}" requiere ${qty} seriales, pero solo has ingresado ${serials.length}`);
-                    return;
-                }
-                // Validar que todos los seriales tengan serial_code
-                for (let i = 0; i < serials.length; i++) {
-                    if (!serials[i].serial_code || serials[i].serial_code.trim() === '') {
-                        toast.error(`El serial #${i + 1} del producto "${item.product.name}" requiere un código de serie`);
+        setIsSubmitting(true);
+        try {
+            // Validar que al menos un ítem haya sido recibido
+            const hasReceivedItems = Object.values(receivedItems).some(qty => qty > 0);
+            if (!hasReceivedItems) {
+                toast.error('Debe ingresar al menos una cantidad recibida');
+                setIsSubmitting(false);
+                return;
+            }
+            // Validar seriales para productos serializados
+            for (const [itemId, qty] of Object.entries(receivedItems)) {
+                if (qty <= 0)
+                    continue;
+                const item = orderItems.find(i => i.id === itemId);
+                if (!item)
+                    continue;
+                if (item.product.tracking_method === 'serialized') {
+                    const serials = serializedItems[itemId] || [];
+                    // Validar que haya el número correcto de seriales
+                    if (serials.length !== qty) {
+                        toast.error(`El producto "${item.product.name}" requiere ${qty} seriales, pero solo has ingresado ${serials.length}`);
+                        setIsSubmitting(false);
+                        return;
+                    }
+                    // Validar que todos los seriales tengan serial_code
+                    for (let i = 0; i < serials.length; i++) {
+                        if (!serials[i].serial_code || serials[i].serial_code.trim() === '') {
+                            toast.error(`El serial #${i + 1} del producto "${item.product.name}" requiere un código de serie`);
+                            setIsSubmitting(false);
+                            return;
+                        }
+                    }
+                    // Validar que no haya códigos duplicados dentro del mismo producto
+                    const serialCodes = serials.map(s => s.serial_code.trim());
+                    const uniqueCodes = new Set(serialCodes);
+                    if (uniqueCodes.size !== serialCodes.length) {
+                        toast.error(`Hay códigos de serie duplicados para el producto "${item.product.name}"`);
+                        setIsSubmitting(false);
                         return;
                     }
                 }
-                // Validar que no haya códigos duplicados dentro del mismo producto
-                const serialCodes = serials.map(s => s.serial_code.trim());
-                const uniqueCodes = new Set(serialCodes);
-                if (uniqueCodes.size !== serialCodes.length) {
-                    toast.error(`Hay códigos de serie duplicados para el producto "${item.product.name}"`);
-                    return;
-                }
             }
-        }
-        try {
             // Registrar cada ítem recibido
             const client = await supabase.getClient();
             const receivedEntries = Object.entries(receivedItems)
@@ -389,6 +399,9 @@ const PurchaseOrderDetail = () => {
             console.error('Error al registrar recepción:', err);
             toast.error('Error al registrar recepción: ' + err.message);
         }
+        finally {
+            setIsSubmitting(false);
+        }
     };
     const calculateRemainingItems = (item) => {
         return item.quantity - (item.received_quantity || 0);
@@ -404,12 +417,7 @@ const PurchaseOrderDetail = () => {
     const { format: formatCurrency, settings: currencySettings } = useCurrency();
     // Formatear fecha
     const formatDate = (dateString) => {
-        const options = {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        };
-        return new Date(dateString).toLocaleDateString(currencySettings.locale || 'es-BO', options);
+        return formatDateString(dateString, currencySettings.locale || 'es-BO');
     };
     // Renderizar el badge de estado
     const renderStatusBadge = (status) => {
@@ -486,7 +494,7 @@ const PurchaseOrderDetail = () => {
                                                                                                         handleRemoveSerial(item.id, idx);
                                                                                                         handleReceiveQuantityChange(item.id, receivedQty - 1, calculateRemainingItems(item));
                                                                                                     }, className: "w-full px-2 py-1.5 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 dark:hover:bg-red-900/20 rounded border border-red-300 dark:border-red-700", children: "Eliminar" }) })] }, idx)))] }) }) }))] }, item.id));
-                                                        }) })] }) }) })) : (_jsx("div", { className: "overflow-x-auto", children: _jsxs("table", { className: "min-w-full divide-y divide-gray-200 dark:divide-gray-700", children: [_jsx("thead", { className: "bg-gray-50 dark:bg-gray-700", children: _jsxs("tr", { children: [_jsx("th", { className: "text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4", children: "Producto" }), _jsx("th", { className: "text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4", children: "Cantidad" }), _jsx("th", { className: "text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4", children: "Precio Unit." }), _jsx("th", { className: "text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4", children: "Total" }), ['recibida_parcialmente', 'completada'].includes(order.status) && (_jsx("th", { className: "text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4", children: "Recibidos" }))] }) }), _jsxs("tbody", { className: "bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700", children: [orderItems.map(item => (_jsxs("tr", { className: "hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors", children: [_jsxs("td", { className: "py-3 px-4 text-sm dark:text-gray-300", children: [_jsx("div", { className: "font-medium", children: item.product.name }), _jsxs("div", { className: "text-xs text-gray-500 dark:text-gray-400", children: ["SKU: ", item.product.sku] })] }), _jsx("td", { className: "py-3 px-4 text-sm text-right dark:text-gray-300", children: item.quantity }), _jsx("td", { className: "py-3 px-4 text-sm text-right dark:text-gray-300", children: formatCurrency(item.unit_price) }), _jsx("td", { className: "py-3 px-4 text-sm text-right font-medium dark:text-gray-300", children: formatCurrency(item.total_price) }), ['recibida_parcialmente', 'completada'].includes(order.status) && (_jsx("td", { className: "py-3 px-4 text-sm text-right", children: _jsxs("span", { className: item.received_quantity === item.quantity ? 'text-green-600 dark:text-green-400' : 'text-yellow-600 dark:text-yellow-400', children: [item.received_quantity || 0, " / ", item.quantity] }) }))] }, item.id))), _jsxs("tr", { className: "bg-gray-50 dark:bg-gray-700", children: [_jsx("td", { colSpan: 3, className: "py-3 px-4 text-sm text-right font-medium dark:text-gray-300", children: "Total:" }), _jsx("td", { className: "py-3 px-4 text-sm text-right font-bold dark:text-gray-300", children: formatCurrency(order.total_amount) }), ['recibida_parcialmente', 'completada'].includes(order.status) && _jsx("td", {})] })] })] }) })), isReceivingItems && (_jsxs("div", { className: "mt-4 flex justify-end space-x-3", children: [_jsx("button", { type: "button", onClick: handleCancelReceiving, className: "px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400", children: "Cancelar" }), _jsxs("button", { type: "button", onClick: handleSaveReceived, className: "px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400", children: [_jsx("i", { className: "fas fa-save mr-2" }), "Guardar Recepci\u00F3n"] })] }))] })] }), _jsxs("div", { children: [_jsxs("div", { className: "bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6", children: [_jsx("h3", { className: "text-lg font-medium mb-3 dark:text-gray-200", children: "Informaci\u00F3n del Proveedor" }), _jsxs("div", { className: "space-y-3", children: [_jsxs("div", { children: [_jsx("h4", { className: "text-sm font-medium text-gray-500 dark:text-gray-400", children: "Nombre" }), _jsx("p", { className: "mt-1 text-sm text-gray-900 dark:text-gray-300", children: order.supplier.name })] }), order.supplier.contact_info?.contact_name && (_jsxs("div", { children: [_jsx("h4", { className: "text-sm font-medium text-gray-500 dark:text-gray-400", children: "Contacto" }), _jsx("p", { className: "mt-1 text-sm text-gray-900 dark:text-gray-300", children: order.supplier.contact_info.contact_name })] })), _jsxs("div", { className: "grid grid-cols-2 gap-4", children: [order.supplier.contact_info?.phone && (_jsxs("div", { children: [_jsx("h4", { className: "text-sm font-medium text-gray-500 dark:text-gray-400", children: "Tel\u00E9fono" }), _jsx("p", { className: "mt-1 text-sm text-gray-900 dark:text-gray-300", children: order.supplier.contact_info.phone })] })), order.supplier.contact_info?.email && (_jsxs("div", { children: [_jsx("h4", { className: "text-sm font-medium text-gray-500 dark:text-gray-400", children: "Email" }), _jsx("p", { className: "mt-1 text-sm text-gray-900 dark:text-gray-300", children: order.supplier.contact_info.email })] }))] }), order.supplier.contact_info?.address && (_jsxs("div", { children: [_jsx("h4", { className: "text-sm font-medium text-gray-500 dark:text-gray-400", children: "Direcci\u00F3n" }), _jsx("p", { className: "mt-1 text-sm text-gray-900 dark:text-gray-300", children: order.supplier.contact_info.address })] }))] }), _jsx("div", { className: "mt-4", children: _jsxs(Link, { to: `/proveedores/${order.supplier.id}/compras`, className: "text-blue-600 hover:text-blue-800 text-sm flex items-center", children: [_jsx("i", { className: "fas fa-history mr-1" }), "Ver historial de compras"] }) })] }), _jsxs("div", { className: "bg-white rounded-lg shadow-md p-6", children: [_jsx("h3", { className: "text-lg font-medium mb-3", children: "Almac\u00E9n de Destino" }), _jsxs("div", { className: "space-y-3", children: [_jsxs("div", { children: [_jsx("h4", { className: "text-sm font-medium text-gray-500", children: "Nombre" }), _jsx("p", { className: "mt-1 text-sm text-gray-900", children: order.warehouse.name })] }), order.warehouse.location && (_jsxs("div", { children: [_jsx("h4", { className: "text-sm font-medium text-gray-500", children: "Ubicaci\u00F3n" }), _jsx("p", { className: "mt-1 text-sm text-gray-900", children: order.warehouse.location })] }))] })] })] })] }), showPrintOptions && (_jsx("div", { className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50", children: _jsxs("div", { className: "bg-white rounded-lg p-6 w-full max-w-4xl shadow-lg", children: [_jsxs("div", { className: "flex items-start justify-between mb-4", children: [_jsx("h3", { className: "text-lg font-semibold", children: "Opciones de Impresi\u00F3n" }), _jsx("button", { onClick: handleClosePrintOptions, className: "text-gray-500 hover:text-gray-700", children: _jsx("i", { className: "fas fa-times" }) })] }), _jsxs("div", { className: "mb-4", children: [_jsx("p", { className: "text-sm text-gray-600 mb-2", children: "Seleccione el formato de impresi\u00F3n:" }), _jsxs("div", { className: "flex gap-3", children: [_jsxs("button", { onClick: () => handlePrintFormatChange({ value: 'letter', label: 'Carta' }), className: `px-4 py-2 border rounded-md ${printFormat.value === 'letter'
+                                                        }) })] }) }) })) : (_jsx("div", { className: "overflow-x-auto", children: _jsxs("table", { className: "min-w-full divide-y divide-gray-200 dark:divide-gray-700", children: [_jsx("thead", { className: "bg-gray-50 dark:bg-gray-700", children: _jsxs("tr", { children: [_jsx("th", { className: "text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4", children: "Producto" }), _jsx("th", { className: "text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4", children: "Cantidad" }), _jsx("th", { className: "text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4", children: "Precio Unit." }), _jsx("th", { className: "text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4", children: "Total" }), ['recibida_parcialmente', 'completada'].includes(order.status) && (_jsx("th", { className: "text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider py-3 px-4", children: "Recibidos" }))] }) }), _jsxs("tbody", { className: "bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700", children: [orderItems.map(item => (_jsxs("tr", { className: "hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors", children: [_jsxs("td", { className: "py-3 px-4 text-sm dark:text-gray-300", children: [_jsx("div", { className: "font-medium", children: item.product.name }), _jsxs("div", { className: "text-xs text-gray-500 dark:text-gray-400", children: ["SKU: ", item.product.sku] })] }), _jsx("td", { className: "py-3 px-4 text-sm text-right dark:text-gray-300", children: item.quantity }), _jsx("td", { className: "py-3 px-4 text-sm text-right dark:text-gray-300", children: formatCurrency(item.unit_price) }), _jsx("td", { className: "py-3 px-4 text-sm text-right font-medium dark:text-gray-300", children: formatCurrency(item.total_price) }), ['recibida_parcialmente', 'completada'].includes(order.status) && (_jsx("td", { className: "py-3 px-4 text-sm text-right", children: _jsxs("span", { className: item.received_quantity === item.quantity ? 'text-green-600 dark:text-green-400' : 'text-yellow-600 dark:text-yellow-400', children: [item.received_quantity || 0, " / ", item.quantity] }) }))] }, item.id))), _jsxs("tr", { className: "bg-gray-50 dark:bg-gray-700", children: [_jsx("td", { colSpan: 3, className: "py-3 px-4 text-sm text-right font-medium dark:text-gray-300", children: "Total:" }), _jsx("td", { className: "py-3 px-4 text-sm text-right font-bold dark:text-gray-300", children: formatCurrency(order.total_amount) }), ['recibida_parcialmente', 'completada'].includes(order.status) && _jsx("td", {})] })] })] }) })), isReceivingItems && (_jsxs("div", { className: "mt-4 flex justify-end space-x-3", children: [_jsx("button", { type: "button", onClick: handleCancelReceiving, className: "px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400", children: "Cancelar" }), _jsxs("button", { type: "button", onClick: handleSaveReceived, disabled: isSubmitting, className: "px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50 disabled:cursor-not-allowed", children: [_jsx("i", { className: `fas ${isSubmitting ? 'fa-spinner fa-spin' : 'fa-save'} mr-2` }), isSubmitting ? 'Guardando...' : 'Guardar Recepción'] })] }))] })] }), _jsxs("div", { children: [_jsxs("div", { className: "bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6", children: [_jsx("h3", { className: "text-lg font-medium mb-3 dark:text-gray-200", children: "Informaci\u00F3n del Proveedor" }), _jsxs("div", { className: "space-y-3", children: [_jsxs("div", { children: [_jsx("h4", { className: "text-sm font-medium text-gray-500 dark:text-gray-400", children: "Nombre" }), _jsx("p", { className: "mt-1 text-sm text-gray-900 dark:text-gray-300", children: order.supplier.name })] }), order.supplier.contact_info?.contact_name && (_jsxs("div", { children: [_jsx("h4", { className: "text-sm font-medium text-gray-500 dark:text-gray-400", children: "Contacto" }), _jsx("p", { className: "mt-1 text-sm text-gray-900 dark:text-gray-300", children: order.supplier.contact_info.contact_name })] })), _jsxs("div", { className: "grid grid-cols-2 gap-4", children: [order.supplier.contact_info?.phone && (_jsxs("div", { children: [_jsx("h4", { className: "text-sm font-medium text-gray-500 dark:text-gray-400", children: "Tel\u00E9fono" }), _jsx("p", { className: "mt-1 text-sm text-gray-900 dark:text-gray-300", children: order.supplier.contact_info.phone })] })), order.supplier.contact_info?.email && (_jsxs("div", { children: [_jsx("h4", { className: "text-sm font-medium text-gray-500 dark:text-gray-400", children: "Email" }), _jsx("p", { className: "mt-1 text-sm text-gray-900 dark:text-gray-300", children: order.supplier.contact_info.email })] }))] }), order.supplier.contact_info?.address && (_jsxs("div", { children: [_jsx("h4", { className: "text-sm font-medium text-gray-500 dark:text-gray-400", children: "Direcci\u00F3n" }), _jsx("p", { className: "mt-1 text-sm text-gray-900 dark:text-gray-300", children: order.supplier.contact_info.address })] }))] }), _jsx("div", { className: "mt-4", children: _jsxs(Link, { to: `/proveedores/${order.supplier.id}/compras`, className: "text-blue-600 hover:text-blue-800 text-sm flex items-center", children: [_jsx("i", { className: "fas fa-history mr-1" }), "Ver historial de compras"] }) })] }), _jsxs("div", { className: "bg-white rounded-lg shadow-md p-6", children: [_jsx("h3", { className: "text-lg font-medium mb-3", children: "Almac\u00E9n de Destino" }), _jsxs("div", { className: "space-y-3", children: [_jsxs("div", { children: [_jsx("h4", { className: "text-sm font-medium text-gray-500", children: "Nombre" }), _jsx("p", { className: "mt-1 text-sm text-gray-900", children: order.warehouse.name })] }), order.warehouse.location && (_jsxs("div", { children: [_jsx("h4", { className: "text-sm font-medium text-gray-500", children: "Ubicaci\u00F3n" }), _jsx("p", { className: "mt-1 text-sm text-gray-900", children: order.warehouse.location })] }))] })] })] })] }), showPrintOptions && (_jsx("div", { className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50", children: _jsxs("div", { className: "bg-white rounded-lg p-6 w-full max-w-4xl shadow-lg", children: [_jsxs("div", { className: "flex items-start justify-between mb-4", children: [_jsx("h3", { className: "text-lg font-semibold", children: "Opciones de Impresi\u00F3n" }), _jsx("button", { onClick: handleClosePrintOptions, className: "text-gray-500 hover:text-gray-700", children: _jsx("i", { className: "fas fa-times" }) })] }), _jsxs("div", { className: "mb-4", children: [_jsx("p", { className: "text-sm text-gray-600 mb-2", children: "Seleccione el formato de impresi\u00F3n:" }), _jsxs("div", { className: "flex gap-3", children: [_jsxs("button", { onClick: () => handlePrintFormatChange({ value: 'letter', label: 'Carta' }), className: `px-4 py-2 border rounded-md ${printFormat.value === 'letter'
                                                 ? 'bg-blue-500 text-white border-blue-500'
                                                 : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`, children: [_jsx("i", { className: "fas fa-file-alt mr-2" }), "Carta"] }), _jsxs("button", { onClick: () => handlePrintFormatChange({ value: 'roll', label: 'Rollo' }), className: `px-4 py-2 border rounded-md ${printFormat.value === 'roll'
                                                 ? 'bg-blue-500 text-white border-blue-500'
