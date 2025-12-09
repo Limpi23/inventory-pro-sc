@@ -247,52 +247,54 @@ jobs:
             | jq -r .upload_url)
           echo "upload_url=$release_url" >> $GITHUB_OUTPUT
 
-      - name: Upload DMG (x64)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.get_release.outputs.upload_url }}
-          asset_path: dist-builder/C.O.M.P.A-${{ steps.version.outputs.fileVersion }}-x64.dmg
-          asset_name: Inventario-Pro-${{ steps.version.outputs.fileVersion }}-x64.dmg
-          asset_content_type: application/octet-stream
-
-      - name: Upload DMG (arm64)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.get_release.outputs.upload_url }}
-          asset_path: dist-builder/C.O.M.P.A-${{ steps.version.outputs.fileVersion }}-arm64.dmg
-          asset_name: Inventario-Pro-${{ steps.version.outputs.fileVersion }}-arm64.dmg
-          asset_content_type: application/octet-stream
-
-      - name: Upload ZIP (x64)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.get_release.outputs.upload_url }}
-          asset_path: dist-builder/C.O.M.P.A-${{ steps.version.outputs.fileVersion }}-x64-mac.zip
-          asset_name: Inventario-Pro-${{ steps.version.outputs.fileVersion }}-x64-mac.zip
-          asset_content_type: application/zip
-
-      - name: Upload ZIP (arm64)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.get_release.outputs.upload_url }}
-          asset_path: dist-builder/C.O.M.P.A-${{ steps.version.outputs.fileVersion }}-arm64-mac.zip
-          asset_name: Inventario-Pro-${{ steps.version.outputs.fileVersion }}-arm64-mac.zip
-          asset_content_type: application/zip
-
-      - name: Upload latest-mac.yml for electron-updater
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.get_release.outputs.upload_url }}
-          asset_path: dist-builder/latest-mac.yml
-          asset_name: latest-mac.yml
-          asset_content_type: text/yaml 
+      - name: Find and upload macOS artifacts
+        run: |
+          cd dist-builder
+          
+          # Find DMG files
+          for dmg in *.dmg; do
+            if [ -f "$dmg" ]; then
+              echo "Uploading $dmg..."
+              # Rename to friendly name
+              if [[ "$dmg" == *"arm64"* ]]; then
+                newname="Inventario-Pro-${{ steps.version.outputs.fileVersion }}-arm64.dmg"
+              else
+                newname="Inventario-Pro-${{ steps.version.outputs.fileVersion }}-x64.dmg"
+              fi
+              
+              curl -X POST \
+                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Content-Type: application/octet-stream" \
+                --data-binary "@$dmg" \
+                "${{ steps.get_release.outputs.upload_url }}?name=$newname"
+            fi
+          done
+          
+          # Find ZIP files
+          for zip in *-mac.zip; do
+            if [ -f "$zip" ]; then
+              echo "Uploading $zip..."
+              # Rename to friendly name
+              if [[ "$zip" == *"arm64"* ]]; then
+                newname="Inventario-Pro-${{ steps.version.outputs.fileVersion }}-arm64-mac.zip"
+              else
+                newname="Inventario-Pro-${{ steps.version.outputs.fileVersion }}-x64-mac.zip"
+              fi
+              
+              curl -X POST \
+                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Content-Type: application/zip" \
+                --data-binary "@$zip" \
+                "${{ steps.get_release.outputs.upload_url }}?name=$newname"
+            fi
+          done
+          
+          # Upload latest-mac.yml
+          if [ -f "latest-mac.yml" ]; then
+            echo "Uploading latest-mac.yml..."
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Content-Type: text/yaml" \
+              --data-binary "@latest-mac.yml" \
+              "${{ steps.get_release.outputs.upload_url }}?name=latest-mac.yml"
+          fi 
