@@ -250,6 +250,8 @@ jobs:
       - name: Find and upload macOS artifacts
         run: |
           cd dist-builder
+          echo "=== Contents of dist-builder ==="
+          ls -la
           
           # Find DMG files
           for dmg in *.dmg; do
@@ -270,15 +272,23 @@ jobs:
             fi
           done
           
-          # Find ZIP files
-          for zip in *-mac.zip; do
+          # Find ZIP files (more flexible pattern)
+          for zip in *.zip; do
+            # Skip blockmap files
+            if [[ "$zip" == *".blockmap" ]]; then
+              continue
+            fi
+            
             if [ -f "$zip" ]; then
               echo "Uploading $zip..."
               # Rename to friendly name
               if [[ "$zip" == *"arm64"* ]]; then
                 newname="Inventario-Pro-${{ steps.version.outputs.fileVersion }}-arm64-mac.zip"
-              else
+              elif [[ "$zip" == *"x64"* ]]; then
                 newname="Inventario-Pro-${{ steps.version.outputs.fileVersion }}-x64-mac.zip"
+              else
+                # Universal or unknown architecture
+                newname="Inventario-Pro-${{ steps.version.outputs.fileVersion }}-mac.zip"
               fi
               
               curl -X POST \
