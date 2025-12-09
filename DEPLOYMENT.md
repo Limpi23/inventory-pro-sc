@@ -65,11 +65,22 @@ git push origin v1.4.3
 
 Cada build genera los siguientes archivos:
 
+### Windows
 | Archivo | Descripción | Uso |
 |---------|-------------|-----|
-| `inventory-suit-vX.X.X Setup.exe` | Instalador completo | Distribución a usuarios |
+| `inventory-suit-vX.X.X-Setup.exe` | Instalador completo Windows | Distribución a usuarios |
 | `inventory-suit-vX.X.X-full.nupkg` | Paquete de actualización | Sistema de auto-update |
-| `RELEASES` | Metadatos de versión | Control de versiones |
+| `RELEASES` | Metadatos de versión Windows | Control de versiones |
+| `latest.yml` | Configuración auto-update | Electron-updater |
+
+### macOS
+| Archivo | Descripción | Uso |
+|---------|-------------|-----|
+| `Inventario-Pro-vX.X.X-x64.dmg` | Instalador Mac Intel | Distribución a usuarios Intel |
+| `Inventario-Pro-vX.X.X-arm64.dmg` | Instalador Mac Apple Silicon | Distribución a usuarios M1/M2/M3 |
+| `Inventario-Pro-vX.X.X-x64-mac.zip` | Versión portable Intel | Alternativa al DMG |
+| `Inventario-Pro-vX.X.X-arm64-mac.zip` | Versión portable Apple Silicon | Alternativa al DMG |
+| `latest-mac.yml` | Configuración auto-update macOS | Electron-updater |
 
 ## ⚙️ Configuración Local
 
@@ -85,7 +96,17 @@ ELECTRON_BUILDER_CACHE=$HOME/.cache/electron-builder
 # Desarrollo
 npm run dev:electron          # Ejecutar en modo desarrollo
 npm run build                # Build para producción
+
+# Windows
 npm run make:win             # Generar instalador Windows
+npm run build:nsis           # Build con electron-builder (Windows)
+npm run publish:nsis         # Build y publicar Windows
+
+# macOS
+npm run build:mac            # Generar instaladores macOS (x64 + arm64)
+npm run build:mac:x64        # Solo Intel
+npm run build:mac:arm64      # Solo Apple Silicon
+npm run publish:mac          # Build y publicar macOS
 
 # CI/CD
 npm run lint                 # Verificar código
@@ -117,19 +138,51 @@ Los workflows necesitan los siguientes permisos:
 
 ## 📁 Estructura de Artifacts
 
+### Windows (Electron Forge)
 ```
 out/make/squirrel.windows/x64/
 ├── inventory-suit-1.4.2 Setup.exe     # Instalador principal
 ├── inventory-suit-1.4.2-full.nupkg    # Paquete de actualización
-└── RELEASES                            # Archivo de metadatos
+├── RELEASES                            # Archivo de metadatos
+└── latest.yml                          # Auto-update config
+```
+
+### macOS (Electron Builder)
+```
+dist-builder/
+├── C.O.M.P.A-1.4.2-x64.dmg            # Instalador Intel
+├── C.O.M.P.A-1.4.2-arm64.dmg          # Instalador Apple Silicon
+├── C.O.M.P.A-1.4.2-x64-mac.zip        # Portable Intel
+├── C.O.M.P.A-1.4.2-arm64-mac.zip      # Portable Apple Silicon
+└── latest-mac.yml                      # Auto-update config
+```
+
+## 🍎 Consideraciones para macOS
+
+### Code Signing (Opcional)
+Para distribución en producción, considera firmar la aplicación:
+```bash
+# Requiere Apple Developer Account
+export APPLE_ID="tu-email@ejemplo.com"
+export APPLE_ID_PASSWORD="app-specific-password"
+export CSC_LINK="path/to/certificate.p12"
+export CSC_KEY_PASSWORD="certificate-password"
+```
+
+### Notarización (Opcional)
+Para evitar advertencias de seguridad en macOS:
+```bash
+# Agregar a electron-builder.yml
+afterSign: "scripts/notarize.js"
 ```
 
 ## 🚀 Próximos Pasos
 
+- [x] Configurar builds para macOS
 - [ ] Configurar notificaciones Slack/Discord
 - [ ] Agregar tests automatizados
-- [ ] Configurar builds para macOS/Linux
-- [ ] Implementar firma de código
+- [ ] Implementar firma de código para macOS
+- [ ] Configurar notarización de macOS
 - [ ] Configurar auto-deploy a servidores de actualización
 
 ---

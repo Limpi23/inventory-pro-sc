@@ -97,17 +97,39 @@ jobs:
             ## 🚀 Inventario Pro ${{ steps.version.outputs.tag }}
             
             ### 📦 Archivos de Instalación
-            - **Setup.exe**: Instalador completo para Windows
+            
+            #### Windows
+            - **Setup.exe**: Instalador completo para Windows x64
             - **nupkg**: Paquete para actualizaciones automáticas
             
+            #### macOS
+            - **x64.dmg**: Instalador para Mac Intel
+            - **arm64.dmg**: Instalador para Mac Apple Silicon (M1/M2/M3)
+            - **x64-mac.zip**: Versión portable para Mac Intel
+            - **arm64-mac.zip**: Versión portable para Mac Apple Silicon
+            
             ### 💻 Requisitos del Sistema
+            
+            **Windows:**
             - Windows 10 o superior
             - Arquitectura x64
             
+            **macOS:**
+            - macOS 10.13 (High Sierra) o superior
+            - Intel (x64) o Apple Silicon (arm64)
+            
             ### 🔧 Instalación
-            1. Descarga `inventory-suit-${{ steps.version.outputs.fileVersion }} Setup.exe`
+            
+            **Windows:**
+            1. Descarga `inventory-suit-${{ steps.version.outputs.fileVersion }}-Setup.exe`
             2. Ejecuta el instalador como administrador
             3. Sigue las instrucciones en pantalla
+            4. Configura tu conexión a Supabase
+            
+            **macOS:**
+            1. Descarga el archivo `.dmg` correspondiente a tu procesador
+            2. Abre el DMG y arrastra la app a Aplicaciones
+            3. Si macOS bloquea la app, ve a Preferencias del Sistema > Seguridad y Privacidad
             4. Configura tu conexión a Supabase
             
             ### 🆕 Características
@@ -115,6 +137,7 @@ jobs:
             - Interfaz moderna y responsive
             - Integración con Supabase
             - Actualizaciones automáticas
+            - Soporte multi-plataforma (Windows y macOS)
             
             ---
             **Desarrollado por SuitCore** | [Documentación](./README.md) | [Reporte de Issues](../../issues)
@@ -159,4 +182,117 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: out/make/squirrel.windows/x64/latest.yml
           asset_name: latest.yml
+          asset_content_type: text/yaml
+
+  build-macos:
+    runs-on: macos-latest
+    needs: build-windows
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Update version in package.json
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          version="${{ github.event.inputs.version }}"
+          version="${version#v}"
+          npm version $version --no-git-tag-version
+
+      - name: Build application
+        run: npm run build
+
+      - name: Build preload script
+        run: npm run build:preload
+
+      - name: Build macOS installer (electron-builder)
+        run: npx electron-builder --mac --x64 --arm64 --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: List build artifacts
+        run: |
+          echo "=== Build Artifacts ==="
+          ls -lh dist-builder/
+          echo "=== File Sizes ==="
+          du -sh dist-builder/*
+
+      - name: Get version info
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="${{ github.event.inputs.version }}"
+          else
+            tag="${{ github.ref_name }}"
+          fi
+          fileVersion="${tag#v}"
+          echo "tag=$tag" >> $GITHUB_OUTPUT
+          echo "fileVersion=$fileVersion" >> $GITHUB_OUTPUT
+          echo "Tag: $tag | FileVersion: $fileVersion"
+
+      - name: Get release upload URL
+        id: get_release
+        run: |
+          release_url=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.version.outputs.tag }}" \
+            | jq -r .upload_url)
+          echo "upload_url=$release_url" >> $GITHUB_OUTPUT
+
+      - name: Upload DMG (x64)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.get_release.outputs.upload_url }}
+          asset_path: dist-builder/C.O.M.P.A-${{ steps.version.outputs.fileVersion }}-x64.dmg
+          asset_name: Inventario-Pro-${{ steps.version.outputs.fileVersion }}-x64.dmg
+          asset_content_type: application/octet-stream
+
+      - name: Upload DMG (arm64)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.get_release.outputs.upload_url }}
+          asset_path: dist-builder/C.O.M.P.A-${{ steps.version.outputs.fileVersion }}-arm64.dmg
+          asset_name: Inventario-Pro-${{ steps.version.outputs.fileVersion }}-arm64.dmg
+          asset_content_type: application/octet-stream
+
+      - name: Upload ZIP (x64)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.get_release.outputs.upload_url }}
+          asset_path: dist-builder/C.O.M.P.A-${{ steps.version.outputs.fileVersion }}-x64-mac.zip
+          asset_name: Inventario-Pro-${{ steps.version.outputs.fileVersion }}-x64-mac.zip
+          asset_content_type: application/zip
+
+      - name: Upload ZIP (arm64)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.get_release.outputs.upload_url }}
+          asset_path: dist-builder/C.O.M.P.A-${{ steps.version.outputs.fileVersion }}-arm64-mac.zip
+          asset_name: Inventario-Pro-${{ steps.version.outputs.fileVersion }}-arm64-mac.zip
+          asset_content_type: application/zip
+
+      - name: Upload latest-mac.yml for electron-updater
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.get_release.outputs.upload_url }}
+          asset_path: dist-builder/latest-mac.yml
+          asset_name: latest-mac.yml
           asset_content_type: text/yaml 
