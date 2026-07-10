@@ -1,9 +1,11 @@
-import { jsx as _jsx, Fragment as _Fragment, jsxs as _jsxs } from "react/jsx-runtime";
+import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '../components/ui/sheet';
 import { useAuth } from '../lib/auth';
+import { useBranch, ALL_BRANCHES } from '../lib/branch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from './ui/select';
 import DatabaseStatus from './ui/DatabaseStatus';
 import UpdateNotification from './ui/UpdateNotification';
 import SubscriptionHelpButton from './SubscriptionHelpButton';
@@ -11,6 +13,16 @@ import SubscriptionInfo from './SubscriptionInfo';
 // Función cn simple para manejar la combinación de clases
 const cn = (...classes) => {
     return classes.filter(Boolean).join(' ');
+};
+// Selector de sucursal activa (bloqueado para usuarios con sucursal asignada)
+const BranchSwitcher = () => {
+    const { warehouses, activeBranchId, activeBranch, isLocked, setActiveBranch } = useBranch();
+    if (isLocked) {
+        return (_jsxs("span", { className: "hidden md:inline-flex items-center gap-2 text-xs px-3 py-2 rounded-md bg-primary/10 text-primary select-none", title: "Sucursal asignada", children: [_jsx("i", { className: "fas fa-store" }), activeBranch?.name || 'Sucursal'] }));
+    }
+    if (!warehouses.length)
+        return null;
+    return (_jsx("div", { className: "hidden md:block", children: _jsxs(Select, { value: activeBranchId, onValueChange: setActiveBranch, children: [_jsxs(SelectTrigger, { className: "w-[210px] h-9", title: "Sucursal activa", children: [_jsx("i", { className: "fas fa-store mr-2 text-muted-foreground" }), _jsx(SelectValue, { placeholder: "Sucursal" })] }), _jsxs(SelectContent, { children: [_jsx(SelectItem, { value: ALL_BRANCHES, children: "Todas las sucursales" }), warehouses.map(w => (_jsxs(SelectItem, { value: w.id, children: [w.name, w.branch_type === 'matriz' ? ' (Matriz)' : ''] }, w.id)))] })] }) }));
 };
 const Layout = ({ children, onOpenConfig }) => {
     const location = useLocation();
@@ -66,7 +78,8 @@ const Layout = ({ children, onOpenConfig }) => {
             requiredPermission: { resource: 'inventario', action: 'read' },
             children: [
                 { name: 'Control de Inventario', path: '/inventario' },
-                { name: 'Inventario General', path: '/inventario/general' }
+                { name: 'Inventario General', path: '/inventario/general' },
+                { name: 'Transferencias', path: '/inventario/transferencias' }
             ]
         },
         {
@@ -150,6 +163,6 @@ const Layout = ({ children, onOpenConfig }) => {
                                                                                                                 ? "text-primary font-medium"
                                                                                                                 : "text-muted-foreground hover:bg-muted"), onClick: () => setMobileOpen(false), children: child.name })] }, child.path))) })] }))] })) : (_jsxs(Link, { to: item.path, className: cn("flex items-center py-3 px-4 rounded-md transition-colors", location.pathname === item.path
                                                                                     ? "bg-primary/10 text-primary"
-                                                                                    : "text-muted-foreground hover:bg-muted"), onClick: () => setMobileOpen(false), children: [_jsx("i", { className: `${item.icon} w-5` }), _jsx("span", { className: "ml-3", children: item.name })] })) }) }, item.path))) }) })] })] }), _jsx("h1", { className: "text-xl font-semibold hidden sm:block", children: navigationItems.find(item => item.path === location.pathname)?.name || 'Dashboard' })] }), _jsxs("div", { className: "flex items-center space-x-2", children: [_jsx(SubscriptionHelpButton, {}), appVersion && (_jsxs("span", { className: "text-xs px-2 py-1 rounded bg-muted text-muted-foreground select-none", title: "Versi\u00F3n de la aplicaci\u00F3n", children: ["v", appVersion] })), _jsx(DatabaseStatus, {}), _jsx(UpdateNotification, {}), _jsx("button", { className: "rounded-full w-10 h-10 flex items-center justify-center hover:bg-muted transition-colors", title: "Configurar conexi\u00F3n", onClick: onOpenConfig, style: { marginRight: 8 }, children: _jsx("i", { className: "fas fa-cog text-xl text-gray-500" }) }), _jsx("div", { className: "relative", children: _jsxs(Button, { variant: "outline", className: "rounded-full w-10 h-10 p-0 sm:w-auto sm:h-auto sm:p-2 sm:pl-3 sm:pr-3", onClick: handleLogout, children: [_jsx("i", { className: "fas fa-sign-out-alt sm:mr-2" }), _jsx("span", { className: "hidden sm:inline", children: user?.full_name || 'Usuario' })] }) })] })] }), _jsx(SubscriptionInfo, {})] }), _jsx("main", { className: "flex-1 overflow-auto p-4 sm:p-6", children: children })] })] }));
+                                                                                    : "text-muted-foreground hover:bg-muted"), onClick: () => setMobileOpen(false), children: [_jsx("i", { className: `${item.icon} w-5` }), _jsx("span", { className: "ml-3", children: item.name })] })) }) }, item.path))) }) })] })] }), _jsx("h1", { className: "text-xl font-semibold hidden sm:block", children: navigationItems.find(item => item.path === location.pathname)?.name || 'Dashboard' })] }), _jsxs("div", { className: "flex items-center space-x-2", children: [_jsx(BranchSwitcher, {}), _jsx(SubscriptionHelpButton, {}), appVersion && (_jsxs("span", { className: "text-xs px-2 py-1 rounded bg-muted text-muted-foreground select-none", title: "Versi\u00F3n de la aplicaci\u00F3n", children: ["v", appVersion] })), _jsx(DatabaseStatus, {}), _jsx(UpdateNotification, {}), _jsx("button", { className: "rounded-full w-10 h-10 flex items-center justify-center hover:bg-muted transition-colors", title: "Configurar conexi\u00F3n", onClick: onOpenConfig, style: { marginRight: 8 }, children: _jsx("i", { className: "fas fa-cog text-xl text-gray-500" }) }), _jsx("div", { className: "relative", children: _jsxs(Button, { variant: "outline", className: "rounded-full w-10 h-10 p-0 sm:w-auto sm:h-auto sm:p-2 sm:pl-3 sm:pr-3", onClick: handleLogout, children: [_jsx("i", { className: "fas fa-sign-out-alt sm:mr-2" }), _jsx("span", { className: "hidden sm:inline", children: user?.full_name || 'Usuario' })] }) })] })] }), _jsx(SubscriptionInfo, {})] }), _jsx("main", { className: "flex-1 overflow-auto p-4 sm:p-6", children: children })] })] }));
 };
 export default Layout;

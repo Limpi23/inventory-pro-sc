@@ -1,6 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useBranch } from '../../lib/branch';
 import { toast } from 'react-hot-toast';
 const InventoryAdjustment = ({ isOpen, onClose, onAdjustmentComplete }) => {
     const [products, setProducts] = useState([]);
@@ -16,10 +17,16 @@ const InventoryAdjustment = ({ isOpen, onClose, onAdjustmentComplete }) => {
     const [isLoadingStock, setIsLoadingStock] = useState(false);
     const [productSearchTerm, setProductSearchTerm] = useState('');
     const [showProductDropdown, setShowProductDropdown] = useState(false);
+    const { activeBranchId, isAllView } = useBranch();
     useEffect(() => {
         if (isOpen) {
             loadData();
+            // Preseleccionar la sucursal activa
+            if (!isAllView && activeBranchId) {
+                setSelectedWarehouseId(prev => prev || activeBranchId);
+            }
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen]);
     useEffect(() => {
         if (selectedWarehouseId) {

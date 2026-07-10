@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Role } from '../../types';
 import { useAuth } from '../lib/auth';
+import { useBranch } from '../lib/branch';
 import { toast } from 'react-hot-toast';
 import userService from '../lib/userService';
 import {
@@ -41,8 +42,12 @@ import {
 } from '../components/ui/dropdown-menu';
 import authService from '../lib/authService';
 
+// Valor sentinela para "sin sucursal asignada" (ve todas)
+const NO_BRANCH = 'none';
+
 const Users: React.FC = () => {
   const { user: currentUser, hasPermission } = useAuth();
+  const { warehouses } = useBranch();
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,13 +57,15 @@ const Users: React.FC = () => {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [editForm, setEditForm] = useState({
     role_id: '',
-    active: true
+    active: true,
+    warehouse_id: NO_BRANCH
   });
   const [newUserForm, setNewUserForm] = useState({
     email: '',
     full_name: '',
     password: '',
     role_id: '',
+    warehouse_id: NO_BRANCH,
   });
 
   // Verificar permisos
@@ -97,7 +104,8 @@ const Users: React.FC = () => {
     setSelectedUser(user);
     setEditForm({
       role_id: user.role_id.toString(),
-      active: user.active
+      active: user.active,
+      warehouse_id: user.warehouse_id || NO_BRANCH
     });
     setIsEditDialogOpen(true);
   };
@@ -108,7 +116,8 @@ const Users: React.FC = () => {
     try {
       await userService.updateUser(selectedUser.id, {
         role_id: parseInt(editForm.role_id),
-        active: editForm.active
+        active: editForm.active,
+        warehouse_id: editForm.warehouse_id === NO_BRANCH ? null : editForm.warehouse_id
       });
       
       toast.success('Usuario actualizado correctamente');
@@ -130,7 +139,8 @@ const Users: React.FC = () => {
         email: newUserForm.email,
         password: newUserForm.password,
         full_name: newUserForm.full_name,
-        role_id: parseInt(newUserForm.role_id)
+        role_id: parseInt(newUserForm.role_id),
+        warehouse_id: newUserForm.warehouse_id === NO_BRANCH ? null : newUserForm.warehouse_id
       });
       toast.success('Usuario creado correctamente');
       setIsAddDialogOpen(false);
@@ -139,6 +149,7 @@ const Users: React.FC = () => {
         full_name: '',
         password: '',
         role_id: '',
+        warehouse_id: NO_BRANCH,
       });
       fetchUsers();
     } catch (error: any) {
@@ -151,6 +162,7 @@ const Users: React.FC = () => {
           full_name: '',
           password: '',
           role_id: '',
+          warehouse_id: NO_BRANCH,
         });
         fetchUsers();
       } else {
@@ -287,6 +299,27 @@ const Users: React.FC = () => {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="warehouse" className="text-right">
+                    Sucursal
+                  </Label>
+                  <Select
+                    value={newUserForm.warehouse_id}
+                    onValueChange={(value) => setNewUserForm(prev => ({ ...prev, warehouse_id: value }))}
+                  >
+                    <SelectTrigger className="col-span-3">
+                      <SelectValue placeholder="Sin sucursal (ve todas)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_BRANCH}>Sin sucursal (ve todas)</SelectItem>
+                      {warehouses.map(w => (
+                        <SelectItem key={w.id} value={w.id}>
+                          {w.name}{w.branch_type === 'matriz' ? ' (Matriz)' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
@@ -317,6 +350,7 @@ const Users: React.FC = () => {
                 <TableHead>Nombre</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Rol</TableHead>
+                <TableHead>Sucursal</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Último Acceso</TableHead>
                 <TableHead>Acciones</TableHead>
@@ -325,7 +359,7 @@ const Users: React.FC = () => {
             <TableBody>
               {filteredUsers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     No se encontraron usuarios con la búsqueda actual.
                   </TableCell>
                 </TableRow>
@@ -340,6 +374,15 @@ const Users: React.FC = () => {
                       }`}>
                         {user.role_name}
                       </span>
+                    </TableCell>
+                    <TableCell>
+                      {user.warehouse_name ? (
+                        <span className="px-2 py-1 rounded-full text-xs bg-muted text-muted-foreground">
+                          <i className="fas fa-store mr-1"></i>{user.warehouse_name}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">Todas</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       {user.active ? (
@@ -425,6 +468,27 @@ const Users: React.FC = () => {
                   {roles.map(role => (
                     <SelectItem key={role.id} value={role.id.toString()}>
                       {role.name} - {role.description}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-warehouse" className="text-right">
+                Sucursal
+              </Label>
+              <Select
+                value={editForm.warehouse_id}
+                onValueChange={(value) => setEditForm(prev => ({ ...prev, warehouse_id: value }))}
+              >
+                <SelectTrigger className="col-span-3">
+                  <SelectValue placeholder="Sin sucursal (ve todas)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_BRANCH}>Sin sucursal (ve todas)</SelectItem>
+                  {warehouses.map(w => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.name}{w.branch_type === 'matriz' ? ' (Matriz)' : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>

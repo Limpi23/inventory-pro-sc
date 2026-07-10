@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { getLocalDateISOString, formatDateString } from '../lib/dateUtils';
 import Papa from 'papaparse';
 import { useCurrency } from '../hooks/useCurrency';
+import { useBranch } from '../lib/branch';
 
 interface ReportFilter {
   startDate: string;
@@ -67,9 +68,16 @@ const Reports: React.FC = () => {
     maxAmount: 0
   });
 
+  const { activeBranchId, isAllView, isLocked } = useBranch();
+
   useEffect(() => {
     fetchWarehouses();
   }, []);
+
+  // Sincronizar el filtro de almacén con la sucursal activa
+  useEffect(() => {
+    setFilters(prev => ({ ...prev, warehouse_id: isAllView ? undefined : activeBranchId }));
+  }, [activeBranchId, isAllView]);
 
   useEffect(() => {
     setCurrentPage(1); // Reset página al cambiar filtros
@@ -533,7 +541,8 @@ const Reports: React.FC = () => {
               name="warehouse_id"
               value={filters.warehouse_id || ''}
               onChange={handleFilterChange}
-              className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              disabled={isLocked}
+              className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:opacity-70 disabled:cursor-not-allowed"
             >
               <option value="">Todos los almacenes</option>
               {warehouses.map(warehouse => (

@@ -6,18 +6,28 @@ export const userService = {
         try {
             const client = await supabase.getClient();
             // Primero obtenemos los usuarios básicos
-            const { data: usersData, error: usersError } = await client
+            let { data: usersData, error: usersError } = await client
                 .from('users')
                 .select(`
-          id, 
-          email, 
-          full_name, 
-          active, 
+          id,
+          email,
+          full_name,
+          active,
           role_id,
+          warehouse_id,
           last_login,
           created_at
         `)
                 .order('full_name');
+            // Fallback para bases sin la migración de sucursales (columna warehouse_id inexistente)
+            if (usersError && /warehouse_id/i.test(usersError.message || '')) {
+                const retry = await client
+                    .from('users')
+                    .select('id, email, full_name, active, role_id, last_login, created_at')
+                    .order('full_name');
+                usersData = retry.data;
+                usersError = retry.error;
+            }
             if (usersError)
                 throw usersError;
             if (!usersData)
@@ -33,6 +43,14 @@ export const userService = {
                 map[role.id] = role;
                 return map;
             }, {});
+            // Mapa de sucursales para mostrar el nombre de la sucursal asignada
+            const { data: warehousesData } = await client
+                .from('warehouses')
+                .select('id, name');
+            const warehousesMap = (warehousesData || []).reduce((map, w) => {
+                map[String(w.id)] = w;
+                return map;
+            }, {});
             // Mapear los datos de usuarios con sus roles
             return usersData.map((user) => ({
                 id: String(user.id),
@@ -42,6 +60,8 @@ export const userService = {
                 role_id: Number(user.role_id),
                 role_name: rolesMap[Number(user.role_id)]?.name || '',
                 role_description: rolesMap[Number(user.role_id)]?.description || '',
+                warehouse_id: user.warehouse_id ? String(user.warehouse_id) : null,
+                warehouse_name: user.warehouse_id ? (warehousesMap[String(user.warehouse_id)]?.name || '') : '',
                 last_login: user.last_login ? String(user.last_login) : undefined,
                 created_at: String(user.created_at || new Date().toISOString())
             }));
@@ -59,11 +79,12 @@ export const userService = {
             const { data: userData, error: userError } = await client
                 .from('users')
                 .select(`
-          id, 
-          email, 
-          full_name, 
-          active, 
+          id,
+          email,
+          full_name,
+          active,
           role_id,
+          warehouse_id,
           last_login,
           created_at
         `)
@@ -90,6 +111,7 @@ export const userService = {
                 role_id: Number(u.role_id),
                 role_name: roleData?.name || '',
                 role_description: roleData?.description || '',
+                warehouse_id: u.warehouse_id ? String(u.warehouse_id) : null,
                 last_login: u.last_login ? String(u.last_login) : undefined,
                 created_at: String(u.created_at || new Date().toISOString())
             };
@@ -155,27 +177,41 @@ export const userService = {
     // Crear un nuevo usuario
     createUser: async (userData) => {
         try {
+            let newUser;
             // Intentar primero crear directamente en public.users (más confiable)
             try {
-                const newUser = await authService.createUserDirectly({
+                newUser = await authService.createUserDirectly({
                     email: userData.email,
                     password: userData.password,
                     full_name: userData.full_name,
                     role_id: userData.role_id
                 });
-                return newUser;
             }
             catch (directError) {
                 console.warn('Fallo creación directa, intentando con Supabase Auth:', directError.message);
                 // Fallback: intentar con Supabase Auth
-                const newUser = await authService.register({
+                newUser = await authService.register({
                     email: userData.email,
                     password: userData.password,
                     full_name: userData.full_name,
                     role_id: userData.role_id
                 });
-                return newUser;
             }
+            // Asignar sucursal si se indicó
+            if (userData.warehouse_id) {
+                try {
+                    const client = await supabase.getClient();
+                    await client
+                        .from('users')
+                        .update({ warehouse_id: userData.warehouse_id })
+                        .eq('id', newUser.id);
+                    newUser.warehouse_id = userData.warehouse_id;
+                }
+                catch (whError) {
+                    console.warn('No se pudo asignar la sucursal al usuario:', whError.message);
+                }
+            }
+            return newUser;
         }
         catch (error) {
             console.error('Error al crear usuario (detalle):', error);

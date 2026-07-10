@@ -1,0 +1,12 @@
+[
+  {
+    "name": "Cliente A",
+    "url": "https://xxxxxxxxxxxx.supabase.co",
+    "key": "SERVICE_ROLE_KEY_DEL_PROYECTO"
+  },
+  {
+    "name": "Cliente B",
+    "url": "https://yyyyyyyyyyyy.supabase.co",
+    "key": "SERVICE_ROLE_KEY_DEL_PROYECTO"
+  }
+]

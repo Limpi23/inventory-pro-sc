@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { supabase, stockMovementService } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../lib/auth';
 import { useCurrency } from '../hooks/useCurrency';
@@ -29,7 +29,7 @@ const ReturnDetail: React.FC = () => {
         .from('returns')
         .select(`
           *,
-          invoice:invoices(invoice_number),
+          invoice:invoices(invoice_number, warehouse_id),
           customer:customers(name, email, phone)
         `)
         .eq('id', id)
@@ -61,18 +61,45 @@ const ReturnDetail: React.FC = () => {
   const handleUpdateStatus = async (newStatus: string) => {
     try {
       const client = await supabase.getClient();
+
+      // Al aprobar, reponer el stock en la sucursal indicada en la devolución
+      // (o en el almacén de la factura original como respaldo).
+      if (newStatus === 'procesada') {
+        const restockWarehouseId = returnData?.warehouse_id || returnData?.invoice?.warehouse_id;
+        if (!restockWarehouseId) {
+          toast.error('La devolución no tiene sucursal de reposición ni almacén en la factura');
+          return;
+        }
+        if (returnItems.length > 0) {
+          const inReturnTypeId = await stockMovementService.getMovementTypeIdByCode('IN_RETURN');
+          const movements = returnItems.map((item: any) => ({
+            product_id: item.product_id,
+            warehouse_id: restockWarehouseId,
+            movement_type_id: inReturnTypeId,
+            quantity: Number(item.quantity),
+            reference: `DEV-${returnData?.invoice?.invoice_number || id}`,
+            notes: `Reposición por devolución aprobada`,
+            movement_date: new Date().toISOString(),
+            created_by: user?.id
+          }));
+          await stockMovementService.createBatch(movements as any);
+        }
+      }
+
       const { error } = await client
         .from('returns')
         .update({ status: newStatus })
         .eq('id', id);
-        
+
       if (error) throw error;
-      
+
       setReturnData({ ...returnData, status: newStatus });
-      toast.success('Estado actualizado correctamente');
+      toast.success(newStatus === 'procesada'
+        ? 'Devolución aprobada y stock repuesto en la sucursal'
+        : 'Estado actualizado correctamente');
     } catch (error: any) {
       console.error('Error al actualizar estado:', error.message);
-      toast.error('Error al actualizar el estado');
+      toast.error(`Error al actualizar el estado: ${error.message}`);
     }
   };
 

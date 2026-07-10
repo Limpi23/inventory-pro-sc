@@ -4,6 +4,7 @@ import { getLocalDateISOString } from '../lib/dateUtils';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useCurrency } from '../hooks/useCurrency';
+import { useBranch } from '../lib/branch';
 
 interface Customer {
   id: string;
@@ -52,6 +53,7 @@ interface ProductSerial {
 
 const InvoiceForm: React.FC = () => {
   const currency = useCurrency();
+  const { activeBranchId, isAllView, isLocked } = useBranch();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -119,6 +121,14 @@ const InvoiceForm: React.FC = () => {
 
   // Ref para el campo de búsqueda de productos
   const productSearchInputRef = useRef<HTMLInputElement>(null);
+
+  // Preseleccionar la sucursal activa al crear una factura nueva
+  useEffect(() => {
+    if (!isEditing && !isAllView && activeBranchId) {
+      setFormData(prev => (prev.warehouse_id ? prev : { ...prev, warehouse_id: activeBranchId }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBranchId, isAllView, isEditing]);
 
   useEffect(() => {
     fetchCustomers();
@@ -1079,13 +1089,17 @@ const InvoiceForm: React.FC = () => {
                 value={formData.warehouse_id}
                 onChange={handleInputChange}
                 required
-                className="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                disabled={isLocked}
+                className="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
               >
                 <option value="">-- Seleccione almacén --</option>
                 {warehouses.map(warehouse => (
                   <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
                 ))}
               </select>
+              {isLocked && (
+                <p className="text-xs text-gray-500 mt-1">Sucursal asignada a tu usuario</p>
+              )}
             </div>
 
             <div>

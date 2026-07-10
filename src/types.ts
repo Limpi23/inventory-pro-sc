@@ -8,6 +8,10 @@ export interface User {
   role_name: string;
   role_description?: string;
   tenant_id?: string;
+  // Sucursal asignada al usuario (null = sin restricción, típico de admins de matriz)
+  warehouse_id?: string | null;
+  warehouse_name?: string;
+  warehouse_branch_type?: 'matriz' | 'sucursal';
   last_login?: string;
   created_at: string;
 }
@@ -116,6 +120,8 @@ export interface Return {
   status: string;
   reason?: string;
   notes?: string;
+  // Sucursal/almacén donde se repone la mercancía al aprobar
+  warehouse_id?: string | null;
   invoice?: Invoice;
 }
 

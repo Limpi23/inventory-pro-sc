@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useBranch } from '../lib/branch';
 
 interface Product {
   id: string;
@@ -50,6 +51,7 @@ interface MovementItem {
 }
 
 const Inventory: React.FC = () => {
+  const { activeBranchId, isAllView } = useBranch();
   const [products, setProducts] = useState<Product[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [movementTypes, setMovementTypes] = useState<any[]>([]);
@@ -84,6 +86,14 @@ const Inventory: React.FC = () => {
   const [movementItems, setMovementItems] = useState<MovementItem[]>([]);
   const [globalReference, setGlobalReference] = useState('');
   const [globalNotes, setGlobalNotes] = useState('');
+
+  // Preseleccionar la sucursal activa como origen de los movimientos
+  useEffect(() => {
+    if (!isAllView && activeBranchId) {
+      setWarehouseId(prev => prev || activeBranchId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBranchId, isAllView]);
 
   useEffect(() => {
     async function fetchData() {

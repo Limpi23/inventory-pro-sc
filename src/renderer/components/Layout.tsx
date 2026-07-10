@@ -3,6 +3,14 @@ import { Link, useLocation } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '../components/ui/sheet';
 import { useAuth } from '../lib/auth';
+import { useBranch, ALL_BRANCHES } from '../lib/branch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
 import DatabaseStatus from './ui/DatabaseStatus';
 import UpdateNotification from './ui/UpdateNotification';
 import SubscriptionHelpButton from './SubscriptionHelpButton';
@@ -26,6 +34,44 @@ interface NavigationItem {
   isExpanded?: boolean;
   requiredPermission?: { resource: string; action: string };
 }
+
+// Selector de sucursal activa (bloqueado para usuarios con sucursal asignada)
+const BranchSwitcher: React.FC = () => {
+  const { warehouses, activeBranchId, activeBranch, isLocked, setActiveBranch } = useBranch();
+
+  if (isLocked) {
+    return (
+      <span
+        className="hidden md:inline-flex items-center gap-2 text-xs px-3 py-2 rounded-md bg-primary/10 text-primary select-none"
+        title="Sucursal asignada"
+      >
+        <i className="fas fa-store"></i>
+        {activeBranch?.name || 'Sucursal'}
+      </span>
+    );
+  }
+
+  if (!warehouses.length) return null;
+
+  return (
+    <div className="hidden md:block">
+      <Select value={activeBranchId} onValueChange={setActiveBranch}>
+        <SelectTrigger className="w-[210px] h-9" title="Sucursal activa">
+          <i className="fas fa-store mr-2 text-muted-foreground"></i>
+          <SelectValue placeholder="Sucursal" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL_BRANCHES}>Todas las sucursales</SelectItem>
+          {warehouses.map(w => (
+            <SelectItem key={w.id} value={w.id}>
+              {w.name}{w.branch_type === 'matriz' ? ' (Matriz)' : ''}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+};
 
 const Layout: React.FC<LayoutProps> = ({ children, onOpenConfig }) => {
   const location = useLocation();
@@ -82,7 +128,8 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenConfig }) => {
       requiredPermission: { resource: 'inventario', action: 'read' },
       children: [
         { name: 'Control de Inventario', path: '/inventario' },
-        { name: 'Inventario General', path: '/inventario/general' }
+        { name: 'Inventario General', path: '/inventario/general' },
+        { name: 'Transferencias', path: '/inventario/transferencias' }
       ]
     },
     { 
@@ -372,6 +419,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onOpenConfig }) => {
             </div>
 
             <div className="flex items-center space-x-2">
+              <BranchSwitcher />
               <SubscriptionHelpButton />
               {appVersion && (
                 <span className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground select-none" title="Versión de la aplicación">

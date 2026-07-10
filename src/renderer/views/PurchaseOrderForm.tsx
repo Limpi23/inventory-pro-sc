@@ -4,6 +4,7 @@ import PurchaseOrderItemsImport, { ImportOrderItem } from '../components/purchas
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useCurrency } from '../hooks/useCurrency';
 import { getLocalDateISOString } from '../lib/dateUtils';
+import { useBranch } from '../lib/branch';
 
 interface Supplier {
   id: string;
@@ -33,6 +34,7 @@ interface OrderItem {
 }
 
 const PurchaseOrderForm: React.FC = () => {
+  const { activeBranchId, isAllView, isLocked } = useBranch();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -70,6 +72,14 @@ const PurchaseOrderForm: React.FC = () => {
 
   const [productSearchTerm, setProductSearchTerm] = useState('');
   const productSearchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Preseleccionar la sucursal activa al crear una orden nueva
+  useEffect(() => {
+    if (!isEditing && !isAllView && activeBranchId) {
+      setFormData(prev => (prev.warehouse_id ? prev : { ...prev, warehouse_id: activeBranchId }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBranchId, isAllView, isEditing]);
 
   useEffect(() => {
     fetchSuppliers();
@@ -503,8 +513,8 @@ const PurchaseOrderForm: React.FC = () => {
                   value={formData.warehouse_id}
                   onChange={handleInputChange}
                   required
-                  className="w-full py-2 px-3 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  disabled={isEditing && formData.status !== 'borrador'}
+                  className="w-full py-2 px-3 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  disabled={isLocked || (isEditing && formData.status !== 'borrador')}
                 >
                   <option value="">Seleccionar almacén</option>
                   {warehouses.map(warehouse => (

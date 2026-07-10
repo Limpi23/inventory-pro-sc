@@ -1,7 +1,9 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useBranch } from '../lib/branch';
 const Inventory = () => {
+    const { activeBranchId, isAllView } = useBranch();
     const [products, setProducts] = useState([]);
     const [warehouses, setWarehouses] = useState([]);
     const [movementTypes, setMovementTypes] = useState([]);
@@ -33,6 +35,13 @@ const Inventory = () => {
     const [movementItems, setMovementItems] = useState([]);
     const [globalReference, setGlobalReference] = useState('');
     const [globalNotes, setGlobalNotes] = useState('');
+    // Preseleccionar la sucursal activa como origen de los movimientos
+    useEffect(() => {
+        if (!isAllView && activeBranchId) {
+            setWarehouseId(prev => prev || activeBranchId);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeBranchId, isAllView]);
     useEffect(() => {
         async function fetchData() {
             try {

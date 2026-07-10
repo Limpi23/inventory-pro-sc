@@ -121,6 +121,7 @@ export default function WarehouseList() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nombre</TableHead>
+                  <TableHead>Tipo</TableHead>
                   <TableHead>Ubicación</TableHead>
                   <TableHead>Descripción</TableHead>
                   <TableHead className="text-center">Acciones</TableHead>
@@ -129,7 +130,7 @@ export default function WarehouseList() {
               <TableBody>
                 {currentWarehouses.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-8">
+                    <TableCell colSpan={5} className="text-center py-8">
                       {searchTerm ? (
                         <div className="flex flex-col items-center text-gray-500">
                           <i className="fas fa-search text-4xl mb-2 text-gray-300"></i>
@@ -147,6 +148,13 @@ export default function WarehouseList() {
                   currentWarehouses.map((warehouse) => (
                     <TableRow key={warehouse.id}>
                       <TableCell className="font-medium">{warehouse.name}</TableCell>
+                      <TableCell>
+                        {warehouse.branch_type === 'matriz' ? (
+                          <span className="px-2 py-1 rounded-full text-xs bg-primary/20 text-primary">Casa Matriz</span>
+                        ) : (
+                          <span className="px-2 py-1 rounded-full text-xs bg-muted text-muted-foreground">Sucursal</span>
+                        )}
+                      </TableCell>
                       <TableCell>{warehouse.location || "-"}</TableCell>
                       <TableCell className="max-w-xs truncate">{warehouse.description || "-"}</TableCell>
                       <TableCell className="text-center">

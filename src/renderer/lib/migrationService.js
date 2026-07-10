@@ -42,7 +42,8 @@ const MIGRATIONS = [
     '20251007000300_prevent_negative_stock',
     '20251010000000_add_serial_id_to_invoice_items',
     '20251024000000_create_generic_admin_user',
-    '20251123105500_optimize_dashboard_and_products'
+    '20251123105500_optimize_dashboard_and_products',
+    '20260710000000_matriz_sucursales'
 ];
 // Contenido de las migraciones embebido (se generará dinámicamente)
 const MIGRATION_CONTENTS = {};
@@ -169,6 +170,53 @@ export const migrationService = {
                 error: error instanceof Error ? error.message : 'Error desconocido'
             });
             throw error;
+        }
+    },
+    /**
+     * Aplica automáticamente la migración de matriz/sucursales si la base
+     * del cliente aún no la tiene. Se invoca al iniciar la app, de modo que
+     * al distribuir una actualización no haga falta ningún paso manual.
+     * Es segura de ejecutar varias veces (la migración es idempotente).
+     */
+    async ensureBranchesMigration() {
+        try {
+            const client = await supabase.getClient();
+            // La tabla stock_transfers solo existe si la migración ya se aplicó
+            const { error: probeError } = await client
+                .from('stock_transfers')
+                .select('id')
+                .limit(1);
+            if (!probeError)
+                return; // ya migrada
+            const msg = probeError.message || '';
+            if (!/stock_transfers|does not exist|relation|schema cache/i.test(msg)) {
+                // Error distinto (red, permisos, etc.): no intentar migrar
+                return;
+            }
+            const sql = await this.getMigrationContent('20260710000000_matriz_sucursales');
+            if (!sql) {
+                console.warn('[Migration] No se encontró el SQL de la migración de sucursales');
+                return;
+            }
+            const { data, error } = await client.rpc('execute_migration', {
+                migration_sql: sql
+            });
+            if (error) {
+                // PGRST202 = no existe execute_migration (instalación sin bootstrap);
+                // en ese caso queda el camino manual desde el menú.
+                console.warn('[Migration] No se pudo aplicar la migración de sucursales automáticamente:', error.message);
+                return;
+            }
+            const result = data;
+            if (result && !result.success) {
+                console.warn('[Migration] La migración de sucursales retornó error:', result.error);
+            }
+            else {
+                console.log('[Migration] ✅ Migración de matriz/sucursales aplicada automáticamente');
+            }
+        }
+        catch (e) {
+            console.warn('[Migration] Error verificando migración de sucursales:', e?.message || e);
         }
     },
     /**
