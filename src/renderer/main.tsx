@@ -5,6 +5,7 @@ import App from './App';
 import './index.css';
 import '@fortawesome/fontawesome-free/css/all.css';
 import { AuthProvider } from './lib/auth';
+import { BranchProvider } from './lib/branch';
 
 // En producción (protocolo file://) usamos HashRouter para evitar problemas de rutas con file system
 const UsingHash = window.location.protocol === 'file:';
@@ -15,9 +16,11 @@ const Router: React.FC<{ children: React.ReactNode }> = ({ children }) => UsingH
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <AuthProvider>
-      <Router>
-        <App />
-      </Router>
+      <BranchProvider>
+        <Router>
+          <App />
+        </Router>
+      </BranchProvider>
     </AuthProvider>
   </React.StrictMode>
 );

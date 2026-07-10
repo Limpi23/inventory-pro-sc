@@ -36,6 +36,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     last_login: String(userData.last_login || ''),
     created_at: String(userData.created_at || ''),
     tenant_id: userData.tenant_id ? String(userData.tenant_id) : undefined,
+    warehouse_id: userData.warehouse_id ? String(userData.warehouse_id) : null,
+    warehouse_name: userData.warehouse_name ? String(userData.warehouse_name) : undefined,
+    warehouse_branch_type: userData.warehouse_branch_type || undefined,
   });
 
   // Función para guardar la sesión de forma segura
@@ -53,7 +56,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           // Preferir vista user_roles para obtener role_name/description junto con el usuario
           const { data: userData, error } = await client
             .from('user_roles')
-            .select('id, email, full_name, active, role_id, role_name, role_description, last_login, created_at')
+            .select('*')
             .eq('id', sessionUser.id)
             .eq('active', true)
             .single();

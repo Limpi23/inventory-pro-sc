@@ -197,12 +197,15 @@ export const productService = {
             throw error;
         return data || [];
     },
-    getLowStockProducts: async ({ page = 1, pageSize = 10, search = '', threshold = 0 }) => {
+    getLowStockProducts: async ({ page = 1, pageSize = 10, search = '', threshold = 0, warehouseId = '' } = {}) => {
         const client = await getSupabaseClient();
         let query = client
             .from('current_stock')
-            .select('product_id, product_name, sku, warehouse_name, current_quantity', { count: 'exact' })
+            .select('product_id, product_name, sku, warehouse_id, warehouse_name, current_quantity', { count: 'exact' })
             .lte('current_quantity', threshold);
+        if (warehouseId && warehouseId !== 'all') {
+            query = query.eq('warehouse_id', warehouseId);
+        }
         if (search) {
             query = query.or(`product_name.ilike.%${search}%, sku.ilike.%${search}%`);
         }
@@ -527,6 +530,106 @@ export const locationsService = {
         if (error)
             throw error;
         await logAppEvent('location.delete', 'location', id, null);
+    }
+};
+// Transferencias entre sucursales (documento con flujo pendiente -> en tránsito -> recibida)
+export const stockTransfersService = {
+    getAll: async (filters) => {
+        const client = await getSupabaseClient();
+        let query = client
+            .from('stock_transfers')
+            .select(`
+        *,
+        source_warehouse:warehouses!stock_transfers_source_warehouse_id_fkey(id, name),
+        destination_warehouse:warehouses!stock_transfers_destination_warehouse_id_fkey(id, name)
+      `);
+        if (filters?.warehouseId && filters.warehouseId !== 'all') {
+            query = query.or(`source_warehouse_id.eq.${filters.warehouseId},destination_warehouse_id.eq.${filters.warehouseId}`);
+        }
+        if (filters?.status && filters.status !== 'all') {
+            query = query.eq('status', filters.status);
+        }
+        const { data, error } = await query.order('created_at', { ascending: false });
+        if (error)
+            throw error;
+        return data || [];
+    },
+    getById: async (id) => {
+        const client = await getSupabaseClient();
+        const { data, error } = await client
+            .from('stock_transfers')
+            .select(`
+        *,
+        source_warehouse:warehouses!stock_transfers_source_warehouse_id_fkey(id, name),
+        destination_warehouse:warehouses!stock_transfers_destination_warehouse_id_fkey(id, name),
+        items:stock_transfer_items(*, product:products(id, name, sku))
+      `)
+            .eq('id', id)
+            .single();
+        if (error)
+            throw error;
+        return data;
+    },
+    create: async (input, userId) => {
+        const client = await getSupabaseClient();
+        const { data, error } = await client.rpc('create_stock_transfer', {
+            p_source_warehouse_id: input.source_warehouse_id,
+            p_destination_warehouse_id: input.destination_warehouse_id,
+            p_items: input.items,
+            p_notes: input.notes || null,
+            p_user_id: userId || null
+        });
+        if (error)
+            throw error;
+        const result = data;
+        if (!result?.success)
+            throw new Error(result?.error || 'No se pudo crear la transferencia');
+        await logAppEvent('transfer.create', 'stock_transfer', result.transfer_id, {
+            transfer_number: result.transfer_number,
+            source_warehouse_id: input.source_warehouse_id,
+            destination_warehouse_id: input.destination_warehouse_id,
+            items: input.items.length
+        });
+        return { transfer_id: result.transfer_id, transfer_number: result.transfer_number };
+    },
+    ship: async (transferId, userId) => {
+        const client = await getSupabaseClient();
+        const { data, error } = await client.rpc('ship_stock_transfer', {
+            p_transfer_id: transferId,
+            p_user_id: userId || null
+        });
+        if (error)
+            throw error;
+        const result = data;
+        if (!result?.success)
+            throw new Error(result?.error || 'No se pudo enviar la transferencia');
+        await logAppEvent('transfer.ship', 'stock_transfer', transferId, null);
+    },
+    receive: async (transferId, userId) => {
+        const client = await getSupabaseClient();
+        const { data, error } = await client.rpc('receive_stock_transfer', {
+            p_transfer_id: transferId,
+            p_user_id: userId || null
+        });
+        if (error)
+            throw error;
+        const result = data;
+        if (!result?.success)
+            throw new Error(result?.error || 'No se pudo recibir la transferencia');
+        await logAppEvent('transfer.receive', 'stock_transfer', transferId, null);
+    },
+    cancel: async (transferId, userId) => {
+        const client = await getSupabaseClient();
+        const { data, error } = await client.rpc('cancel_stock_transfer', {
+            p_transfer_id: transferId,
+            p_user_id: userId || null
+        });
+        if (error)
+            throw error;
+        const result = data;
+        if (!result?.success)
+            throw new Error(result?.error || 'No se pudo cancelar la transferencia');
+        await logAppEvent('transfer.cancel', 'stock_transfer', transferId, null);
     }
 };
 export const stockMovementService = {

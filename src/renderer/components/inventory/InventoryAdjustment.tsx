@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useBranch } from '../../lib/branch';
 import { toast } from 'react-hot-toast';
 
 interface InventoryAdjustmentProps {
@@ -46,10 +47,17 @@ const InventoryAdjustment: React.FC<InventoryAdjustmentProps> = ({ isOpen, onClo
   const [productSearchTerm, setProductSearchTerm] = useState('');
   const [showProductDropdown, setShowProductDropdown] = useState(false);
 
+  const { activeBranchId, isAllView } = useBranch();
+
   useEffect(() => {
     if (isOpen) {
       loadData();
+      // Preseleccionar la sucursal activa
+      if (!isAllView && activeBranchId) {
+        setSelectedWarehouseId(prev => prev || activeBranchId);
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   useEffect(() => {

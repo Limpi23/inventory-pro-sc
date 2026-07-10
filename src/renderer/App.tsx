@@ -22,6 +22,7 @@ const Locations = React.lazy(() => import('./views/Locations'));
 const Sales = React.lazy(() => import('./views/Sales'));
 const Inventory = React.lazy(() => import('./views/Inventory'));
 const InventoryGeneral = React.lazy(() => import('./views/InventoryGeneral'));
+const Transfers = React.lazy(() => import('./views/Transfers'));
 const PurchaseOrders = React.lazy(() => import('./views/PurchaseOrders'));
 const PurchaseOrderForm = React.lazy(() => import('./views/PurchaseOrderForm'));
 const PurchaseOrderDetail = React.lazy(() => import('./views/PurchaseOrderDetail'));
@@ -339,6 +340,7 @@ const App = () => {
             <Route path="proveedores/:id/compras" element={<SupplierPurchases />} />
             <Route path="inventario" element={<Inventory />} />
             <Route path="inventario/general" element={<InventoryGeneral />} />
+            <Route path="inventario/transferencias" element={<Transfers />} />
             <Route path="reportes" element={<Reports />} />
             {/* Rutas de Órdenes de Compra */}
             <Route path="ordenes-compra" element={<PurchaseOrders />} />

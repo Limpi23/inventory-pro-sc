@@ -5,10 +5,12 @@ import { getLocalDateISOString } from '../lib/dateUtils';
 import { ReturnInput, ReturnItemInput, Invoice, InvoiceItem } from '../../types';
 import { toast } from 'react-hot-toast';
 import { useCurrency } from '../hooks/useCurrency';
+import { useBranch } from '../lib/branch';
 
 const ReturnForm: React.FC = () => {
   const navigate = useNavigate();
   const currency = useCurrency();
+  const { warehouses, activeBranchId, isAllView } = useBranch();
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -18,6 +20,8 @@ const ReturnForm: React.FC = () => {
   const [returnItems, setReturnItems] = useState<ReturnItemInput[]>([]);
   const [reason, setReason] = useState('');
   const [notes, setNotes] = useState('');
+  // Sucursal/almacén al que se repone la mercancía devuelta
+  const [returnWarehouseId, setReturnWarehouseId] = useState('');
 
   useEffect(() => {
     fetchInvoices();
@@ -78,6 +82,9 @@ const ReturnForm: React.FC = () => {
 
   const handleInvoiceSelect = (invoice: Invoice) => {
     setSelectedInvoice(invoice);
+    // Por defecto la mercancía vuelve al almacén de la factura,
+    // o a la sucursal activa si la factura no tiene almacén.
+    setReturnWarehouseId(invoice.warehouse_id || (!isAllView ? activeBranchId : ''));
     setSearchTerm('');
   };
 
@@ -144,6 +151,11 @@ const ReturnForm: React.FC = () => {
       return;
     }
 
+    if (!returnWarehouseId) {
+      toast.error('Debe seleccionar la sucursal/almacén de reposición');
+      return;
+    }
+
     try {
       setSubmitting(true);
 
@@ -171,7 +183,8 @@ const ReturnForm: React.FC = () => {
           reason: returnData.reason,
           notes: returnData.notes,
           total_amount: totalAmount,
-          status: 'pendiente'
+          status: 'pendiente',
+          warehouse_id: returnWarehouseId
         }])
         .select('id')
         .single();
@@ -352,6 +365,26 @@ const ReturnForm: React.FC = () => {
             {/* Datos de la devolución */}
             {selectedInvoice && (
               <div className="space-y-6">
+                <div>
+                  <h2 className="text-lg font-medium mb-4">Sucursal/Almacén de Reposición</h2>
+                  <select
+                    className="w-full px-4 py-2 border rounded-md"
+                    value={returnWarehouseId}
+                    onChange={(e) => setReturnWarehouseId(e.target.value)}
+                    required
+                  >
+                    <option value="">-- Seleccione sucursal --</option>
+                    {warehouses.map(w => (
+                      <option key={w.id} value={w.id}>
+                        {w.name}{w.branch_type === 'matriz' ? ' (Matriz)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    El stock se repondrá en esta sucursal cuando la devolución sea aprobada.
+                  </p>
+                </div>
+
                 <div>
                   <h2 className="text-lg font-medium mb-4">Motivo de la Devolución</h2>
                   <textarea

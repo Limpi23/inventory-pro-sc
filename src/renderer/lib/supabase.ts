@@ -34,10 +34,40 @@ export interface Category {
 export interface Warehouse {
   id: string;
   name: string;
+  location?: string;
+  description?: string;
   address?: string;
+  branch_type?: 'matriz' | 'sucursal';
   is_active: boolean;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface StockTransfer {
+  id: string;
+  transfer_number: string;
+  source_warehouse_id: string;
+  destination_warehouse_id: string;
+  status: 'pending' | 'in_transit' | 'received' | 'cancelled';
+  notes?: string | null;
+  created_by?: string | null;
+  shipped_at?: string | null;
+  received_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  source_warehouse?: { id?: string; name?: string };
+  destination_warehouse?: { id?: string; name?: string };
+  items?: StockTransferItem[];
+}
+
+export interface StockTransferItem {
+  id: string;
+  transfer_id: string;
+  product_id: string;
+  quantity: number;
+  source_location_id?: string | null;
+  destination_location_id?: string | null;
+  product?: { id?: string; name?: string; sku?: string };
 }
 
 export interface Location {
@@ -326,12 +356,16 @@ export const productService = {
     return data || [];
   },
 
-  getLowStockProducts: async ({ page = 1, pageSize = 10, search = '', threshold = 0 }) => {
+  getLowStockProducts: async ({ page = 1, pageSize = 10, search = '', threshold = 0, warehouseId = '' }: { page?: number; pageSize?: number; search?: string; threshold?: number; warehouseId?: string } = {}) => {
     const client = await getSupabaseClient();
     let query = client
       .from('current_stock')
-      .select('product_id, product_name, sku, warehouse_name, current_quantity', { count: 'exact' })
+      .select('product_id, product_name, sku, warehouse_id, warehouse_name, current_quantity', { count: 'exact' })
       .lte('current_quantity', threshold);
+
+    if (warehouseId && warehouseId !== 'all') {
+      query = query.eq('warehouse_id', warehouseId);
+    }
 
     if (search) {
       query = query.or(`product_name.ilike.%${search}%, sku.ilike.%${search}%`);
@@ -643,6 +677,107 @@ export const locationsService = {
       .eq('id', id);
     if (error) throw error;
     await logAppEvent('location.delete', 'location', id, null);
+  }
+};
+
+// Transferencias entre sucursales (documento con flujo pendiente -> en tránsito -> recibida)
+export const stockTransfersService = {
+  getAll: async (filters?: { warehouseId?: string; status?: string }): Promise<StockTransfer[]> => {
+    const client = await getSupabaseClient();
+    let query = client
+      .from('stock_transfers')
+      .select(`
+        *,
+        source_warehouse:warehouses!stock_transfers_source_warehouse_id_fkey(id, name),
+        destination_warehouse:warehouses!stock_transfers_destination_warehouse_id_fkey(id, name)
+      `);
+    if (filters?.warehouseId && filters.warehouseId !== 'all') {
+      query = query.or(`source_warehouse_id.eq.${filters.warehouseId},destination_warehouse_id.eq.${filters.warehouseId}`);
+    }
+    if (filters?.status && filters.status !== 'all') {
+      query = query.eq('status', filters.status);
+    }
+    const { data, error } = await query.order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+
+  getById: async (id: string): Promise<StockTransfer | null> => {
+    const client = await getSupabaseClient();
+    const { data, error } = await client
+      .from('stock_transfers')
+      .select(`
+        *,
+        source_warehouse:warehouses!stock_transfers_source_warehouse_id_fkey(id, name),
+        destination_warehouse:warehouses!stock_transfers_destination_warehouse_id_fkey(id, name),
+        items:stock_transfer_items(*, product:products(id, name, sku))
+      `)
+      .eq('id', id)
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  create: async (input: {
+    source_warehouse_id: string;
+    destination_warehouse_id: string;
+    notes?: string;
+    items: Array<{ product_id: string; quantity: number; source_location_id?: string | null; destination_location_id?: string | null }>;
+  }, userId?: string): Promise<{ transfer_id: string; transfer_number: string }> => {
+    const client = await getSupabaseClient();
+    const { data, error } = await client.rpc('create_stock_transfer', {
+      p_source_warehouse_id: input.source_warehouse_id,
+      p_destination_warehouse_id: input.destination_warehouse_id,
+      p_items: input.items,
+      p_notes: input.notes || null,
+      p_user_id: userId || null
+    });
+    if (error) throw error;
+    const result = data as any;
+    if (!result?.success) throw new Error(result?.error || 'No se pudo crear la transferencia');
+    await logAppEvent('transfer.create', 'stock_transfer', result.transfer_id, {
+      transfer_number: result.transfer_number,
+      source_warehouse_id: input.source_warehouse_id,
+      destination_warehouse_id: input.destination_warehouse_id,
+      items: input.items.length
+    });
+    return { transfer_id: result.transfer_id, transfer_number: result.transfer_number };
+  },
+
+  ship: async (transferId: string, userId?: string): Promise<void> => {
+    const client = await getSupabaseClient();
+    const { data, error } = await client.rpc('ship_stock_transfer', {
+      p_transfer_id: transferId,
+      p_user_id: userId || null
+    });
+    if (error) throw error;
+    const result = data as any;
+    if (!result?.success) throw new Error(result?.error || 'No se pudo enviar la transferencia');
+    await logAppEvent('transfer.ship', 'stock_transfer', transferId, null);
+  },
+
+  receive: async (transferId: string, userId?: string): Promise<void> => {
+    const client = await getSupabaseClient();
+    const { data, error } = await client.rpc('receive_stock_transfer', {
+      p_transfer_id: transferId,
+      p_user_id: userId || null
+    });
+    if (error) throw error;
+    const result = data as any;
+    if (!result?.success) throw new Error(result?.error || 'No se pudo recibir la transferencia');
+    await logAppEvent('transfer.receive', 'stock_transfer', transferId, null);
+  },
+
+  cancel: async (transferId: string, userId?: string): Promise<void> => {
+    const client = await getSupabaseClient();
+    const { data, error } = await client.rpc('cancel_stock_transfer', {
+      p_transfer_id: transferId,
+      p_user_id: userId || null
+    });
+    if (error) throw error;
+    const result = data as any;
+    if (!result?.success) throw new Error(result?.error || 'No se pudo cancelar la transferencia');
+    await logAppEvent('transfer.cancel', 'stock_transfer', transferId, null);
   }
 };
 

@@ -4,6 +4,7 @@ import SerializedInventory from '../components/inventory/SerializedInventory';
 import InventoryAdjustment from '../components/inventory/InventoryAdjustment';
 import InventoryAdjustmentHistory from '../components/inventory/InventoryAdjustmentHistory';
 import { supabase } from '../lib/supabase';
+import { useBranch } from '../lib/branch';
 import Papa from 'papaparse';
 import { useReactToPrint } from 'react-to-print';
 import { getLocalDateISOString } from '../lib/dateUtils';
@@ -31,6 +32,7 @@ interface InventoryMovement {
 }
 
 const InventoryGeneral: React.FC = () => {
+  const { activeBranchId, isAllView } = useBranch();
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -66,7 +68,8 @@ const InventoryGeneral: React.FC = () => {
 
   useEffect(() => {
     fetchInventory();
-  }, [currentPage, searchTerm]); // Recargar cuando cambie la página o el término de búsqueda
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, searchTerm, activeBranchId]); // Recargar cuando cambie la página, la búsqueda o la sucursal activa
 
   useEffect(() => {
     checkSuperRootUser();
@@ -112,6 +115,12 @@ const InventoryGeneral: React.FC = () => {
       let dataQuery = client
         .from('current_stock')
         .select('*');
+
+      // Filtrar por la sucursal activa salvo en la vista "todas"
+      if (!isAllView && activeBranchId) {
+        countQuery = countQuery.eq('warehouse_id', activeBranchId);
+        dataQuery = dataQuery.eq('warehouse_id', activeBranchId);
+      }
 
       // Aplicar filtro de búsqueda si existe
       if (searchTerm.trim()) {

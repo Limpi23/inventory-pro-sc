@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 import { Button } from '../components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { supabase } from '../lib/supabase';
+import { useBranch } from '../lib/branch';
 import { toast } from 'react-hot-toast';
 import { Link } from 'react-router-dom';
 import { useCurrency } from '../hooks/useCurrency';
@@ -11,6 +12,7 @@ import { OutOfStockModal } from '../components/OutOfStockModal';
 const Dashboard = () => {
     const [loading, setLoading] = useState(true);
     const currency = useCurrency();
+    const { activeBranchId, activeBranch, isAllView } = useBranch();
     const [showOutOfStockModal, setShowOutOfStockModal] = useState(false);
     const [stats, setStats] = useState([
         { title: 'Total Productos', value: '0', icon: 'fas fa-box', color: 'bg-primary' },
@@ -23,7 +25,8 @@ const Dashboard = () => {
     const [lowStockProducts, setLowStockProducts] = useState([]);
     useEffect(() => {
         fetchDashboardData();
-    }, []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeBranchId]);
     const fetchDashboardData = async () => {
         try {
             setLoading(true);
@@ -32,44 +35,61 @@ const Dashboard = () => {
             const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
             const startOfDay = new Date();
             startOfDay.setHours(0, 0, 0, 0);
+            // Filtrar por sucursal activa salvo en la vista "todas"
+            const branchFilter = isAllView ? null : activeBranchId;
+            // 2. Monthly sales (fetch total_amount only)
+            let salesQuery = client.from('invoices')
+                .select('total_amount')
+                .gte('invoice_date', firstDayOfMonth.toISOString())
+                .in('status', ['emitida', 'pagada']);
+            if (branchFilter)
+                salesQuery = salesQuery.eq('warehouse_id', branchFilter);
+            // 3. Low stock count (unique products)
+            let lowStockCountQuery = client.from('current_stock')
+                .select('product_id')
+                .lte('current_quantity', 0);
+            if (branchFilter)
+                lowStockCountQuery = lowStockCountQuery.eq('warehouse_id', branchFilter);
+            // 4. Today's movements count
+            let movementsCountQuery = client.from('stock_movements')
+                .select('*', { count: 'exact', head: true })
+                .gte('movement_date', startOfDay.toISOString());
+            if (branchFilter)
+                movementsCountQuery = movementsCountQuery.eq('warehouse_id', branchFilter);
+            // 5. Recent movements with joins
+            let recentMovementsQuery = client.from('stock_movements')
+                .select(`
+          id,
+          quantity,
+          movement_date,
+          movement_type_id,
+          product:products(name, sku),
+          warehouse:warehouses(name),
+          movement_type:movement_types(code, description)
+        `)
+                .order('created_at', { ascending: false })
+                .limit(5);
+            if (branchFilter)
+                recentMovementsQuery = recentMovementsQuery.eq('warehouse_id', branchFilter);
+            // 7. Low stock detail
+            let lowStockDetailQuery = client.from('current_stock')
+                .select('current_quantity, product_id, product_name, sku, warehouse_name')
+                .lte('current_quantity', 0)
+                .order('current_quantity', { ascending: true })
+                .limit(5);
+            if (branchFilter)
+                lowStockDetailQuery = lowStockDetailQuery.eq('warehouse_id', branchFilter);
             // Execute independent queries in parallel
             const [productsResult, salesResult, lowStockCountResult, movementsCountResult, recentMovementsResult, topProductsResult, lowStockDetailResult] = await Promise.all([
                 // 1. Total products count
                 client.from('products').select('*', { count: 'exact', head: true }),
-                // 2. Monthly sales (fetch total_amount only)
-                client.from('invoices')
-                    .select('total_amount')
-                    .gte('invoice_date', firstDayOfMonth.toISOString())
-                    .in('status', ['emitida', 'pagada']),
-                // 3. Low stock count (unique products)
-                client.from('current_stock')
-                    .select('product_id')
-                    .lte('current_quantity', 0),
-                // 4. Today's movements count
-                client.from('stock_movements')
-                    .select('*', { count: 'exact', head: true })
-                    .gte('movement_date', startOfDay.toISOString()),
-                // 5. Recent movements with joins
-                client.from('stock_movements')
-                    .select(`
-            id,
-            quantity,
-            movement_date,
-            movement_type_id,
-            product:products(name, sku),
-            warehouse:warehouses(name),
-            movement_type:movement_types(code, description)
-          `)
-                    .order('created_at', { ascending: false })
-                    .limit(5),
+                salesQuery,
+                lowStockCountQuery,
+                movementsCountQuery,
+                recentMovementsQuery,
                 // 6. Top products (RPC or query)
                 client.rpc('get_top_products', { limit_count: 5 }),
-                // 7. Low stock detail
-                client.from('current_stock')
-                    .select('current_quantity, product_id, product_name, sku, warehouse_name')
-                    .lte('current_quantity', 0)
-                    .order('current_quantity', { ascending: true })
-                    .limit(5)
+                lowStockDetailQuery
             ]);
             // Process Results
             // Stats
@@ -162,7 +182,7 @@ const Dashboard = () => {
             className: isInput ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
         };
     };
-    return (_jsxs("div", { className: "space-y-6", children: [_jsxs("div", { className: "flex items-center gap-3", children: [_jsx("h1", { className: "text-2xl font-semibold text-gray-900 dark:text-white", children: "Dashboard" }), _jsx("span", { className: "text-sm text-gray-500 dark:text-gray-400", children: "Panel de Control" })] }), loading ? (_jsx("div", { className: "flex justify-center py-20", children: _jsx("div", { className: "animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500" }) })) : (_jsxs(_Fragment, { children: [_jsx("div", { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6", children: stats.map((stat, index) => (_jsxs(Card, { className: `${stat.title === 'Productos Agotados' ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''}`, onClick: () => {
+    return (_jsxs("div", { className: "space-y-6", children: [_jsxs("div", { className: "flex items-center gap-3", children: [_jsx("h1", { className: "text-2xl font-semibold text-gray-900 dark:text-white", children: "Dashboard" }), _jsx("span", { className: "text-sm text-gray-500 dark:text-gray-400", children: "Panel de Control" }), _jsxs("span", { className: "text-xs px-2 py-1 rounded-full bg-primary/10 text-primary", children: [_jsx("i", { className: "fas fa-store mr-1" }), isAllView ? 'Todas las sucursales' : (activeBranch?.name || 'Sucursal')] })] }), loading ? (_jsx("div", { className: "flex justify-center py-20", children: _jsx("div", { className: "animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500" }) })) : (_jsxs(_Fragment, { children: [_jsx("div", { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6", children: stats.map((stat, index) => (_jsxs(Card, { className: `${stat.title === 'Productos Agotados' ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''}`, onClick: () => {
                                 if (stat.title === 'Productos Agotados') {
                                     setShowOutOfStockModal(true);
                                 }
