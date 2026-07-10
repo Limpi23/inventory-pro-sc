@@ -209,6 +209,58 @@ export const migrationService = {
   },
 
   /**
+   * Aplica automáticamente la migración de matriz/sucursales si la base
+   * del cliente aún no la tiene. Se invoca al iniciar la app, de modo que
+   * al distribuir una actualización no haga falta ningún paso manual.
+   * Es segura de ejecutar varias veces (la migración es idempotente).
+   */
+  async ensureBranchesMigration(): Promise<void> {
+    try {
+      const client = await supabase.getClient();
+
+      // La tabla stock_transfers solo existe si la migración ya se aplicó
+      const { error: probeError } = await client
+        .from('stock_transfers')
+        .select('id')
+        .limit(1);
+
+      if (!probeError) return; // ya migrada
+
+      const msg = probeError.message || '';
+      if (!/stock_transfers|does not exist|relation|schema cache/i.test(msg)) {
+        // Error distinto (red, permisos, etc.): no intentar migrar
+        return;
+      }
+
+      const sql = await this.getMigrationContent('20260710000000_matriz_sucursales');
+      if (!sql) {
+        console.warn('[Migration] No se encontró el SQL de la migración de sucursales');
+        return;
+      }
+
+      const { data, error } = await client.rpc('execute_migration', {
+        migration_sql: sql
+      });
+
+      if (error) {
+        // PGRST202 = no existe execute_migration (instalación sin bootstrap);
+        // en ese caso queda el camino manual desde el menú.
+        console.warn('[Migration] No se pudo aplicar la migración de sucursales automáticamente:', error.message);
+        return;
+      }
+
+      const result = data as any;
+      if (result && !result.success) {
+        console.warn('[Migration] La migración de sucursales retornó error:', result.error);
+      } else {
+        console.log('[Migration] ✅ Migración de matriz/sucursales aplicada automáticamente');
+      }
+    } catch (e: any) {
+      console.warn('[Migration] Error verificando migración de sucursales:', e?.message || e);
+    }
+  },
+
+  /**
    * Obtiene el contenido SQL de una migración
    */
   async getMigrationContent(migrationName: string): Promise<string> {

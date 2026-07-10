@@ -226,6 +226,21 @@ const App = () => {
             window.removeEventListener('show-supabase-config', handleCustomShowConfig);
         };
     }, []);
+    // Aplicar automáticamente las migraciones pendientes de sucursales
+    // cuando la app ya tiene conexión configurada (post-actualización).
+    useEffect(() => {
+        if (!ready)
+            return;
+        (async () => {
+            try {
+                const { migrationService } = await import('./lib/migrationService');
+                await migrationService.ensureBranchesMigration();
+            }
+            catch {
+                // Silencioso: queda el camino manual desde el menú
+            }
+        })();
+    }, [ready]);
     const handleOpenConfig = () => {
         setShowConfigModal(true);
     };
