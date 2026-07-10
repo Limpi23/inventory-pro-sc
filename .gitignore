@@ -39,4 +39,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # Archivos de sistema
-Thumbs.db 
+Thumbs.db
+
+# Credenciales de bases de clientes para scripts/migrate-all.cjs
+scripts/databases.json

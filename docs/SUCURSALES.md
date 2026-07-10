@@ -10,14 +10,20 @@ Esta versión convierte los **almacenes** en **sucursales**: una se marca como *
 - **Transferencias entre sucursales** (menú **Inventario → Transferencias**): documento con número (`TR-000001`) y flujo *pendiente → en tránsito → recibida*. Al enviar se descuenta el stock del origen (`OUT_TRANSFER`) y al confirmar la recepción ingresa al destino (`IN_TRANSFER`). Las pendientes se pueden cancelar.
 - **Devoluciones con reposición**: la devolución registra la sucursal de reposición y, al aprobarse, genera el movimiento `IN_RETURN` que repone el stock en esa sucursal.
 
-## Pasos para activarlo
+## Cómo llega a los clientes (varias bases Supabase)
 
-1. **Aplicar la migración** `supabase/migrations/20260710000000_matriz_sucursales.sql`:
-   - con Supabase CLI: `npm run db:migration:apply:remote`, o
-   - desde la aplicación: menú → *Ejecutar Migraciones* (la migración ya está registrada en el ejecutor interno).
-   - La migración marca automáticamente el almacén más antiguo como matriz si no hay ninguna.
-2. En **Almacenes**, revisar cuál quedó como *Casa Matriz* y ajustar si es necesario.
-3. En **Usuarios**, asignar la sucursal a cada usuario de sucursal (los administradores pueden quedar sin sucursal para ver todo).
+Cada instalación apunta a su propia base Supabase. La migración se aplica de tres formas posibles:
+
+1. **Automática (recomendada, sin hacer nada)**: al abrir la aplicación actualizada, esta detecta si su base aún no tiene la migración de sucursales y la aplica sola mediante `execute_migration`. Cada base de cliente se migra la primera vez que ese cliente abre la app nueva.
+2. **Centralizada (todas las bases de una vez)**: `node scripts/migrate-all.cjs`. Requiere crear `scripts/databases.json` (ignorado por git) copiando `scripts/databases.example.json`, con la URL y la **service_role key** de cada proyecto (Supabase Dashboard → Settings → API). El script aplica la migración a todas las bases y reporta el resultado por cliente.
+3. **Manual por base**: menú de la app → *Ejecutar Migraciones*, o `npm run db:migration:apply:remote` con el proyecto linkeado.
+
+La migración es **idempotente**: puede ejecutarse varias veces sin causar daño, así que no hay conflicto entre la vía automática y la centralizada. Marca automáticamente el almacén más antiguo como matriz si no hay ninguna.
+
+## Pasos después de migrar
+
+1. En **Almacenes**, revisar cuál quedó como *Casa Matriz* y ajustar si es necesario.
+2. En **Usuarios**, asignar la sucursal a cada usuario de sucursal (los administradores pueden quedar sin sucursal para ver todo).
 
 ## Limitaciones actuales
 
