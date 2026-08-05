@@ -43,7 +43,10 @@ const MIGRATIONS = [
     '20251010000000_add_serial_id_to_invoice_items',
     '20251024000000_create_generic_admin_user',
     '20251123105500_optimize_dashboard_and_products',
-    '20260710000000_matriz_sucursales'
+    '20251207000000_inventory_direct_adjustment',
+    '20251207120000_serialized_inventory',
+    '20260710000000_matriz_sucursales',
+    '20260805000000_product_codes'
 ];
 // Contenido de las migraciones embebido (se generará dinámicamente)
 const MIGRATION_CONTENTS = {};

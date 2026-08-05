@@ -13,12 +13,16 @@ export interface CategoryInput {
 export type ProductStatus = 'active' | 'inactive' | 'discontinued';
 export type TrackingMethod = 'standard' | 'serialized';
 
+/** Simbología con la que se imprime el código de un producto. */
+export type BarcodeSymbology = 'CODE128' | 'EAN13' | 'QR';
+
 export interface Product {
 	id: string;
 	name: string;
 	description?: string;
 	sku?: string;
 	barcode?: string;
+	barcode_type?: BarcodeSymbology;
 	category_id?: string | null;
 	location_id?: string | null;
 	tracking_method?: TrackingMethod; // cantidad vs serializado
@@ -38,6 +42,7 @@ export interface ProductInput {
 	description?: string;
 	sku?: string;
 	barcode?: string;
+	barcode_type?: BarcodeSymbology;
 	category_id?: string | null;
 	location_id?: string | null;
 	tracking_method?: TrackingMethod; // cantidad vs serializado

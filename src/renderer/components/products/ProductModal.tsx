@@ -1,11 +1,14 @@
-import { useState, useEffect } from "react";
-import { Product, ProductInput, ProductStatus, Category, Location, TrackingMethod } from "../../../types";
+import { useState, useEffect, useMemo } from "react";
+import { Product, ProductInput, ProductStatus, Category, Location, TrackingMethod, BarcodeSymbology } from "../../../types";
 import { productService, categoriesService, locationsService } from "../../lib/supabase";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { validateCode } from "../../lib/codes";
+import Barcode1D from "./codes/Barcode1D";
+import QRCodeSVG from "./codes/QRCodeSVG";
 
 interface ProductModalProps {
   open: boolean;
@@ -19,6 +22,7 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
     description: "",
     sku: "",
     barcode: "",
+    barcode_type: 'CODE128',
     category_id: "",
     location_id: "",
   tracking_method: 'standard',
@@ -73,6 +77,7 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
         description: product.description || "",
         sku: product.sku || "",
         barcode: product.barcode || "",
+        barcode_type: (product as any).barcode_type || 'CODE128',
         category_id: product.category_id || "",
         location_id: (product as any).location_id || "",
         tracking_method: (product as any).tracking_method || 'standard',
@@ -91,6 +96,7 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
         description: "",
         sku: "",
         barcode: "",
+        barcode_type: 'CODE128',
         category_id: "",
         location_id: "",
         tracking_method: 'standard',
@@ -129,6 +135,14 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
     }));
   };
 
+  // Refleja lo que hará el trigger de la base de datos: si no hay código, el SKU pasa a serlo.
+  const previewValue = ((formData.barcode || "").trim() || (formData.sku || "").trim());
+  const previewType = (formData.barcode_type as BarcodeSymbology) || 'CODE128';
+  const codeCheck = useMemo(
+    () => validateCode(previewValue, previewType),
+    [previewValue, previewType]
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -150,6 +164,11 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
 
     if (!formData.sku || !formData.sku.trim()) {
       setError("El SKU es obligatorio");
+      return;
+    }
+
+    if (!codeCheck.ok) {
+      setError(codeCheck.error || "El código no es válido para el tipo seleccionado");
       return;
     }
 
@@ -271,17 +290,74 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
             
             {/* Código de barras */}
             <div className="grid gap-2">
-              <Label htmlFor="barcode">Código de barras</Label>
+              <Label htmlFor="barcode">Código</Label>
               <Input
                 {...keyboardIsolationHandlers}
                 id="barcode"
                 name="barcode"
                 value={formData.barcode || ""}
                 onChange={handleChange}
-                placeholder="Código de barras"
+                placeholder="Se genera desde el SKU"
               />
+              <p className="text-xs text-muted-foreground">
+                Déjalo vacío y se usará el SKU automáticamente.
+              </p>
             </div>
-            
+
+            {/* Simbología */}
+            <div className="grid gap-2">
+              <Label htmlFor="barcode_type">Tipo de código</Label>
+              <Select
+                value={previewType}
+                onValueChange={(value) => handleSelectChange("barcode_type", value)}
+              >
+                <SelectTrigger id="barcode_type">
+                  <SelectValue placeholder="Seleccionar tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CODE128">Barras · Code128</SelectItem>
+                  <SelectItem value="EAN13">Barras · EAN-13</SelectItem>
+                  <SelectItem value="QR">QR</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Vista previa del código */}
+            <div className="col-span-2 rounded-md border bg-muted/30 p-3">
+              {!previewValue ? (
+                <p className="text-xs text-muted-foreground text-center py-3">
+                  Escribe un SKU para ver el código que se generará.
+                </p>
+              ) : codeCheck.ok ? (
+                <div className="flex items-center gap-4">
+                  <div className="bg-white rounded p-2 flex items-center justify-center shrink-0">
+                    {previewType === 'QR' ? (
+                      <QRCodeSVG value={previewValue} size={96} />
+                    ) : (
+                      <Barcode1D
+                        value={previewValue}
+                        format={previewType === 'EAN13' ? 'EAN13' : 'CODE128'}
+                        height={44}
+                        moduleWidth={1.5}
+                        fontSize={12}
+                      />
+                    )}
+                  </div>
+                  <div className="text-xs space-y-1 min-w-0">
+                    <div className="font-mono break-all">{previewValue}</div>
+                    {!formData.barcode?.trim() && (
+                      <div className="text-muted-foreground">Generado desde el SKU</div>
+                    )}
+                    {codeCheck.warning && (
+                      <div className="text-amber-600">{codeCheck.warning}</div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-red-600 py-2">{codeCheck.error}</p>
+              )}
+            </div>
+
             {/* Precio de compra */}
             <div className="grid gap-2">
               <Label htmlFor="purchase_price">Precio de compra</Label>

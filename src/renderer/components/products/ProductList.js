@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Input } from "../ui/input";
 import { Checkbox } from "../ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
-import { MoreHorizontal, Pencil, Trash2, Ban, Hash } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Ban, Hash, QrCode, Printer } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import * as XLSX from "xlsx";
 import ProductModal from "./ProductModal";
@@ -15,8 +15,10 @@ import ProductImport from "./ProductImport";
 import ProductPriceUpdate from './ProductPriceUpdate';
 import ProductBulkAssignLocation from './ProductBulkAssignLocation';
 import SerialManagementModal from '../inventory/SerialManagementModal';
+import LabelPrintModal from './codes/LabelPrintModal';
 import { useAuth } from "../../lib/auth";
 import { useCurrency } from "../../hooks/useCurrency";
+import { useBarcodeScanner } from "../../hooks/useBarcodeScanner";
 import { toast } from "react-hot-toast";
 export default function ProductList() {
     const { user, hasPermission } = useAuth();
@@ -48,6 +50,30 @@ export default function ProductList() {
     const [locations, setLocations] = useState([]);
     const [serialModalOpen, setSerialModalOpen] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState(null);
+    const [labelProducts, setLabelProducts] = useState(null);
+    // Abre el modal de etiquetas con los productos seleccionados, que pueden
+    // estar repartidos en varias páginas del listado.
+    async function openLabelsForSelection() {
+        if (selectedIds.size === 0)
+            return;
+        try {
+            setIsLoading(true);
+            const all = await productService.getAll();
+            const items = all.filter(p => selectedIds.has(p.id));
+            if (items.length === 0) {
+                toast.error('No se encontraron los productos seleccionados');
+                return;
+            }
+            setLabelProducts(items);
+        }
+        catch (e) {
+            console.error(e);
+            toast.error('No se pudieron cargar los productos para etiquetar');
+        }
+        finally {
+            setIsLoading(false);
+        }
+    }
     useEffect(() => {
         fetchProducts({ keepPage: true });
         // Cargar listas para filtros
@@ -72,7 +98,8 @@ export default function ProductList() {
             const { data, count } = await productService.getProducts({
                 page: opts?.keepPage ? page : 1,
                 pageSize,
-                search: searchQuery,
+                // `search` explícito para poder buscar antes de que el estado se actualice
+                search: opts?.search ?? searchQuery,
                 warehouseId: warehouseFilter,
                 locationId: locationFilter
             });
@@ -93,6 +120,14 @@ export default function ProductList() {
         setPage(1);
         fetchProducts({ keepPage: false });
     }
+    // Lectura con escáner: filtra la lista por el código leído.
+    useBarcodeScanner({
+        onScan: (code) => {
+            setSearchQuery(code);
+            setPage(1);
+            fetchProducts({ keepPage: false, search: code });
+        },
+    });
     // Paginación calculada con datos del servidor
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
     // En modo servidor, 'products' ya contiene solo los items de la página actual
@@ -209,6 +244,7 @@ export default function ProductList() {
                 description: p.description || "",
                 sku: p.sku || "",
                 barcode: p.barcode || "",
+                barcode_type: p.barcode_type || "CODE128",
                 category_id: p.category?.id || p.category_id || "",
                 location_id: p.location?.id || p.location_id || "",
                 location: p.location?.name || "",
@@ -235,7 +271,7 @@ export default function ProductList() {
     };
     return (_jsxs(Card, { children: [_jsxs(CardHeader, { className: "space-y-3", children: [_jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", children: [_jsx(CardTitle, { className: "text-xl md:text-2xl", children: "Productos" }), _jsxs("div", { className: "flex gap-2 sm:justify-end w-full sm:w-auto", children: [_jsx(ProductImport, { onImportComplete: () => fetchProducts({ keepPage: false }), size: "sm", className: "w-full sm:w-auto" }), _jsxs(Button, { onClick: handleExportExcel, variant: "outline", className: "whitespace-nowrap w-full sm:w-auto", size: "sm", children: ["Exportar Excel ", selectedIds.size > 0 ? `(${selectedIds.size})` : ""] }), _jsx(ProductBulkAssignLocation, { selectedIds: [...selectedIds], onDone: () => fetchProducts({ keepPage: true }) }), _jsx(Button, { onClick: () => setIsPriceUpdateOpen(true), className: "bg-yellow-500 hover:bg-yellow-600 text-white whitespace-nowrap text-xs md:text-sm w-full sm:w-auto", "aria-label": "Actualizar precios masivos", size: "sm", children: "Actualizar Precios Masivos" }), _jsx(Button, { onClick: () => setIsModalOpen(true), className: "bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap w-full sm:w-auto", size: "sm", children: "Agregar Producto" })] })] }), _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2", children: [_jsx(Input, { placeholder: "Buscar productos...", value: searchQuery, onChange: (e) => setSearchQuery(e.target.value), onKeyDown: (e) => e.key === 'Enter' && handleSearch(), className: "w-full" }), _jsxs(Select, { value: warehouseFilter || 'all', onValueChange: (v) => { setWarehouseFilter(v === 'all' ? '' : v); setPage(1); }, children: [_jsx(SelectTrigger, { className: "min-w-[150px]", children: _jsx(SelectValue, { placeholder: "Almac\u00E9n" }) }), _jsxs(SelectContent, { children: [_jsx(SelectItem, { value: "all", children: "Todos almacenes" }), warehouses.map(w => (_jsx(SelectItem, { value: w.id, children: w.name }, w.id)))] })] }), _jsxs(Select, { value: locationFilter || 'all', onValueChange: (v) => { setLocationFilter(v === 'all' ? '' : v); setPage(1); }, children: [_jsx(SelectTrigger, { className: "min-w-[150px]", children: _jsx(SelectValue, { placeholder: "Ubicaci\u00F3n" }) }), _jsxs(SelectContent, { children: [_jsx(SelectItem, { value: "all", children: "Todas ubicaciones" }), locations
                                                 .filter(l => !warehouseFilter || l.warehouse_id === warehouseFilter)
-                                                .map(l => (_jsx(SelectItem, { value: l.id, children: l.name }, l.id)))] })] })] })] }), _jsx(CardContent, { children: isLoading ? (_jsx("p", { children: "Cargando productos..." })) : (_jsxs("div", { className: "overflow-x-auto -mx-4 md:mx-0", children: [selectedIds.size > 0 && (_jsxs("div", { className: "flex items-center justify-between p-3 mb-2 rounded-md bg-blue-50 text-blue-900 border border-blue-200", children: [_jsxs("div", { className: "text-sm", children: ["Seleccionados ", selectedIds.size, "."] }), _jsxs("div", { className: "flex items-center gap-2", children: [_jsx(Button, { variant: "outline", size: "sm", onClick: () => setSelectedIds(new Set()), children: "Limpiar selecci\u00F3n" }), _jsx(Button, { variant: "destructive", size: "sm", onClick: async () => {
+                                                .map(l => (_jsx(SelectItem, { value: l.id, children: l.name }, l.id)))] })] })] })] }), _jsx(CardContent, { children: isLoading ? (_jsx("p", { children: "Cargando productos..." })) : (_jsxs("div", { className: "overflow-x-auto -mx-4 md:mx-0", children: [selectedIds.size > 0 && (_jsxs("div", { className: "flex items-center justify-between p-3 mb-2 rounded-md bg-blue-50 text-blue-900 border border-blue-200", children: [_jsxs("div", { className: "text-sm", children: ["Seleccionados ", selectedIds.size, "."] }), _jsxs("div", { className: "flex items-center gap-2", children: [_jsx(Button, { variant: "outline", size: "sm", onClick: () => setSelectedIds(new Set()), children: "Limpiar selecci\u00F3n" }), _jsxs(Button, { variant: "outline", size: "sm", className: "gap-2", onClick: openLabelsForSelection, children: [_jsx(Printer, { className: "h-4 w-4" }), " Imprimir etiquetas"] }), _jsx(Button, { variant: "destructive", size: "sm", onClick: async () => {
                                                 if (selectedIds.size === 0)
                                                     return;
                                                 const count = selectedIds.size;
@@ -266,7 +302,7 @@ export default function ProductList() {
                                                         ? 'Activo'
                                                         : product.status === 'inactive'
                                                             ? 'Inactivo'
-                                                            : 'Descontinuado' }) }), _jsx(TableCell, { className: "text-right whitespace-nowrap", children: _jsxs(DropdownMenu, { children: [_jsx(DropdownMenuTrigger, { asChild: true, children: _jsxs(Button, { variant: "ghost", size: "icon", className: "h-8 w-8", children: [_jsx(MoreHorizontal, { className: "h-4 w-4" }), _jsx("span", { className: "sr-only", children: "Abrir men\u00FA" })] }) }), _jsxs(DropdownMenuContent, { align: "end", children: [_jsxs(DropdownMenuItem, { onClick: () => handleEdit(product), className: "gap-2", children: [_jsx(Pencil, { className: "h-4 w-4" }), " Editar"] }), product.tracking_method === 'serialized' && (_jsxs(DropdownMenuItem, { onClick: () => {
+                                                            : 'Descontinuado' }) }), _jsx(TableCell, { className: "text-right whitespace-nowrap", children: _jsxs(DropdownMenu, { children: [_jsx(DropdownMenuTrigger, { asChild: true, children: _jsxs(Button, { variant: "ghost", size: "icon", className: "h-8 w-8", children: [_jsx(MoreHorizontal, { className: "h-4 w-4" }), _jsx("span", { className: "sr-only", children: "Abrir men\u00FA" })] }) }), _jsxs(DropdownMenuContent, { align: "end", children: [_jsxs(DropdownMenuItem, { onClick: () => handleEdit(product), className: "gap-2", children: [_jsx(Pencil, { className: "h-4 w-4" }), " Editar"] }), _jsxs(DropdownMenuItem, { onClick: () => setLabelProducts([product]), className: "gap-2", children: [_jsx(QrCode, { className: "h-4 w-4" }), " Imprimir etiqueta"] }), product.tracking_method === 'serialized' && (_jsxs(DropdownMenuItem, { onClick: () => {
                                                                         setSelectedProduct(product);
                                                                         setSerialModalOpen(true);
                                                                     }, className: "gap-2", children: [_jsx(Hash, { className: "h-4 w-4" }), " Gestionar Seriales"] })), _jsx(DropdownMenuItem, { onClick: () => {
@@ -280,7 +316,7 @@ export default function ProductList() {
                                                                         else {
                                                                             handleMarkActive(product.id, false);
                                                                         }
-                                                                    }, className: "gap-2", children: product.status === 'active' ? (_jsxs(_Fragment, { children: [_jsx(Ban, { className: "h-4 w-4" }), " Marcar inactivo"] })) : (_jsxs(_Fragment, { children: [_jsx("svg", { xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 24 24", fill: "currentColor", className: "h-4 w-4", children: _jsx("path", { fillRule: "evenodd", d: "M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm13.36-2.46a.75.75 0 1 0-1.22-.88l-3.236 4.49-1.49-1.49a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.616-4.836Z", clipRule: "evenodd" }) }), "Marcar activo"] })) }), _jsxs(DropdownMenuItem, { onClick: () => handleDelete(product.id), className: "gap-2 text-red-600 focus:text-red-600", children: [_jsx(Trash2, { className: "h-4 w-4" }), " Eliminar"] })] })] }) })] }, product.id)))) })] }), _jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-4", children: [_jsxs("div", { className: "text-sm text-muted-foreground", children: ["Mostrando ", totalCount === 0 ? 0 : (page - 1) * pageSize + 1, "\u2013", Math.min(page * pageSize, totalCount), " de ", totalCount] }), _jsxs("div", { className: "flex items-center gap-2", children: [_jsx("span", { className: "text-sm", children: "Por p\u00E1gina" }), _jsxs(Select, { value: String(pageSize), onValueChange: (val) => { setPageSize(Number(val)); setPage(1); }, children: [_jsx(SelectTrigger, { className: "w-[80px]", children: _jsx(SelectValue, {}) }), _jsxs(SelectContent, { children: [_jsx(SelectItem, { value: "10", children: "10" }), _jsx(SelectItem, { value: "20", children: "20" }), _jsx(SelectItem, { value: "50", children: "50" }), _jsx(SelectItem, { value: "100", children: "100" })] })] }), _jsxs("div", { className: "flex items-center gap-2 ml-2", children: [_jsx(Button, { variant: "outline", size: "sm", onClick: () => setPage(p => Math.max(1, p - 1)), disabled: page <= 1, children: "Anterior" }), _jsxs("div", { className: "text-sm", children: ["P\u00E1gina ", page, " de ", totalPages] }), _jsx(Button, { variant: "outline", size: "sm", onClick: () => setPage(p => Math.min(totalPages, p + 1)), disabled: page >= totalPages, children: "Siguiente" })] })] })] })] })) }), _jsx(ProductModal, { open: isModalOpen, onClose: handleModalClose, product: editingProduct }), _jsx(ProductPriceUpdate, { open: isPriceUpdateOpen, onClose: () => setIsPriceUpdateOpen(false), onUpdateComplete: fetchProducts }), selectedProduct && (_jsx(SerialManagementModal, { productId: selectedProduct.id, productName: selectedProduct.name, productSku: selectedProduct.sku, onClose: () => {
+                                                                    }, className: "gap-2", children: product.status === 'active' ? (_jsxs(_Fragment, { children: [_jsx(Ban, { className: "h-4 w-4" }), " Marcar inactivo"] })) : (_jsxs(_Fragment, { children: [_jsx("svg", { xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 24 24", fill: "currentColor", className: "h-4 w-4", children: _jsx("path", { fillRule: "evenodd", d: "M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm13.36-2.46a.75.75 0 1 0-1.22-.88l-3.236 4.49-1.49-1.49a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.616-4.836Z", clipRule: "evenodd" }) }), "Marcar activo"] })) }), _jsxs(DropdownMenuItem, { onClick: () => handleDelete(product.id), className: "gap-2 text-red-600 focus:text-red-600", children: [_jsx(Trash2, { className: "h-4 w-4" }), " Eliminar"] })] })] }) })] }, product.id)))) })] }), _jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-4", children: [_jsxs("div", { className: "text-sm text-muted-foreground", children: ["Mostrando ", totalCount === 0 ? 0 : (page - 1) * pageSize + 1, "\u2013", Math.min(page * pageSize, totalCount), " de ", totalCount] }), _jsxs("div", { className: "flex items-center gap-2", children: [_jsx("span", { className: "text-sm", children: "Por p\u00E1gina" }), _jsxs(Select, { value: String(pageSize), onValueChange: (val) => { setPageSize(Number(val)); setPage(1); }, children: [_jsx(SelectTrigger, { className: "w-[80px]", children: _jsx(SelectValue, {}) }), _jsxs(SelectContent, { children: [_jsx(SelectItem, { value: "10", children: "10" }), _jsx(SelectItem, { value: "20", children: "20" }), _jsx(SelectItem, { value: "50", children: "50" }), _jsx(SelectItem, { value: "100", children: "100" })] })] }), _jsxs("div", { className: "flex items-center gap-2 ml-2", children: [_jsx(Button, { variant: "outline", size: "sm", onClick: () => setPage(p => Math.max(1, p - 1)), disabled: page <= 1, children: "Anterior" }), _jsxs("div", { className: "text-sm", children: ["P\u00E1gina ", page, " de ", totalPages] }), _jsx(Button, { variant: "outline", size: "sm", onClick: () => setPage(p => Math.min(totalPages, p + 1)), disabled: page >= totalPages, children: "Siguiente" })] })] })] })] })) }), _jsx(ProductModal, { open: isModalOpen, onClose: handleModalClose, product: editingProduct }), _jsx(ProductPriceUpdate, { open: isPriceUpdateOpen, onClose: () => setIsPriceUpdateOpen(false), onUpdateComplete: fetchProducts }), labelProducts && labelProducts.length > 0 && (_jsx(LabelPrintModal, { open: true, onClose: () => setLabelProducts(null), products: labelProducts })), selectedProduct && (_jsx(SerialManagementModal, { productId: selectedProduct.id, productName: selectedProduct.name, productSku: selectedProduct.sku, onClose: () => {
                     setSerialModalOpen(false);
                     setSelectedProduct(null);
                 }, onUpdate: fetchProducts }))] }));

@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useBranch } from '../lib/branch';
+import { useBarcodeScanner } from '../hooks/useBarcodeScanner';
 
 interface Product {
   id: string;
   name: string;
   sku?: string;
+  barcode?: string;
 }
 
 interface Warehouse {
@@ -223,6 +225,23 @@ const Inventory: React.FC = () => {
     setProductSearchTerm(product.sku ? `${product.name} (${product.sku})` : product.name);
     setShowProductDropdown(false);
   };
+
+  // Lectura con escáner: selecciona el producto sin tocar el buscador.
+  const handleBarcodeScan = (code: string) => {
+    const needle = code.trim().toLowerCase();
+    const found = products.find(p =>
+      (p.barcode || '').toLowerCase() === needle || (p.sku || '').toLowerCase() === needle
+    );
+
+    if (!found) {
+      alert(`Código no encontrado: ${code}`);
+      return;
+    }
+
+    handleSelectProduct(found);
+  };
+
+  useBarcodeScanner({ onScan: handleBarcodeScan });
 
   // Función para manejar cambios en el tipo de movimiento
   const handleMovementTypeChange = (type: 'entry' | 'exit' | 'transfer') => {

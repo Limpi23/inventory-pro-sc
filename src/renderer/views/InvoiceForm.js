@@ -6,6 +6,7 @@ import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useCurrency } from '../hooks/useCurrency';
 import { useBranch } from '../lib/branch';
+import { useBarcodeScanner } from '../hooks/useBarcodeScanner';
 const InvoiceForm = () => {
     const currency = useCurrency();
     const { activeBranchId, isAllView, isLocked } = useBranch();
@@ -205,7 +206,7 @@ const InvoiceForm = () => {
             const client = await supabase.getClient();
             const { data, error } = await client
                 .from('products')
-                .select('id, name, sku, sale_price, tax_rate, tracking_method')
+                .select('id, name, sku, barcode, sale_price, tax_rate, tracking_method')
                 .order('name');
             if (error)
                 throw error;
@@ -497,6 +498,29 @@ const InvoiceForm = () => {
             }));
         }
     };
+    // Lectura con escáner: selecciona el producto y trae su precio e impuesto,
+    // igual que si se hubiera elegido en el desplegable.
+    const handleBarcodeScan = (code) => {
+        const needle = code.trim().toLowerCase();
+        const found = products.find(p => (p.barcode || '').toLowerCase() === needle || (p.sku || '').toLowerCase() === needle);
+        if (!found) {
+            toast.error(`Código no encontrado: ${code}`);
+            return;
+        }
+        setCurrentItem(prev => ({
+            ...prev,
+            product_id: found.id,
+            quantity: prev.quantity > 0 ? prev.quantity : 1,
+            unit_price: found.sale_price,
+            unit_price_display: (() => {
+                const displayPrice = currency.toDisplay(found.sale_price);
+                return Number.isFinite(displayPrice) ? `${displayPrice}` : '';
+            })(),
+            tax_rate: found.tax_rate || 0
+        }));
+        toast.success(`${found.name}${found.sku ? ` · ${found.sku}` : ''}`);
+    };
+    useBarcodeScanner({ onScan: handleBarcodeScan });
     const calculateItemTotals = (quantity, unitPrice, taxRate, discountPercent) => {
         const subtotal = quantity * unitPrice;
         const discountAmount = (subtotal * discountPercent) / 100;

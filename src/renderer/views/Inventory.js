@@ -2,6 +2,7 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useBranch } from '../lib/branch';
+import { useBarcodeScanner } from '../hooks/useBarcodeScanner';
 const Inventory = () => {
     const { activeBranchId, isAllView } = useBranch();
     const [products, setProducts] = useState([]);
@@ -167,6 +168,17 @@ const Inventory = () => {
         setProductSearchTerm(product.sku ? `${product.name} (${product.sku})` : product.name);
         setShowProductDropdown(false);
     };
+    // Lectura con escáner: selecciona el producto sin tocar el buscador.
+    const handleBarcodeScan = (code) => {
+        const needle = code.trim().toLowerCase();
+        const found = products.find(p => (p.barcode || '').toLowerCase() === needle || (p.sku || '').toLowerCase() === needle);
+        if (!found) {
+            alert(`Código no encontrado: ${code}`);
+            return;
+        }
+        handleSelectProduct(found);
+    };
+    useBarcodeScanner({ onScan: handleBarcodeScan });
     // Función para manejar cambios en el tipo de movimiento
     const handleMovementTypeChange = (type) => {
         if (type === 'entry') {
