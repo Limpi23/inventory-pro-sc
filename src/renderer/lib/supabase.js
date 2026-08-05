@@ -197,6 +197,28 @@ export const productService = {
             throw error;
         return data || [];
     },
+    /**
+     * Busca un producto por código exacto. Prueba primero `barcode` y luego `sku`,
+     * que es lo que un lector puede haber leído de la etiqueta.
+     * Se usan dos consultas con `eq` en vez de un `or` para no tener que escapar
+     * códigos que contengan comas o paréntesis.
+     */
+    findByCode: async (code) => {
+        const value = (code || '').trim();
+        if (!value)
+            return null;
+        const client = await getSupabaseClient();
+        const select = `*, category:categories(id, name), location:locations(id, name, warehouse_id)`;
+        const byBarcode = await client.from('products').select(select).eq('barcode', value).limit(1);
+        if (byBarcode.error)
+            throw byBarcode.error;
+        if (byBarcode.data?.length)
+            return byBarcode.data[0];
+        const bySku = await client.from('products').select(select).eq('sku', value).limit(1);
+        if (bySku.error)
+            throw bySku.error;
+        return bySku.data?.[0] || null;
+    },
     getLowStockProducts: async ({ page = 1, pageSize = 10, search = '', threshold = 0 }) => {
         const client = await getSupabaseClient();
         let query = client

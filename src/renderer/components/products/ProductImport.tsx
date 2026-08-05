@@ -14,7 +14,7 @@ interface ProductImportProps {
 
 const REQUIRED_COLUMNS = ['name'];
 const OPTIONAL_BUT_VALIDATED_COLUMNS = ['sku', 'category', 'category_id', 'location', 'location_id', 'min_stock', 'max_stock', 'purchase_price', 'sale_price', 'tax_rate', 'status'];
-const SUPPORTED_COLUMNS = [...new Set([...REQUIRED_COLUMNS, ...OPTIONAL_BUT_VALIDATED_COLUMNS, 'description', 'barcode'])];
+const SUPPORTED_COLUMNS = [...new Set([...REQUIRED_COLUMNS, ...OPTIONAL_BUT_VALIDATED_COLUMNS, 'description', 'barcode', 'barcode_type'])];
 const NUMBER_FIELDS: Array<{ key: string; label: string; allowEmpty?: boolean; min?: number }> = [
   { key: 'min_stock', label: 'Stock mínimo', allowEmpty: true, min: 0 },
   { key: 'max_stock', label: 'Stock máximo', allowEmpty: true, min: 0 },
@@ -263,7 +263,11 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
             name,
             description: row.description || '',
             sku: sku,
+            // Si viene vacío, el trigger de la base de datos lo rellena con el SKU.
             barcode: row.barcode || '',
+            barcode_type: ['CODE128', 'EAN13', 'QR'].includes(String(row.barcode_type || '').toUpperCase())
+              ? String(row.barcode_type).toUpperCase()
+              : 'CODE128',
             category_id,
             location_id,
             min_stock: numericValues.min_stock ?? 0,
@@ -344,13 +348,14 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
   };
 
   const downloadTemplate = () => {
-    const headers = ['name', 'description', 'sku', 'barcode', 'category', 'category_id', 'location', 'location_id', 'min_stock', 'max_stock', 'purchase_price', 'sale_price', 'tax_rate', 'status'];
+    const headers = ['name', 'description', 'sku', 'barcode', 'barcode_type', 'category', 'category_id', 'location', 'location_id', 'min_stock', 'max_stock', 'purchase_price', 'sale_price', 'tax_rate', 'status'];
     const rows = [
       {
         name: 'Producto 1',
         description: 'Descripción del producto 1',
         sku: 'ABC123',
-        barcode: '123456789',
+        barcode: '',
+        barcode_type: 'CODE128',
         category: 'Categoría Principal',
         category_id: '9e91d103-7c4c-472d-9566-981274a13ff4',
         location: 'Pasillo A - Estante 1',
@@ -366,7 +371,8 @@ const ProductImport: React.FC<ProductImportProps> = ({ onImportComplete, classNa
         name: 'Producto 2',
         description: 'Descripción del producto 2',
         sku: 'DEF456',
-        barcode: '987654321',
+        barcode: '7501234567890',
+        barcode_type: 'EAN13',
         category: 'Otra Categoría',
         category_id: '',
         location: 'Bodega - Rack 2',

@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Input } from "../ui/input";
 import { Checkbox } from "../ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
-import { MoreHorizontal, Pencil, Trash2, Ban, Hash } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Ban, Hash, QrCode, Printer } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import * as XLSX from "xlsx";
 import ProductModal from "./ProductModal";
@@ -15,8 +15,10 @@ import ProductImport from "./ProductImport";
 import ProductPriceUpdate from './ProductPriceUpdate';
 import ProductBulkAssignLocation from './ProductBulkAssignLocation';
 import SerialManagementModal from '../inventory/SerialManagementModal';
+import LabelPrintModal from './codes/LabelPrintModal';
 import { useAuth } from "../../lib/auth";
 import { useCurrency } from "../../hooks/useCurrency";
+import { useBarcodeScanner } from "../../hooks/useBarcodeScanner";
 import { toast } from "react-hot-toast";
 
 type UIProduct = Product & { category?: { id: string; name: string } | null; location?: { id: string; name: string } | null };
@@ -54,6 +56,28 @@ export default function ProductList() {
   const [locations, setLocations] = useState<{ id: string; name: string; warehouse_id?: string }[]>([]);
   const [serialModalOpen, setSerialModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [labelProducts, setLabelProducts] = useState<Product[] | null>(null);
+
+  // Abre el modal de etiquetas con los productos seleccionados, que pueden
+  // estar repartidos en varias páginas del listado.
+  async function openLabelsForSelection() {
+    if (selectedIds.size === 0) return;
+    try {
+      setIsLoading(true);
+      const all = await productService.getAll();
+      const items = (all as unknown as Product[]).filter(p => selectedIds.has(p.id));
+      if (items.length === 0) {
+        toast.error('No se encontraron los productos seleccionados');
+        return;
+      }
+      setLabelProducts(items);
+    } catch (e) {
+      console.error(e);
+      toast.error('No se pudieron cargar los productos para etiquetar');
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   useEffect(() => {
     fetchProducts({ keepPage: true });
@@ -74,13 +98,14 @@ export default function ProductList() {
     fetchProducts({ keepPage: true });
   }, [page, pageSize, warehouseFilter, locationFilter]);
 
-  async function fetchProducts(opts?: { keepPage?: boolean }) {
+  async function fetchProducts(opts?: { keepPage?: boolean; search?: string }) {
     try {
       setIsLoading(true);
       const { data, count } = await productService.getProducts({
         page: opts?.keepPage ? page : 1,
         pageSize,
-        search: searchQuery,
+        // `search` explícito para poder buscar antes de que el estado se actualice
+        search: opts?.search ?? searchQuery,
         warehouseId: warehouseFilter,
         locationId: locationFilter
       });
@@ -101,6 +126,15 @@ export default function ProductList() {
     setPage(1);
     fetchProducts({ keepPage: false });
   }
+
+  // Lectura con escáner: filtra la lista por el código leído.
+  useBarcodeScanner({
+    onScan: (code) => {
+      setSearchQuery(code);
+      setPage(1);
+      fetchProducts({ keepPage: false, search: code });
+    },
+  });
 
   // Paginación calculada con datos del servidor
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -223,6 +257,7 @@ export default function ProductList() {
         description: (p as any).description || "",
         sku: p.sku || "",
         barcode: (p as any).barcode || "",
+        barcode_type: (p as any).barcode_type || "CODE128",
         category_id: (p as any).category?.id || (p as any).category_id || "",
         location_id: (p as any).location?.id || (p as any).location_id || "",
         location: (p as any).location?.name || "",
@@ -324,6 +359,9 @@ export default function ProductList() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm" onClick={() => setSelectedIds(new Set())}>Limpiar selección</Button>
+                  <Button variant="outline" size="sm" className="gap-2" onClick={openLabelsForSelection}>
+                    <Printer className="h-4 w-4" /> Imprimir etiquetas
+                  </Button>
                   {/* Botón de eliminación masiva */}
                   <Button
                     variant="destructive"
@@ -434,6 +472,9 @@ export default function ProductList() {
                             <DropdownMenuItem onClick={() => handleEdit(product)} className="gap-2">
                               <Pencil className="h-4 w-4" /> Editar
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setLabelProducts([product])} className="gap-2">
+                              <QrCode className="h-4 w-4" /> Imprimir etiqueta
+                            </DropdownMenuItem>
                             {product.tracking_method === 'serialized' && (
                               <DropdownMenuItem 
                                 onClick={() => {
@@ -529,6 +570,14 @@ export default function ProductList() {
         onClose={() => setIsPriceUpdateOpen(false)}
         onUpdateComplete={fetchProducts}
       />
+
+      {labelProducts && labelProducts.length > 0 && (
+        <LabelPrintModal
+          open={true}
+          onClose={() => setLabelProducts(null)}
+          products={labelProducts}
+        />
+      )}
 
       {selectedProduct && (
         <SerialManagementModal
