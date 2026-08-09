@@ -19,10 +19,29 @@ import LabelPrintModal from './codes/LabelPrintModal';
 import { useAuth } from "../../lib/auth";
 import { useCurrency } from "../../hooks/useCurrency";
 import { useBarcodeScanner } from "../../hooks/useBarcodeScanner";
+import { useBranch, ALL_BRANCHES } from "../../lib/branch";
+import { priceService } from "../../lib/priceService";
 import { toast } from "react-hot-toast";
 export default function ProductList() {
     const { user, hasPermission } = useAuth();
+    const { activeBranchId, activeBranch } = useBranch();
     const currency = useCurrency();
+    // Precios propios de la sucursal activa; en la vista "todas" rige el precio base
+    const [branchPrices, setBranchPrices] = useState(new Map());
+    useEffect(() => {
+        let cancelado = false;
+        if (!activeBranchId || activeBranchId === ALL_BRANCHES) {
+            setBranchPrices(new Map());
+            return;
+        }
+        priceService
+            .getMapByWarehouse(activeBranchId)
+            .then((m) => { if (!cancelado)
+            setBranchPrices(m); })
+            .catch(() => { if (!cancelado)
+            setBranchPrices(new Map()); });
+        return () => { cancelado = true; };
+    }, [activeBranchId]);
     const isAdmin = ((user?.role_name || '').toLowerCase().includes('admin')) || user?.role_id === 1;
     const canUpdateProducts = (isAdmin ||
         hasPermission('products', 'update') ||
@@ -294,7 +313,10 @@ export default function ProductList() {
                                                 }
                                             }, children: "Eliminar seleccionados" })] })] })), _jsxs(Table, { children: [_jsx(TableHeader, { children: _jsxs(TableRow, { children: [_jsx(TableHead, { className: "w-10", children: _jsx(Checkbox, { checked: someVisibleSelected ? 'indeterminate' : allVisibleSelected, onCheckedChange: toggleSelectAll, "aria-label": "Seleccionar todos en esta p\u00E1gina" }) }), _jsx(TableHead, { children: "Nombre" }), _jsx(TableHead, { className: "hidden md:table-cell", children: "SKU" }), _jsx(TableHead, { className: "hidden lg:table-cell", children: "Tipo" }), _jsx(TableHead, { className: "hidden lg:table-cell", children: "Categor\u00EDa" }), _jsx(TableHead, { className: "hidden xl:table-cell", children: "Ubicaci\u00F3n" }), _jsx(TableHead, { className: "hidden xl:table-cell", children: "Precio Compra" }), _jsx(TableHead, { children: "Precio Venta" }), _jsx(TableHead, { className: "hidden md:table-cell", children: "Estado" }), _jsx(TableHead, { className: "text-right", children: "Acciones" })] }) }), _jsx(TableBody, { children: products.length === 0 ? (_jsx(TableRow, { children: _jsx(TableCell, { colSpan: 8, className: "text-center", children: "No hay productos registrados" }) })) : (visibleProducts.map((product) => (_jsxs(TableRow, { children: [_jsx(TableCell, { className: "w-10", children: _jsx(Checkbox, { checked: selectedIds.has(product.id), onCheckedChange: () => toggleOne(product.id), "aria-label": `Seleccionar ${product.name}` }) }), _jsx(TableCell, { children: product.name }), _jsx(TableCell, { className: "hidden md:table-cell", children: product.sku || "-" }), _jsx(TableCell, { className: "hidden lg:table-cell", children: _jsx("span", { className: `px-2 py-1 rounded-full text-xs font-medium ${product.tracking_method === 'serialized'
                                                         ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
-                                                        : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'}`, children: product.tracking_method === 'serialized' ? 'Serializado' : 'Estándar' }) }), _jsx(TableCell, { className: "hidden lg:table-cell", children: product.category?.name || "-" }), _jsx(TableCell, { className: "hidden xl:table-cell", children: product.location?.name || '-' }), _jsx(TableCell, { className: "hidden xl:table-cell", children: formatCurrency(product.purchase_price ?? 0) }), _jsx(TableCell, { children: formatCurrency(product.sale_price ?? 0) }), _jsx(TableCell, { className: "hidden md:table-cell", children: _jsx("span", { className: `px-2 py-1 rounded-full text-xs capitalize ${product.status === 'active'
+                                                        : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'}`, children: product.tracking_method === 'serialized' ? 'Serializado' : 'Estándar' }) }), _jsx(TableCell, { className: "hidden lg:table-cell", children: product.category?.name || "-" }), _jsx(TableCell, { className: "hidden xl:table-cell", children: product.location?.name || '-' }), _jsx(TableCell, { className: "hidden xl:table-cell", children: formatCurrency(priceService.resolve(product, branchPrices.get(product.id)).purchase_price) }), _jsx(TableCell, { children: (() => {
+                                                    const r = priceService.resolve(product, branchPrices.get(product.id));
+                                                    return (_jsxs("span", { className: "inline-flex items-center gap-1", children: [formatCurrency(r.sale_price), r.propio && (_jsx("span", { className: "text-[10px] px-1 rounded bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200", title: `Precio propio de ${activeBranch?.name || 'esta sucursal'}`, children: "suc" }))] }));
+                                                })() }), _jsx(TableCell, { className: "hidden md:table-cell", children: _jsx("span", { className: `px-2 py-1 rounded-full text-xs capitalize ${product.status === 'active'
                                                         ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
                                                         : product.status === 'inactive'
                                                             ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'

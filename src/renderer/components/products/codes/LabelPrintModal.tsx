@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import type { Product } from '../../../../types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../ui/dialog';
@@ -8,6 +8,9 @@ import { Label } from '../../ui/label';
 import { Checkbox } from '../../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { useCurrency } from '../../../hooks/useCurrency';
+import { useBranch, ALL_BRANCHES } from '../../../lib/branch';
+import { warehousesService } from '../../../lib/supabase';
+import { priceService, type ProductPrice } from '../../../lib/priceService';
 import { resolveCodeValue, validateCode, effectiveSymbology, type BarcodeSymbology } from '../../../lib/codes';
 import ProductLabel, { type LabelOptions } from './ProductLabel';
 
@@ -51,7 +54,33 @@ interface LabelPrintModalProps {
 
 export default function LabelPrintModal({ open, onClose, products }: LabelPrintModalProps) {
   const currency = useCurrency();
+  const { activeBranchId } = useBranch();
   const printRef = useRef<HTMLDivElement>(null);
+
+  // Sucursal cuyo precio se imprime en la etiqueta
+  const [priceWarehouseId, setPriceWarehouseId] = useState<string>(activeBranchId || ALL_BRANCHES);
+  const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([]);
+  const [branchPrices, setBranchPrices] = useState<Map<string, ProductPrice>>(new Map());
+
+  useEffect(() => {
+    warehousesService
+      .getAll()
+      .then((w: any[]) => setWarehouses((w || []).filter((x) => x.is_active !== false).map((x) => ({ id: x.id, name: x.name }))))
+      .catch(() => setWarehouses([]));
+  }, []);
+
+  useEffect(() => {
+    let cancelado = false;
+    if (!priceWarehouseId || priceWarehouseId === ALL_BRANCHES) {
+      setBranchPrices(new Map());
+      return;
+    }
+    priceService
+      .getMapByWarehouse(priceWarehouseId)
+      .then((m) => { if (!cancelado) setBranchPrices(m); })
+      .catch(() => { if (!cancelado) setBranchPrices(new Map()); });
+    return () => { cancelado = true; };
+  }, [priceWarehouseId]);
 
   const [templateId, setTemplateId] = useState<string>('a4-3x8');
   const [custom, setCustom] = useState<SheetTemplate>({
@@ -98,9 +127,11 @@ export default function LabelPrintModal({ open, onClose, products }: LabelPrintM
 
   const priceLabels = useMemo(() => {
     const map: Record<string, string> = {};
-    printable.forEach(p => { map[p.id] = currency.format(Number(p.sale_price) || 0); });
+    printable.forEach(p => {
+      map[p.id] = currency.format(priceService.resolve(p, branchPrices.get(p.id)).sale_price);
+    });
     return map;
-  }, [printable, currency]);
+  }, [printable, currency, branchPrices]);
 
   // Etiquetas expandidas por copias, precedidas por los huecos ya usados de la hoja
   const pages = useMemo(() => {
@@ -195,6 +226,19 @@ export default function LabelPrintModal({ open, onClose, products }: LabelPrintM
                 </p>
               )}
             </div>
+
+            {showPrice && warehouses.length > 0 && (
+              <div className="grid gap-2">
+                <Label>Precio de qué sucursal</Label>
+                <Select value={priceWarehouseId} onValueChange={setPriceWarehouseId}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_BRANCHES}>Precio base del catálogo</SelectItem>
+                    {warehouses.map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-2">
               <div className="grid gap-2">

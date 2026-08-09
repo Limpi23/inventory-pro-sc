@@ -6,6 +6,7 @@ import { toast } from 'react-hot-toast';
 import { useCurrency } from '../hooks/useCurrency';
 import { useBranch } from '../lib/branch';
 import { useBarcodeScanner } from '../hooks/useBarcodeScanner';
+import { priceService, type ProductPrice } from '../lib/priceService';
 
 interface Customer {
   id: string;
@@ -68,6 +69,9 @@ const InvoiceForm: React.FC = () => {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  // Precios propios de la sucursal que factura. Si un producto no está aquí,
+  // rige el precio base del catálogo.
+  const [branchPrices, setBranchPrices] = useState<Map<string, ProductPrice>>(new Map());
   const [productStock, setProductStock] = useState<Record<string, number>>({});
   const [isLoadingStock, setIsLoadingStock] = useState(false);
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
@@ -193,6 +197,24 @@ const InvoiceForm: React.FC = () => {
       setProductStock({});
     }
   }, [formData.warehouse_id]);
+
+  // Precios de la sucursal que factura: se recargan al cambiar de almacén
+  useEffect(() => {
+    let cancelado = false;
+    if (!formData.warehouse_id) {
+      setBranchPrices(new Map());
+      return;
+    }
+    priceService
+      .getMapByWarehouse(formData.warehouse_id)
+      .then((map) => { if (!cancelado) setBranchPrices(map); })
+      .catch(() => { if (!cancelado) setBranchPrices(new Map()); });
+    return () => { cancelado = true; };
+  }, [formData.warehouse_id]);
+
+  /** Precio de venta que corresponde al almacén de la factura. */
+  const precioDeVenta = (producto: Product): number =>
+    priceService.resolve(producto, branchPrices.get(producto.id)).sale_price;
 
   // Recalcular items cuando cambie el descuento global o el estado de IVA
   useEffect(() => {
@@ -582,12 +604,13 @@ const InvoiceForm: React.FC = () => {
     if (name === 'product_id') {
       const selectedProduct = products.find(p => p.id === value);
       if (selectedProduct) {
+        const precio = precioDeVenta(selectedProduct);
         setCurrentItem(prev => ({
           ...prev,
           [name]: value,
-          unit_price: selectedProduct.sale_price,
+          unit_price: precio,
           unit_price_display: (() => {
-            const displayPrice = currency.toDisplay(selectedProduct.sale_price);
+            const displayPrice = currency.toDisplay(precio);
             return Number.isFinite(displayPrice) ? `${displayPrice}` : '';
           })(),
           tax_rate: selectedProduct.tax_rate || 0
@@ -633,13 +656,14 @@ const InvoiceForm: React.FC = () => {
       return;
     }
 
+    const precio = precioDeVenta(found);
     setCurrentItem(prev => ({
       ...prev,
       product_id: found.id,
       quantity: prev.quantity > 0 ? prev.quantity : 1,
-      unit_price: found.sale_price,
+      unit_price: precio,
       unit_price_display: (() => {
-        const displayPrice = currency.toDisplay(found.sale_price);
+        const displayPrice = currency.toDisplay(precio);
         return Number.isFinite(displayPrice) ? `${displayPrice}` : '';
       })(),
       tax_rate: found.tax_rate || 0

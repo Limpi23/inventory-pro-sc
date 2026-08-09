@@ -46,7 +46,8 @@ const MIGRATIONS = [
     '20251207000000_inventory_direct_adjustment',
     '20251207120000_serialized_inventory',
     '20260710000000_matriz_sucursales',
-    '20260805000000_product_codes'
+    '20260805000000_product_codes',
+    '20260806000000_product_prices'
 ];
 // Contenido de las migraciones embebido (se generará dinámicamente)
 const MIGRATION_CONTENTS = {};

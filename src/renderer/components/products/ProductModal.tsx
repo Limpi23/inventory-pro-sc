@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Product, ProductInput, ProductStatus, Category, Location, TrackingMethod, BarcodeSymbology } from "../../../types";
-import { productService, categoriesService, locationsService } from "../../lib/supabase";
+import { productService, categoriesService, locationsService, warehousesService } from "../../lib/supabase";
+import { priceService } from "../../lib/priceService";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -36,6 +37,10 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
   });
   const [categories, setCategories] = useState<Category[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
+  // Precio propio por sucursal. Vacío = esa sucursal usa el precio base de arriba.
+  const [branchPrices, setBranchPrices] = useState<
+    Array<{ warehouse_id: string; name: string; sale: string; purchase: string }>
+  >([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -68,6 +73,35 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
     
     loadData();
   }, []);
+
+  // Cargar sucursales y, si se edita, sus precios propios
+  useEffect(() => {
+    if (!open) return;
+    let cancelado = false;
+    (async () => {
+      try {
+        const almacenes = await warehousesService.getAll();
+        const activos = (almacenes || []).filter((w: any) => w.is_active !== false);
+        const propios = product ? await priceService.getByProduct(product.id) : [];
+        if (cancelado) return;
+        const porAlmacen = new Map(propios.map((p) => [p.warehouse_id, p]));
+        setBranchPrices(
+          activos.map((w: any) => {
+            const p = porAlmacen.get(w.id);
+            return {
+              warehouse_id: w.id,
+              name: w.name,
+              sale: p?.sale_price !== null && p?.sale_price !== undefined ? String(p.sale_price) : "",
+              purchase: p?.purchase_price !== null && p?.purchase_price !== undefined ? String(p.purchase_price) : "",
+            };
+          })
+        );
+      } catch (e) {
+        console.error("Error cargando precios por sucursal:", e);
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [product, open]);
 
   // Actualizar el formulario cuando se edita un producto existente
   useEffect(() => {
@@ -176,14 +210,36 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
       setIsSubmitting(true);
       setError("");
 
+      let guardado: any;
       if (product) {
         // Actualizar producto existente
-        await productService.update(product.id, formData as any);
+        guardado = await productService.update(product.id, formData as any);
       } else {
         // Crear nuevo producto
-        await productService.create(formData as any);
+        guardado = await productService.create(formData as any);
       }
-      
+
+      // Precios por sucursal: se guardan los que tengan algún valor y se
+      // eliminan los que se dejaron en blanco, para que vuelvan al precio base.
+      const productId = guardado?.id || product?.id;
+      if (productId) {
+        const aGuardar = branchPrices.filter((b) => b.sale.trim() !== "" || b.purchase.trim() !== "");
+        const aBorrar = branchPrices.filter((b) => b.sale.trim() === "" && b.purchase.trim() === "");
+        if (aGuardar.length) {
+          await priceService.upsert(
+            aGuardar.map((b) => ({
+              product_id: productId,
+              warehouse_id: b.warehouse_id,
+              sale_price: b.sale.trim() === "" ? null : Number(b.sale),
+              purchase_price: b.purchase.trim() === "" ? null : Number(b.purchase),
+            }))
+          );
+        }
+        for (const b of aBorrar) {
+          await priceService.remove(productId, b.warehouse_id);
+        }
+      }
+
       onClose();
     } catch (err: any) {
       setError(err.message || "Error al guardar el producto");
@@ -385,7 +441,50 @@ export default function ProductModal({ open, onClose, product }: ProductModalPro
                 placeholder="0"
               />
             </div>
-            
+
+            {/* Precios por sucursal */}
+            {branchPrices.length > 0 && (
+              <div className="col-span-2 rounded-md border p-3">
+                <div className="mb-2">
+                  <Label>Precios por sucursal</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Déjalos vacíos para que la sucursal use los precios de arriba.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  {branchPrices.map((b, idx) => (
+                    <div key={b.warehouse_id} className="grid grid-cols-[1fr_auto_auto] gap-2 items-center">
+                      <span className="text-sm truncate" title={b.name}>{b.name}</span>
+                      <Input
+                        {...keyboardIsolationHandlers}
+                        className="h-8 w-28"
+                        type="number"
+                        placeholder={`compra ${formData.purchase_price ?? 0}`}
+                        value={b.purchase}
+                        onChange={(e) =>
+                          setBranchPrices((prev) =>
+                            prev.map((x, i) => (i === idx ? { ...x, purchase: e.target.value } : x))
+                          )
+                        }
+                      />
+                      <Input
+                        {...keyboardIsolationHandlers}
+                        className="h-8 w-28"
+                        type="number"
+                        placeholder={`venta ${formData.sale_price ?? 0}`}
+                        value={b.sale}
+                        onChange={(e) =>
+                          setBranchPrices((prev) =>
+                            prev.map((x, i) => (i === idx ? { ...x, sale: e.target.value } : x))
+                          )
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Stock mínimo (solo relevante para cantidad) */}
             {formData.tracking_method !== 'serialized' && (
               <div className="grid gap-2">

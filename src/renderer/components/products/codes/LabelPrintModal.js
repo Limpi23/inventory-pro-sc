@@ -1,5 +1,5 @@
 import { jsxs as _jsxs, jsx as _jsx } from "react/jsx-runtime";
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../ui/dialog';
 import { Button } from '../../ui/button';
@@ -8,6 +8,9 @@ import { Label } from '../../ui/label';
 import { Checkbox } from '../../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { useCurrency } from '../../../hooks/useCurrency';
+import { useBranch, ALL_BRANCHES } from '../../../lib/branch';
+import { warehousesService } from '../../../lib/supabase';
+import { priceService } from '../../../lib/priceService';
 import { resolveCodeValue, validateCode, effectiveSymbology } from '../../../lib/codes';
 import ProductLabel from './ProductLabel';
 const PAGE_SIZES = {
@@ -25,7 +28,32 @@ const TEMPLATES = [
 ];
 export default function LabelPrintModal({ open, onClose, products }) {
     const currency = useCurrency();
+    const { activeBranchId } = useBranch();
     const printRef = useRef(null);
+    // Sucursal cuyo precio se imprime en la etiqueta
+    const [priceWarehouseId, setPriceWarehouseId] = useState(activeBranchId || ALL_BRANCHES);
+    const [warehouses, setWarehouses] = useState([]);
+    const [branchPrices, setBranchPrices] = useState(new Map());
+    useEffect(() => {
+        warehousesService
+            .getAll()
+            .then((w) => setWarehouses((w || []).filter((x) => x.is_active !== false).map((x) => ({ id: x.id, name: x.name }))))
+            .catch(() => setWarehouses([]));
+    }, []);
+    useEffect(() => {
+        let cancelado = false;
+        if (!priceWarehouseId || priceWarehouseId === ALL_BRANCHES) {
+            setBranchPrices(new Map());
+            return;
+        }
+        priceService
+            .getMapByWarehouse(priceWarehouseId)
+            .then((m) => { if (!cancelado)
+            setBranchPrices(m); })
+            .catch(() => { if (!cancelado)
+            setBranchPrices(new Map()); });
+        return () => { cancelado = true; };
+    }, [priceWarehouseId]);
     const [templateId, setTemplateId] = useState('a4-3x8');
     const [custom, setCustom] = useState({
         ...TEMPLATES[0], id: 'custom', label: 'Personalizado',
@@ -60,9 +88,11 @@ export default function LabelPrintModal({ open, onClose, products }) {
     const printable = useMemo(() => products.filter(p => validateCode(resolveCodeValue(p), symbology).ok), [products, symbology]);
     const priceLabels = useMemo(() => {
         const map = {};
-        printable.forEach(p => { map[p.id] = currency.format(Number(p.sale_price) || 0); });
+        printable.forEach(p => {
+            map[p.id] = currency.format(priceService.resolve(p, branchPrices.get(p.id)).sale_price);
+        });
         return map;
-    }, [printable, currency]);
+    }, [printable, currency, branchPrices]);
     // Etiquetas expandidas por copias, precedidas por los huecos ya usados de la hoja
     const pages = useMemo(() => {
         const cells = [];
@@ -89,7 +119,7 @@ export default function LabelPrintModal({ open, onClose, products }) {
                                             ['w', 'Ancho (mm)'], ['h', 'Alto (mm)'],
                                             ['ml', 'Margen izq. (mm)'], ['mt', 'Margen sup. (mm)'],
                                             ['gx', 'Sep. horiz. (mm)'], ['gy', 'Sep. vert. (mm)'],
-                                        ].map(([key, lbl]) => (_jsxs("div", { className: "grid gap-1", children: [_jsx(Label, { className: "text-xs", children: lbl }), _jsx(Input, { className: "h-8", type: "number", step: "0.1", value: String(custom[key]), onChange: (e) => updateCustom({ [key]: Number(e.target.value) || 0 }) })] }, key)))] })), _jsxs("div", { className: "grid gap-2", children: [_jsx(Label, { children: "C\u00F3digo a imprimir" }), _jsxs(Select, { value: symbology, onValueChange: (v) => setSymbology(v), children: [_jsx(SelectTrigger, { children: _jsx(SelectValue, {}) }), _jsxs(SelectContent, { children: [_jsx(SelectItem, { value: "CODE128", children: "Barras \u00B7 Code128" }), _jsx(SelectItem, { value: "EAN13", children: "Barras \u00B7 EAN-13" }), _jsx(SelectItem, { value: "QR", children: "QR" })] })] }), symbology === 'QR' && (_jsx("p", { className: "text-xs text-muted-foreground", children: "Requiere un lector 2D. Los lectores l\u00E1ser de barras no leen QR." }))] }), _jsxs("div", { className: "grid grid-cols-2 gap-2", children: [_jsxs("div", { className: "grid gap-2", children: [_jsx(Label, { htmlFor: "copies", children: "Copias c/u" }), _jsx(Input, { id: "copies", type: "number", min: 1, value: copies, onChange: (e) => setCopies(Math.max(1, Number(e.target.value) || 1)) })] }), _jsxs("div", { className: "grid gap-2", children: [_jsx(Label, { htmlFor: "startAt", children: "Empezar en" }), _jsx(Input, { id: "startAt", type: "number", min: 1, max: perPage, value: startAt, onChange: (e) => setStartAt(Math.min(perPage, Math.max(1, Number(e.target.value) || 1))) })] })] }), _jsxs("p", { className: "text-xs text-muted-foreground -mt-2", children: ["\u00ABEmpezar en\u00BB salta etiquetas ya usadas de la hoja (de 1 a ", perPage, ")."] }), _jsxs("div", { className: "space-y-2", children: [_jsx(Label, { children: "Mostrar en la etiqueta" }), [
+                                        ].map(([key, lbl]) => (_jsxs("div", { className: "grid gap-1", children: [_jsx(Label, { className: "text-xs", children: lbl }), _jsx(Input, { className: "h-8", type: "number", step: "0.1", value: String(custom[key]), onChange: (e) => updateCustom({ [key]: Number(e.target.value) || 0 }) })] }, key)))] })), _jsxs("div", { className: "grid gap-2", children: [_jsx(Label, { children: "C\u00F3digo a imprimir" }), _jsxs(Select, { value: symbology, onValueChange: (v) => setSymbology(v), children: [_jsx(SelectTrigger, { children: _jsx(SelectValue, {}) }), _jsxs(SelectContent, { children: [_jsx(SelectItem, { value: "CODE128", children: "Barras \u00B7 Code128" }), _jsx(SelectItem, { value: "EAN13", children: "Barras \u00B7 EAN-13" }), _jsx(SelectItem, { value: "QR", children: "QR" })] })] }), symbology === 'QR' && (_jsx("p", { className: "text-xs text-muted-foreground", children: "Requiere un lector 2D. Los lectores l\u00E1ser de barras no leen QR." }))] }), showPrice && warehouses.length > 0 && (_jsxs("div", { className: "grid gap-2", children: [_jsx(Label, { children: "Precio de qu\u00E9 sucursal" }), _jsxs(Select, { value: priceWarehouseId, onValueChange: setPriceWarehouseId, children: [_jsx(SelectTrigger, { children: _jsx(SelectValue, {}) }), _jsxs(SelectContent, { children: [_jsx(SelectItem, { value: ALL_BRANCHES, children: "Precio base del cat\u00E1logo" }), warehouses.map(w => _jsx(SelectItem, { value: w.id, children: w.name }, w.id))] })] })] })), _jsxs("div", { className: "grid grid-cols-2 gap-2", children: [_jsxs("div", { className: "grid gap-2", children: [_jsx(Label, { htmlFor: "copies", children: "Copias c/u" }), _jsx(Input, { id: "copies", type: "number", min: 1, value: copies, onChange: (e) => setCopies(Math.max(1, Number(e.target.value) || 1)) })] }), _jsxs("div", { className: "grid gap-2", children: [_jsx(Label, { htmlFor: "startAt", children: "Empezar en" }), _jsx(Input, { id: "startAt", type: "number", min: 1, max: perPage, value: startAt, onChange: (e) => setStartAt(Math.min(perPage, Math.max(1, Number(e.target.value) || 1))) })] })] }), _jsxs("p", { className: "text-xs text-muted-foreground -mt-2", children: ["\u00ABEmpezar en\u00BB salta etiquetas ya usadas de la hoja (de 1 a ", perPage, ")."] }), _jsxs("div", { className: "space-y-2", children: [_jsx(Label, { children: "Mostrar en la etiqueta" }), [
                                             ['Nombre', showName, setShowName],
                                             ['Código en texto', showSku, setShowSku],
                                             ['Precio', showPrice, setShowPrice],

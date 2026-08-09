@@ -19,13 +19,31 @@ import LabelPrintModal from './codes/LabelPrintModal';
 import { useAuth } from "../../lib/auth";
 import { useCurrency } from "../../hooks/useCurrency";
 import { useBarcodeScanner } from "../../hooks/useBarcodeScanner";
+import { useBranch, ALL_BRANCHES } from "../../lib/branch";
+import { priceService, type ProductPrice } from "../../lib/priceService";
 import { toast } from "react-hot-toast";
 
 type UIProduct = Product & { category?: { id: string; name: string } | null; location?: { id: string; name: string } | null };
 
 export default function ProductList() {
   const { user, hasPermission } = useAuth();
+  const { activeBranchId, activeBranch } = useBranch();
   const currency = useCurrency();
+  // Precios propios de la sucursal activa; en la vista "todas" rige el precio base
+  const [branchPrices, setBranchPrices] = useState<Map<string, ProductPrice>>(new Map());
+
+  useEffect(() => {
+    let cancelado = false;
+    if (!activeBranchId || activeBranchId === ALL_BRANCHES) {
+      setBranchPrices(new Map());
+      return;
+    }
+    priceService
+      .getMapByWarehouse(activeBranchId)
+      .then((m) => { if (!cancelado) setBranchPrices(m); })
+      .catch(() => { if (!cancelado) setBranchPrices(new Map()); });
+    return () => { cancelado = true; };
+  }, [activeBranchId]);
   const isAdmin = ((user?.role_name || '').toLowerCase().includes('admin')) || user?.role_id === 1;
   const canUpdateProducts = (
     isAdmin ||
@@ -441,8 +459,27 @@ export default function ProductList() {
                       </TableCell>
                       <TableCell className="hidden lg:table-cell">{product.category?.name || "-"}</TableCell>
                       <TableCell className="hidden xl:table-cell">{product.location?.name || '-'}</TableCell>
-                      <TableCell className="hidden xl:table-cell">{formatCurrency(product.purchase_price ?? 0)}</TableCell>
-                      <TableCell>{formatCurrency(product.sale_price ?? 0)}</TableCell>
+                      <TableCell className="hidden xl:table-cell">
+                        {formatCurrency(priceService.resolve(product, branchPrices.get(product.id)).purchase_price)}
+                      </TableCell>
+                      <TableCell>
+                        {(() => {
+                          const r = priceService.resolve(product, branchPrices.get(product.id));
+                          return (
+                            <span className="inline-flex items-center gap-1">
+                              {formatCurrency(r.sale_price)}
+                              {r.propio && (
+                                <span
+                                  className="text-[10px] px-1 rounded bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                                  title={`Precio propio de ${activeBranch?.name || 'esta sucursal'}`}
+                                >
+                                  suc
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })()}
+                      </TableCell>
                       <TableCell className="hidden md:table-cell">
                         <span
                           className={`px-2 py-1 rounded-full text-xs capitalize ${
