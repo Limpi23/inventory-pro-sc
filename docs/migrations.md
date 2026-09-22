@@ -100,3 +100,36 @@ ALTER TABLE products DROP COLUMN price;
    ```
 
 4. Verificar en Supabase Studio que los cambios se hayan aplicado correctamente. 
+## Bases de clientes (producción)
+
+Cada cliente tiene su propio proyecto Supabase. **La app no se migra sola**: al
+arrancar solo comprueba que el esquema esté al día y, si falta algo, avisa con
+un mensaje claro.
+
+Hasta la v1.13 la app intentaba aplicar migraciones por su cuenta, llamando a
+`execute_migration()` con la anon key. Esa función ejecuta SQL arbitrario con
+privilegios del dueño de las tablas, y la anon key va dentro del instalador:
+cualquiera podía leer o borrar la base. La migración
+`20260922000000_lock_execute_migration` la cierra y deja solo a `service_role`.
+
+### Antes de publicar una versión que cambia el esquema
+
+```bash
+npx supabase login                       # una vez por máquina
+DRY=1 node scripts/migrate-clients.mjs   # ver qué falta en cada cliente
+node scripts/migrate-clients.mjs         # respaldar y aplicar
+```
+
+El script respalda cada base en `~/Desktop/backup-<proyecto>-<fecha>/`, aplica
+solo lo pendiente en orden y verifica cada paso.
+
+**Aplica las migraciones antes de publicar el instalador.** Si un cliente
+actualiza la app antes de que su base esté migrada, verá el aviso de «base de
+datos no actualizada» y las pantallas afectadas fallarán hasta que se migre.
+
+### Al añadir una migración
+
+1. Crea el `.sql` en `supabase/migrations/`.
+2. Agrégala a `MIGRACIONES` en `scripts/migrate-clients.mjs`, con su sonda.
+3. Si la app depende de ella, agrégala a `checkRequiredSchema()` en
+   `src/renderer/lib/migrationService.ts`.

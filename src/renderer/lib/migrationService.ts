@@ -57,7 +57,8 @@ const MIGRATIONS = [
   '20251207120000_serialized_inventory',
   '20260710000000_matriz_sucursales',
   '20260805000000_product_codes',
-  '20260806000000_product_prices'
+  '20260806000000_product_prices',
+  '20260922000000_lock_execute_migration'
 ];
 
 // Contenido de las migraciones embebido (se generará dinámicamente)
@@ -128,6 +129,16 @@ export const migrationService = {
       const { error: testError } = await client.rpc('execute_migration', {
         migration_sql: 'SELECT 1'
       });
+
+      // 42501 = permiso denegado: execute_migration está cerrada a la app
+      // (20260922000000_lock_execute_migration). Sin este corte, el bucle de abajo
+      // ignoraría cada error y terminaría reportando éxito sin haber migrado nada.
+      if (testError && testError.code === '42501') {
+        throw new Error(
+          'Por seguridad, las migraciones ya no se aplican desde la aplicación. ' +
+          'Debe aplicarlas el administrador (scripts/migrate-clients.mjs).'
+        );
+      }
 
       if (testError && testError.code === 'PGRST202') {
         // La función no existe - necesitamos que el usuario la cree manualmente
@@ -213,55 +224,32 @@ export const migrationService = {
   },
 
   /**
-   * Aplica automáticamente la migración de matriz/sucursales si la base
-   * del cliente aún no la tiene. Se invoca al iniciar la app, de modo que
-   * al distribuir una actualización no haga falta ningún paso manual.
-   * Es segura de ejecutar varias veces (la migración es idempotente).
+   * Comprueba que la base tenga lo que esta versión de la app necesita y
+   * devuelve lo que falta. Es de solo lectura: la app ya no aplica migraciones
+   * por su cuenta, porque para eso necesitaba execute_migration abierta a la
+   * anon key (ver 20260922000000_lock_execute_migration). Las migraciones las
+   * aplica el administrador con scripts/migrate-clients.mjs.
+   *
+   * Solo se considera "falta" un error de esquema. Con RLS activo una consulta
+   * sin permisos devuelve vacío, no error, así que no genera falsos positivos.
    */
-  async ensureBranchesMigration(): Promise<void> {
-    try {
-      const client = await supabase.getClient();
+  async checkRequiredSchema(): Promise<string[]> {
+    const client = await supabase.getClient();
+    const sondas: Array<{ label: string; run: () => PromiseLike<{ error: any }> }> = [
+      { label: 'ajustes de inventario', run: () => client.from('inventory_adjustments').select('id').limit(1) },
+      { label: 'sucursales', run: () => client.from('stock_transfers').select('id').limit(1) },
+      { label: 'códigos de producto', run: () => client.from('products').select('barcode_type').limit(1) },
+      { label: 'precios por sucursal', run: () => client.from('product_prices').select('product_id').limit(1) },
+    ];
 
-      // La tabla stock_transfers solo existe si la migración ya se aplicó
-      const { error: probeError } = await client
-        .from('stock_transfers')
-        .select('id')
-        .limit(1);
-
-      if (!probeError) return; // ya migrada
-
-      const msg = probeError.message || '';
-      if (!/stock_transfers|does not exist|relation|schema cache/i.test(msg)) {
-        // Error distinto (red, permisos, etc.): no intentar migrar
-        return;
+    const faltantes: string[] = [];
+    for (const sonda of sondas) {
+      const { error } = await sonda.run();
+      if (error && /does not exist|schema cache|relation|column/i.test(error.message || '')) {
+        faltantes.push(sonda.label);
       }
-
-      const sql = await this.getMigrationContent('20260710000000_matriz_sucursales');
-      if (!sql) {
-        console.warn('[Migration] No se encontró el SQL de la migración de sucursales');
-        return;
-      }
-
-      const { data, error } = await client.rpc('execute_migration', {
-        migration_sql: sql
-      });
-
-      if (error) {
-        // PGRST202 = no existe execute_migration (instalación sin bootstrap);
-        // en ese caso queda el camino manual desde el menú.
-        console.warn('[Migration] No se pudo aplicar la migración de sucursales automáticamente:', error.message);
-        return;
-      }
-
-      const result = data as any;
-      if (result && !result.success) {
-        console.warn('[Migration] La migración de sucursales retornó error:', result.error);
-      } else {
-        console.log('[Migration] ✅ Migración de matriz/sucursales aplicada automáticamente');
-      }
-    } catch (e: any) {
-      console.warn('[Migration] Error verificando migración de sucursales:', e?.message || e);
     }
+    return faltantes;
   },
 
   /**

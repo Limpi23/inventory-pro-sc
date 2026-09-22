@@ -222,9 +222,14 @@ const App = () => {
       toast.loading('Verificando estado...', { id: 'check-db' });
       
       try {
-        const needsSetup = await migrationService.needsInitialSetup();
-        if (needsSetup) {
-          toast.error('La base de datos requiere migraciones. Use "Ejecutar Migraciones" del menú.', { id: 'check-db' });
+        // Comprueba el esquema que esta versión usa, no solo que exista la base
+        const faltantes = await migrationService.checkRequiredSchema();
+        if (faltantes.length) {
+          toast.error(
+            `La base de datos no está actualizada (falta: ${faltantes.join(', ')}). ` +
+              'Pide al administrador que aplique las migraciones.',
+            { id: 'check-db' }
+          );
         } else {
           toast.success('La base de datos está actualizada.', { id: 'check-db' });
         }
@@ -264,16 +269,25 @@ const App = () => {
     };
   }, []);
 
-  // Aplicar automáticamente las migraciones pendientes de sucursales
-  // cuando la app ya tiene conexión configurada (post-actualización).
+  // Comprobar que la base de datos tenga el esquema que esta versión necesita.
+  // La app no se migra sola: si falta algo, se avisa con claridad en lugar de
+  // fallar más adelante con un error de PostgREST difícil de entender.
   useEffect(() => {
     if (!ready) return;
     (async () => {
       try {
         const { migrationService } = await import('./lib/migrationService');
-        await migrationService.ensureBranchesMigration();
+        const faltantes = await migrationService.checkRequiredSchema();
+        if (faltantes.length) {
+          const { toast } = await import('react-hot-toast');
+          toast.error(
+            `La base de datos no está actualizada para esta versión (falta: ${faltantes.join(', ')}). ` +
+              'Pide al administrador que aplique las migraciones.',
+            { id: 'schema-outdated', duration: Infinity }
+          );
+        }
       } catch {
-        // Silencioso: queda el camino manual desde el menú
+        // Sin conexión o sin configuración: no hay nada que comprobar todavía
       }
     })();
   }, [ready]);

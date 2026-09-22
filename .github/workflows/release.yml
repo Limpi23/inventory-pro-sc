@@ -1,9 +1,10 @@
 name: Build and Release
 
+# Solo manual. Con el disparo por tag competía con build-nsis.yml: ambos creaban
+# la release del mismo tag y el que llegaba segundo fallaba con
+# "already_exists". La release oficial la publica build-nsis.yml (electron-builder),
+# que es la que genera el latest.yml que usa electron-updater.
 on:
-  push:
-    tags:
-      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       version:
